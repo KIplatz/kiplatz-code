@@ -11,6 +11,9 @@ def dank(satz: str, wer: str, art: str = "Meldung") -> str:
 
 
 NEUERUNGEN: dict[str, list[str]] = {
+    "2026-10-13f": [
+        "Spielstände nennen die Vereine jetzt so, wie wir sie sagen: Inter Mailand, AC Mailand, Bayern München, Rapid Wien, und die Ligen heißen Deutsche Bundesliga oder Europameisterschaft.",
+    ],
     "2026-10-13e": [
         "Der Liveticker versteht jetzt auch „Barca Live Spielstand“, „CL“ oder klein geschriebene Vereinsnamen und findet Bayern München, Rapid oder Salzburg auch dann, wenn die Datenbank sie anders schreibt.",
     ],

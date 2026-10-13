@@ -140,3 +140,21 @@ def test_suche_fragt_hoechstens_vier_begriffe_und_merkt_sich_antworten(tmp_path)
     netz.wege.clear()
     assert s.verein_finden("Bayern München")["name"] == "Bayern Munich" and netz.wege == ["search/team/Bayern_Munich"]
     assert s.verein_finden("Bayern München")["name"] == "Bayern Munich" and netz.wege == ["search/team/Bayern_Munich"]
+
+
+def test_deutsche_anzeigenamen_in_den_zeilen_fuer_das_modell(monkeypatch):
+    import community
+    s = {"sport": "Soccer", "liga": "UEFA Champions League", "heim": "Inter Milan", "gast": "Club Brugge", "heim_tore": "3", "gast_tore": "4", "zustand": "2H", "fortschritt": "90+7", "datum": "2026-10-13", "zeit": "19:00"}
+    monkeypatch.setattr(community, "SPRACHE", "de")
+    assert ns._spielzeile(s, "live") == "Inter Mailand 3:4 FC Brügge, 2. Halbzeit, 90+7. Minute (UEFA Champions League)"
+    monkeypatch.setattr(community, "SPRACHE", "en")
+    assert ns._spielzeile(s, "live") == "Inter Milan 3:4 Club Brugge, 2. Halbzeit, 90+7. Minute (UEFA Champions League)"
+    assert sport.anzeige("Bayern Munich") == "Bayern München" and sport.anzeige("Germany") == "Deutschland" and sport.anzeige("Viking") == "Viking Stavanger"
+    assert sport.anzeige("Bayern Munich", "en") == "Bayern Munich" and sport.anzeige("Unbekannter Klub") == "Unbekannter Klub"
+    assert sport.liga_anzeige("German Bundesliga") == "Deutsche Bundesliga" and sport.liga_anzeige("UEFA Champions League") == "UEFA Champions League"
+
+
+def test_cl_direkt_am_dienst(tmp_path):
+    s, netz = _sport(tmp_path)
+    assert s.liga_finden("CL") is None
+    assert netz.wege[-1] == "search/league/UEFA_Champions_League"

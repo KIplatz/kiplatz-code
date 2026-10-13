@@ -85,6 +85,46 @@ VEREINE: dict[str, str] = {
     "spanien": "Spain", "italien": "Italy", "niederlande": "Netherlands", "holland": "Netherlands", "portugal": "Portugal", "belgien": "Belgium", "kroatien": "Croatia",
     "türkei": "Turkey", "tuerkei": "Turkey", "ungarn": "Hungary", "tschechien": "Czech Republic",
 }
+ANZEIGE: dict[str, str] = {
+    "Inter Milan": "Inter Mailand", "AC Milan": "AC Mailand", "Bayern Munich": "Bayern München", "Rapid Vienna": "Rapid Wien", "Austria Vienna": "Austria Wien",
+    "Monchengladbach": "Borussia Mönchengladbach", "Koln": "1. FC Köln", "Köln": "1. FC Köln", "Hamburg": "Hamburger SV", "Stuttgart": "VfB Stuttgart",
+    "Wolfsburg": "VfL Wolfsburg", "Hoffenheim": "TSG Hoffenheim", "Freiburg": "SC Freiburg", "Schalke 04": "FC Schalke 04", "Hertha": "Hertha BSC",
+    "Mainz": "FSV Mainz 05", "Augsburg": "FC Augsburg", "Heidenheim": "1. FC Heidenheim", "Juventus": "Juventus Turin", "Napoli": "SSC Neapel",
+    "Roma": "AS Rom", "Lazio": "Lazio Rom", "Atalanta": "Atalanta Bergamo", "Fiorentina": "AC Florenz", "Club Brugge": "FC Brügge", "Barcelona": "FC Barcelona",
+    "Sevilla": "FC Sevilla", "Valencia": "FC Valencia", "Villarreal": "FC Villarreal", "Real Betis": "Betis Sevilla", "Zürich": "FC Zürich", "Zurich": "FC Zürich",
+    "Basel": "FC Basel", "Young Boys": "BSC Young Boys", "Lille": "OSC Lille", "Marseille": "Olympique Marseille", "Lyon": "Olympique Lyon", "Monaco": "AS Monaco",
+    "Viking": "Viking Stavanger", "Galatasaray": "Galatasaray Istanbul", "Fenerbahce": "Fenerbahçe Istanbul", "Olympiacos": "Olympiakos Piräus",
+    "Sporting CP": "Sporting Lissabon", "Benfica": "Benfica Lissabon", "Porto": "FC Porto", "Ajax": "Ajax Amsterdam", "Feyenoord": "Feyenoord Rotterdam",
+    "Celtic": "Celtic Glasgow", "Rangers": "Glasgow Rangers", "Slavia Prague": "Slavia Prag", "Sparta Prague": "Sparta Prag", "Red Star Belgrade": "Roter Stern Belgrad",
+    "Copenhagen": "FC Kopenhagen", "Bruges": "FC Brügge", "Anderlecht": "RSC Anderlecht", "Salzburg": "Red Bull Salzburg",
+    "Germany": "Deutschland", "Austria": "Österreich", "Switzerland": "Schweiz", "Spain": "Spanien", "Italy": "Italien", "France": "Frankreich",
+    "Netherlands": "Niederlande", "Belgium": "Belgien", "Croatia": "Kroatien", "Turkey": "Türkei", "Hungary": "Ungarn", "Czech Republic": "Tschechien",
+    "Poland": "Polen", "Denmark": "Dänemark", "Sweden": "Schweden", "Norway": "Norwegen", "Scotland": "Schottland", "Greece": "Griechenland",
+    "Slovenia": "Slowenien", "Slovakia": "Slowakei", "Serbia": "Serbien", "Romania": "Rumänien", "Brazil": "Brasilien", "Argentina": "Argentinien",
+    "United States": "USA", "Mexico": "Mexiko", "Ireland": "Irland", "Wales": "Wales", "Finland": "Finnland", "Iceland": "Island", "Georgia": "Georgien",
+    "Ukraine": "Ukraine", "Bosnia and Herzegovina": "Bosnien-Herzegowina", "North Macedonia": "Nordmazedonien", "Albania": "Albanien",
+}
+LIGA_ANZEIGE: dict[str, str] = {
+    "German Bundesliga": "Deutsche Bundesliga", "Austrian Bundesliga": "Österreichische Bundesliga", "German 2. Bundesliga": "2. Bundesliga",
+    "Austrian 2. Liga": "2. Liga", "English Premier League": "Premier League", "English League Championship": "Championship", "Spanish La Liga": "La Liga",
+    "Italian Serie A": "Serie A", "French Ligue 1": "Ligue 1", "Dutch Eredivisie": "Eredivisie", "Portuguese Primeira Liga": "Primeira Liga",
+    "Turkish Super Lig": "Süper Lig", "Swiss Super League": "Super League", "American Major League Soccer": "MLS", "UEFA European Championships": "Europameisterschaft",
+    "FIFA World Cup": "Weltmeisterschaft", "Austrian Cup": "ÖFB-Cup", "DFB Pokal": "DFB-Pokal", "English FA Cup": "FA Cup", "German DEL": "DEL",
+    "Austrian ICE Hockey League": "ICE Hockey League", "Austrian Basketball Superliga": "Basketball Superliga", "German Basketball Bundesliga": "Basketball-Bundesliga",
+    "EuroLeague Basketball": "EuroLeague", "Euroleague Basketball": "EuroLeague", "Club Friendlies": "Freundschaftsspiele", "International Friendlies": "Länderspiele",
+}
+
+
+def anzeige(name: str, lang: str = "de") -> str:
+    n = str(name or "")
+    return ANZEIGE.get(n, n) if lang == "de" else n
+
+
+def liga_anzeige(name: str, lang: str = "de") -> str:
+    n = str(name or "")
+    return LIGA_ANZEIGE.get(n, n) if lang == "de" else n
+
+
 _ZWEITE = re.compile(r"(?<![\w])(II|III|B|Youth|Women|Frauen|Femenino|Feminino|WFC|Ladies|U\d\d|Reserves?|Amateure|Next Gen|Castilla|Primavera|Jong|Atl[èe]tic|Madrile[ñn]o)(?![\w])")
 _KUERZEL = re.compile(r"^(?:1\.\s*|fc|sk|sv|sc|tsv|fk|rb|vfb|vfl|tsg|bsc|spvgg|fsv|ac|as|ss|cf|cd|ud|rcd|afc)\s+", re.I)
 _UMLAUTE = str.maketrans({"ä": "a", "ö": "o", "ü": "u", "ß": "ss", "Ä": "A", "Ö": "O", "Ü": "U", "é": "e", "è": "e", "á": "a", "ó": "o", "ñ": "n", "ç": "c"})
@@ -229,7 +269,7 @@ class Sport:
         n = " ".join(str(name or "").split())[:MAX_SACHE]
         if not n:
             return None
-        suchtext = LIGEN.get(n.lower(), n)
+        suchtext = LIGEN.get(n.lower()) or LIGEN.get(LIGEN_KURZ.get(n, ""), n)
         for e in self._holen("search/league/" + _suchwort(suchtext), SUCHE_S):
             if isinstance(e, dict) and e.get("idLeague"):
                 return {"id": str(e["idLeague"]), "name": str(e.get("strLeague") or suchtext)[:80], "sport": str(e.get("strSport") or "")[:40], "land": str(e.get("strCountry") or "")[:40]}
@@ -328,4 +368,4 @@ def liga_alias(text: str) -> str:
     return LIGEN_KURZ[k.group(1)] if k else ""
 
 
-__all__ = ["Sport", "SportError", "spiel_kurz", "liga_alias", "verein_bekannt", "VEREINE", "LIGEN_KURZ", "LIGEN", "ZUSTAND", "LAEUFT", "VORBEI", "QUELLE", "SEITE", "SCHLUESSEL_DATEI", "LIVE_S", "PLAN_S", "JE_MINUTE"]
+__all__ = ["Sport", "SportError", "spiel_kurz", "liga_alias", "verein_bekannt", "anzeige", "liga_anzeige", "ANZEIGE", "LIGA_ANZEIGE", "VEREINE", "LIGEN_KURZ", "LIGEN", "ZUSTAND", "LAEUFT", "VORBEI", "QUELLE", "SEITE", "SCHLUESSEL_DATEI", "LIVE_S", "PLAN_S", "JE_MINUTE"]

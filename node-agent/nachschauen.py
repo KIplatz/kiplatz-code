@@ -496,7 +496,8 @@ class Nachschauer:
         was = str(d.get("was") or a.was or "live")
         spiele = [s for s in (d.get("spiele") or []) if isinstance(s, dict)]
         liga, verein = d.get("liga") if isinstance(d.get("liga"), dict) else None, d.get("verein") if isinstance(d.get("verein"), dict) else None
-        wofuer = (verein or liga or {}).get("name") or a.sache
+        lang = _sprache()
+        wofuer = (sportdaten.anzeige(verein["name"], lang) if verein else sportdaten.liga_anzeige(liga["name"], lang) if liga else "") or a.sache
         jetzt = self._jetzt()
         if not spiele:
             wer = f" zu {wofuer}" if wofuer else ""
@@ -964,8 +965,17 @@ def _tag_text(datum: str) -> str:
         return datum
 
 
+def _sprache() -> str:
+    try:
+        import community
+        return "en" if str(getattr(community, "SPRACHE", "de")).lower().startswith("en") else "de"
+    except Exception:
+        return "de"
+
+
 def _spielzeile(s: dict, was: str) -> str:
-    heim, gast, liga = str(s.get("heim") or ""), str(s.get("gast") or ""), str(s.get("liga") or "")
+    lang = _sprache()
+    heim, gast, liga = sportdaten.anzeige(str(s.get("heim") or ""), lang), sportdaten.anzeige(str(s.get("gast") or ""), lang), sportdaten.liga_anzeige(str(s.get("liga") or ""), lang)
     ht, gt = str(s.get("heim_tore") or ""), str(s.get("gast_tore") or "")
     zustand, fort = str(s.get("zustand") or ""), str(s.get("fortschritt") or "")
     paar = f"{heim} gegen {gast}" if heim and gast else str(s.get("name") or "Spiel")
