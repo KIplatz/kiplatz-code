@@ -1,0 +1,58 @@
+KIplatz – Lies mich
+===================
+
+KIplatz ist ein KI-Assistent für deinen Windows-Rechner. Die Antworten kommen
+von den Geräten der Community, nicht aus einem Rechenzentrum.
+
+
+So startest du
+--------------
+1. Die ZIP-Datei auspacken: Rechtsklick auf die Datei, dann „Alle extrahieren“.
+2. Im ausgepackten Ordner KIplatz.exe doppelklicken.
+
+Beim ersten Start richtet sich KIplatz selbst ein. Es kopiert sich in deinen
+Benutzerordner, legt ein Symbol auf den Desktop und ins Startmenü und startet
+ab dann mit Windows. Administratorrechte braucht es dafür nicht. Den
+ausgepackten Ordner kannst du danach löschen.
+
+Voraussetzung: Windows 11 mit 64 Bit. Hat dein Rechner keine starke
+Grafikkarte, beantworten die Geräte der Community deine Fragen.
+
+
+Was KIplatz auf deinem Rechner tut
+----------------------------------
+- Für die Community arbeitet es nur so viel, wie du unter „Rechenkraft teilen“
+  freigibst. Rechenkraft, Arbeitsspeicher und den Platz auf der Festplatte
+  stellst du mit Schiebereglern selbst ein, auch das Laufwerk.
+- Deine persönlichen Dateien öffnet es nur, wenn du sie selbst hinzufügst.
+- Deine Gespräche werden auf deinem Gerät gespeichert. Fragst du die
+  Community, geht die Frage ohne deinen Namen an einen anderen Rechner.
+- Was das Programm mit dem Server austauscht, zeigt die Seite „Datenfluss“.
+- Updates kommen von selbst und sind digital unterschrieben. Ein Update ohne
+  gültige Unterschrift wird abgelehnt.
+
+
+Wo die Dateien liegen
+---------------------
+- Das Programm: %LOCALAPPDATA%\Programs\CommunityAI
+- Deine Einstellungen, Gespräche und die KI-Modelle: in deinem Benutzerordner
+- Das gemeinsame Wissen der Community: im Ordner „KIplatz-Speicher“ auf dem
+  Laufwerk, das du gewählt hast (ohne Wahl im Benutzerordner)
+
+
+Entfernen
+---------
+Windows-Einstellungen, dann Apps, dann Installierte Apps, dort bei „KIplatz“
+auf „Deinstallieren“. Oder im Programm unter Einstellungen auf „Programm
+entfernen“. Deine Gespräche und Einstellungen bleiben dabei erhalten, bis du
+sie selbst löschst.
+
+
+Hilfe
+-----
+Website:                 https://kiplatz.at
+Fragen zum Programm:     support@kiplatz.at
+Datenschutz:             https://kiplatz.at/datenschutz/
+
+KIplatz ist eine KI. Antworten können falsch sein, unter jeder Antwort stehen
+die Quellen.

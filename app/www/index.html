@@ -1,0 +1,690 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
+
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' blob: 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' blob: https://kiplatz.at; manifest-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light dark">
+<meta name="robots" content="noindex,nofollow">
+
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="KIplatz">
+<meta name="theme-color" content="#f7f9f8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121616" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="marke/icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<title>KIplatz</title>
+<link rel="stylesheet" href="stil.css">
+
+<script src="js/laden-wache.js"></script>
+<script type="module" src="js/start.js"></script>
+</head>
+<body>
+<div id="app">
+  <aside id="leiste" aria-label="Gespräche">
+    <div class="leiste-kopf">
+      <img class="symbol" src="marke/symbol-64.png" alt="">
+      <span class="wortmarke">KIplatz</span>
+      <button class="rund nur-schmal" id="btn-leiste-zu" type="button" aria-label="Gespräche schließen" data-icon="zu"></button>
+    </div>
+    
+    <div class="leiste-oben" id="leiste-oben">
+      <button class="knopf haupt" id="btn-neu" type="button"><span data-icon="neu"></span>Neues Gespräch</button>
+      <button class="rund knopf-lupe" id="btn-suche" type="button" aria-label="Gespräche durchsuchen" title="Gespräche durchsuchen" aria-controls="suche-feld" aria-expanded="false" data-icon="suche"></button>
+    </div>
+    <label class="suche" id="suche-feld" hidden><span data-icon="suche"></span><input id="suche" type="search" placeholder="Suchen" aria-label="Gespräche durchsuchen" autocomplete="off"><button class="rund suche-zu" id="btn-suche-zu" type="button" aria-label="Suche schließen" data-icon="zu"></button></label>
+    
+    <button class="leiste-zeile" id="btn-platzl" type="button" hidden><span data-icon="platzl"></span>Platzl</button>
+    <nav id="liste" aria-label="Deine Gespräche"></nav>
+    <div class="leiste-fuss">
+      <button class="profil" id="btn-einstellungen" type="button" aria-label="Konto und Einstellungen"><span class="avatar" id="avatar" aria-hidden="true">K</span><span class="profil-text"><span id="geraet-name">KIplatz</span><small>Konto und Einstellungen</small></span><span class="profil-zahnrad" data-icon="einstellungen"></span></button>
+    </div>
+  </aside>
+  <div id="schleier" hidden></div>
+
+  <section id="haupt">
+    <header id="kopf">
+      <button class="rund nur-schmal" id="btn-leiste" type="button" aria-label="Gespräche öffnen" data-icon="leiste"></button>
+      <div class="titel"><h1 id="kopf-titel"><button class="heim" id="btn-heim" type="button" title="Zur Startseite">KIplatz</button></h1><div id="status" role="status"></div></div>
+      <button class="rund" id="btn-neu-kopf" type="button" aria-label="Neues Gespräch" title="Neues Gespräch" data-icon="schreiben"></button>
+      <button class="rund" id="btn-gespraech-menue" type="button" aria-label="Mehr zu diesem Gespräch" title="Mehr" data-icon="mehr"></button>
+      
+      <button class="rund kopf-konto" id="btn-konten" type="button" aria-label="Konten" title="Konten" aria-haspopup="dialog"><span class="avatar" id="avatar-kopf" aria-hidden="true">K</span></button>
+    </header>
+    <div id="hinweis" class="band" hidden><span id="hinweis-text"></span><button class="knopf klein" id="btn-hinweis-zu" type="button">Schließen</button></div>
+
+    <main id="verlauf" tabindex="-1">
+      <div id="willkommen" hidden>
+        <img src="marke/symbol-256.png" alt="">
+        <h2 id="willkommen-text">Willkommen</h2>
+        
+        <form class="karte einrichten" id="einrichten" hidden>
+          
+          <h3>Zwei kurze Fragen, beide freiwillig</h3>
+          <label>Wie darf ich dich nennen?<small>Für die Begrüßung. Bleibt auf deinem Handy.</small><input id="ein-name" maxlength="40" autocomplete="given-name" enterkeyhint="next"></label>
+          <label>Wo wohnst du?<small>Ort oder Bezirk. Fragst du nach dem Wetter oder nach etwas in der Nähe, nimmt KIplatz diesen Ort.</small><input id="ein-ort" maxlength="60" placeholder="z. B. Gmunden" autocomplete="address-level2" enterkeyhint="done"></label>
+          <div class="knopf-paar"><button class="knopf haupt" id="btn-ein-speichern" type="submit">Speichern</button><button class="knopf" id="btn-ein-spaeter" type="button">Später</button></div>
+          <p class="leise klein ein-mehr">Willst du deine KI mehr auf dich einstellen? <button type="button" id="btn-ein-meineki">In den Einstellungen</button> findest du weitere Fragen zum Start.</p>
+        </form>
+      </div>
+      <div id="nachrichten"></div>
+    </main>
+
+    <form id="eingabe-form" autocomplete="off">
+      
+      <div class="skill-schild" id="skill-schild" hidden>
+        <button class="skill-name" id="btn-skill-schild" type="button"><span class="skill-marke">Skill</span><span id="skill-schild-text"></span></button>
+        <button class="skill-weg" id="btn-skill-weg" type="button" aria-label="Skill aus diesem Gespräch nehmen" data-icon="zu"></button>
+      </div>
+      
+      <button class="nach-unten rund" id="btn-nach-unten" type="button" aria-label="Zur neuesten Nachricht" data-icon="runter" hidden></button>
+      
+      <div class="anhaenge" id="anhaenge" hidden></div>
+      <p class="anhang-hinweis" id="anhang-hinweis" hidden>Die Datei bleibt auf deinem Handy. Mit deiner Frage geht nur der Text daraus an einen PC der Community.</p>
+      <p class="sprechen-hinweis" id="sprechen-hinweis" role="status" hidden></p>
+      <div class="eingabe-box">
+        <div class="plus-wrap">
+          <button class="werkzeug" id="btn-plus" type="button" aria-label="Datei, Foto oder Skills" aria-haspopup="menu" aria-expanded="false" data-icon="plus"></button>
+          <div class="plus-menue" id="plus-menue" role="menu" hidden>
+            <button type="button" role="menuitem" id="btn-datei"><span data-icon="datei"></span><span><b>Datei anhängen</b><small>PDF, Word oder Text</small></span></button>
+            <button type="button" role="menuitem" id="btn-foto"><span data-icon="foto"></span><span><b>Foto anhängen</b><small>der Text darauf wird gelesen</small></span></button>
+            <button type="button" role="menuitem" id="btn-plus-skills"><span data-icon="platzl"></span><span><b>Skills</b><small>für dieses Gespräch oder immer an</small></span></button>
+            <button type="button" role="menuitemcheckbox" aria-checked="false" id="btn-daheim-suchen" hidden><span data-icon="datei"></span><span><b>In meinen Dateien suchen</b><small>auf deinem PC daheim, nie im Internet</small></span></button>
+          </div>
+          <input type="file" id="datei-waehlen" multiple hidden>
+          <input type="file" id="foto-waehlen" accept="image/*" multiple hidden>
+        </div>
+        <textarea id="eingabe" rows="1" placeholder="Frag KIplatz etwas …" enterkeyhint="send" aria-label="Deine Frage an KIplatz" maxlength="8000"></textarea>
+        <button class="werkzeug" id="btn-mikro" type="button" aria-label="Sprechen statt tippen" aria-pressed="false" title="Sprechen statt tippen: drücken, sprechen, noch einmal drücken. Der Text landet im Eingabefeld. Der Ton bleibt auf deinem Handy." data-icon="mikro"></button>
+        <button class="senden" id="btn-senden" type="submit" aria-label="Senden" data-icon="senden"></button>
+        <button class="senden stopp" id="btn-stopp" type="button" aria-label="Anhalten" data-icon="stopp" hidden></button>
+      </div>
+      
+      <div class="daheim-leiste" id="daheim-leiste" hidden>
+        <label class="daheim-schalter"><input type="checkbox" id="daheim-an"> <span>In meinen Dateien suchen</span></label>
+        <select id="daheim-pc" aria-label="Auf welchem PC suchen"></select>
+      </div>
+    </form>
+  </section>
+
+  <section id="anmelden" class="seite" hidden>
+    <div class="seite-innen">
+      <img class="logo" src="marke/symbol-256.png" alt="">
+      <h2>Willkommen bei KIplatz</h2>
+      <p class="leise">Hier antworten die PCs unserer Mitglieder, ganz ohne Rechenzentrum. Deine Gespräche gehören nur dir.</p>
+      
+      <div class="karte">
+        
+        <button class="knopf breit google" id="btn-google" type="button"><img src="marke/google-g.svg" alt="" width="20" height="20">Mit Google fortfahren</button>
+        <button class="knopf breit google" id="btn-github" type="button"><img src="marke/github.svg" alt="" width="20" height="20">Mit GitHub fortfahren</button>
+        <button class="knopf haupt breit" id="btn-konto" type="button">Mit E-Mail anmelden</button>
+        
+        <form id="email-form" class="email-schritt" hidden novalidate>
+          <label for="email-adresse">E-Mail-Adresse</label>
+          <input id="email-adresse" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" maxlength="254" aria-describedby="adresse-fehler">
+          <p class="fehler" id="adresse-fehler" role="alert" hidden></p>
+          <button class="knopf haupt breit" id="btn-email-code" type="submit">Code schicken</button>
+        </form>
+        <form id="code-form" class="email-schritt" hidden novalidate>
+          <p class="leise klein" id="code-info"></p>
+          <label for="email-code">Code aus der Mail</label>
+          <input id="email-code" class="code-feld" inputmode="numeric" autocomplete="one-time-code" maxlength="9" placeholder="123456" aria-describedby="code-fehler">
+          <p class="fehler" id="code-fehler" role="alert" hidden></p>
+          <button class="knopf haupt breit" id="btn-email-pruefen" type="submit">Anmelden</button>
+          <div class="knopf-reihe"><button class="knopf" id="btn-email-andere" type="button">Andere Adresse</button><button class="knopf" id="btn-email-neu" type="button">Neuen Code schicken</button></div>
+        </form>
+        <p class="leise klein" id="konto-hinweis">Dasselbe Konto wie im Platzl und in der Werkstatt. Mit Google, GitHub oder einem Code per Mail bist du gleich dabei, auch ohne Konto und ohne Passwort.</p>
+        <p class="info" id="anmelde-info" role="status" hidden></p>
+        <p class="fehler" id="anmelde-fehler" role="alert"></p>
+      </div>
+      <div class="karte" id="karte-andere-konten" hidden>
+        <ul class="konten-liste" id="anmelden-konten"></ul>
+      </div>
+      <p class="karte hinweis-ios" id="ios-tipp" hidden><strong>Tipp fürs iPhone:</strong> Leg KIplatz zuerst auf den Home-Bildschirm (in Safari unten „Teilen“, dann „Zum Home-Bildschirm“) und melde dich dort an. Dann bleibt die Anmeldung in der App.</p>
+      <details class="karte">
+        <summary>Anders anmelden</summary>
+        <p class="leise klein">Mit einem Code aus dem KIplatz-Programm am PC, oder mit einem Anmeldelink von einem anderen Gerät.</p>
+        <label>Name dieses Geräts<small>Andere Mitglieder sehen ihn.</small><input id="name" placeholder="z. B. Mein iPhone" maxlength="40" autocomplete="off"></label>
+        <label>Code<input id="code" placeholder="AB3K-9XQ2" maxlength="16" autocapitalize="characters" autocomplete="one-time-code" spellcheck="false"></label>
+        <button class="knopf breit" id="btn-anmelden" type="button">Mit Code anmelden</button>
+        <label>Anmeldelink<input id="link" placeholder="https://kiplatz.at/app#c=…" autocomplete="off" spellcheck="false"></label>
+        <button class="knopf breit" id="btn-link" type="button">Mit Link anmelden</button>
+      </details>
+    </div>
+  </section>
+
+  <section id="einstellungen" class="seite" hidden aria-labelledby="einstellungen-titel">
+    <header class="seite-kopf">
+      <button class="rund" id="btn-einstellungen-zu" type="button" aria-label="Zurück" data-icon="zurueck"></button>
+      <h2 id="einstellungen-titel" tabindex="-1">Einstellungen</h2>
+    </header>
+    <div class="seite-innen">
+      
+      <div class="liste konto-kopf" id="k-konten">
+        <div class="zeile-knopf"><button type="button" id="btn-k-konten" data-seite="s-konten"><span class="avatar" id="avatar-einst" aria-hidden="true">K</span><span class="zt"><strong id="k-konten-name"></strong><small id="k-konten-info"></small></span></button></div>
+      </div>
+      
+      <div id="karte-admin" hidden>
+        <h3 class="gruppe-titel">Admin</h3>
+        <div class="liste">
+        <div class="zeile-knopf" id="k-admin"><button type="button" id="btn-k-admin" data-seite="s-admin"><span data-icon="pruefen" aria-hidden="true"></span><span class="zt">Admin</span><small id="k-admin-info"></small></button></div>
+        </div>
+      </div>
+      <h3 class="gruppe-titel">Community</h3>
+      <div class="liste">
+        <div class="zeile-knopf" id="k-platzl"><button type="button" id="btn-k-platzl" data-seite="s-platzl"><span data-icon="platzl" aria-hidden="true"></span><span class="zt">Platzl</span><small id="k-platzl-info"></small></button></div>
+        <div class="zeile-knopf" id="k-mithelfen" hidden><button type="button" id="btn-mithelfen"><span data-icon="haken" aria-hidden="true"></span><span class="zt">Antworten prüfen</span><small>2 Credits je Prüfung</small></button></div>
+        <div class="zeile-knopf" id="k-bestenliste" hidden><button type="button" id="btn-bestenliste"><span data-icon="bestenliste" aria-hidden="true"></span><span class="zt">Bestenliste</span><small>Wer am meisten hilft</small></button></div>
+        <div class="zeile-knopf" id="k-wiki" hidden><button type="button" id="btn-wiki"><span data-icon="info" aria-hidden="true"></span><span class="zt">Wiki</span><small>Bessere Antworten mit Quelle</small></button></div>
+      </div>
+      <h3 class="gruppe-titel">KIplatz anpassen</h3>
+      <div class="liste">
+        <div class="zeile-knopf" id="k-meineki"><button type="button" id="btn-meineki"><span data-icon="meineki" aria-hidden="true"></span><span class="zt">Meine KI</span><small id="k-meineki-info">Name, Ort, wofür und wie</small></button></div>
+        <div class="zeile-knopf" id="k-aussehen"><button type="button" id="btn-k-aussehen" data-seite="s-aussehen"><span data-icon="aussehen" aria-hidden="true"></span><span class="zt">Aussehen und Sprache</span><small id="k-aussehen-info"></small></button></div>
+      </div>
+      <h3 class="gruppe-titel">Geräte und PC</h3>
+      <div class="liste">
+        <div class="zeile-knopf" id="karte-abgleich"><button type="button" id="btn-k-abgleich" data-seite="s-abgleich"><span data-icon="abgleich" aria-hidden="true"></span><span class="zt">Gespräche auf allen Geräten</span><small id="k-abgleich-info"></small></button></div>
+        <div class="zeile-knopf" id="k-zuhause"><button type="button" id="btn-k-zuhause" data-seite="s-zuhause"><span data-icon="pc" aria-hidden="true"></span><span class="zt">PC daheim</span><small id="k-zuhause-info"></small></button></div>
+        <div class="zeile-knopf" id="karte-geraete"><button type="button" id="btn-k-geraete" data-seite="s-geraete"><span data-icon="geraet" aria-hidden="true"></span><span class="zt">Geräte</span><small id="k-geraete-info"></small></button></div>
+      </div>
+      <h3 class="gruppe-titel">Daten und Konto</h3>
+      <div class="liste">
+        <div class="zeile-knopf" id="k-datenschutz"><button type="button" id="btn-k-datenschutz" data-seite="s-datenschutz"><span data-icon="schloss" aria-hidden="true"></span><span class="zt">Datenschutz</span></button></div>
+        <div class="zeile-knopf" id="karte-konto-loeschen"><button type="button" id="btn-k-konto-loeschen" data-seite="s-konto-loeschen"><span data-icon="loeschen" aria-hidden="true"></span><span class="zt">Konto löschen</span></button></div>
+      </div>
+      <button class="knopf breit gefahr abmelden-knopf" id="btn-abmelden" type="button">Dieses Konto hier abmelden</button>
+      <p class="leise klein mitte" id="e-version"></p>
+      <p class="leise klein mitte" id="e-quelltext"><span id="e-quelltext-text"></span> <a href="https://kiplatz.at/quelltext/" target="_blank" rel="noopener noreferrer">kiplatz.at/quelltext</a></p>
+    </div>
+  <section class="seite unterseite" id="s-konten" hidden aria-labelledby="s-konten-titel">
+    <header class="seite-kopf"><button class="rund" type="button" data-zu="s-konten" aria-label="Zurück" data-icon="zurueck"></button><h2 id="s-konten-titel" tabindex="-1">Konten</h2></header>
+    <div class="seite-innen">
+      <div class="karte">
+          <ul class="konten-liste" id="konten-liste"></ul>
+          <button class="knopf breit" id="btn-konto-hinzu" type="button" data-icon="neu">Konto hinzufügen</button>
+          <p class="leise klein">Jedes Konto hat hier seine eigenen Gespräche, Projekte und Skills. Ein Tipp auf ein Konto wechselt hin.</p>
+        
+      </div>
+    </div>
+  </section>
+  <section class="seite unterseite" id="s-admin" hidden aria-labelledby="s-admin-titel">
+    <header class="seite-kopf"><button class="rund" type="button" data-zu="s-admin" aria-label="Zurück" data-icon="zurueck"></button><h2 id="s-admin-titel" tabindex="-1">Admin</h2></header>
+    <div class="seite-innen">
+      <div class="karte">
+          <p class="leise klein">Sicherheitsmeldungen der Community, neueste zuerst. Dieselben kommen auch per Mail.</p>
+          <ul class="geraete-liste" id="admin-meldungen" aria-live="polite"></ul>
+          <label class="leise klein" for="admin-suche">Gerät suchen (Name oder Kennung aus der Mail)</label>
+          <input id="admin-suche" type="search" autocomplete="off" spellcheck="false">
+          <ul class="geraete-liste" id="admin-geraete" aria-live="polite"></ul>
+          <p class="leise klein" id="admin-meldung" role="status"></p>
+          
+          <label class="leise klein" for="admin-konto-suche">Konto suchen (Name oder E-Mail-Adresse), wirkt in Mitreden, Mitbauen und KIplatz zugleich</label>
+          <input id="admin-konto-suche" type="search" autocomplete="off" spellcheck="false">
+          <ul class="geraete-liste" id="admin-konten" aria-live="polite"></ul>
+          <p class="leise klein" id="admin-konto-meldung" role="status"></p>
+          
+          <h3 class="admin-teams-titel">Teams</h3>
+          <p class="leise klein">Sperren, umbenennen oder entfernen, immer mit Grund. Die Mitglieder lesen ihn bei „Dein Team“, mit dem Hinweis auf Einspruch an melden@kiplatz.at.</p>
+          <ul class="geraete-liste" id="admin-teams" aria-live="polite"></ul>
+          <p class="leise klein" id="admin-teams-meldung" role="status"></p>
+        
+      </div>
+    </div>
+  </section>
+  <section class="seite unterseite" id="s-platzl" hidden aria-labelledby="s-platzl-titel">
+    <header class="seite-kopf"><button class="rund" type="button" data-zu="s-platzl" aria-label="Zurück" data-icon="zurueck"></button><h2 id="s-platzl-titel" tabindex="-1">Platzl</h2></header>
+    <div class="seite-innen">
+      <div class="karte">
+          <p class="leise klein">Im Platzl triffst du die Community, mit Fragen, Ideen, Fehlermeldungen und Skills. Bist du verbunden, findest du das Platzl links bei deinen Gesprächen. Trennen kannst du jederzeit, hier oder in deinem Platzl-Profil unter „Apps“.</p>
+          <p class="leise klein" id="e-platzl"></p>
+          <button class="knopf breit" id="btn-platzl-verbinden" type="button">Mit dem Platzl verbinden</button>
+          <div class="knopf-paar" id="platzl-verbunden" hidden>
+            <button class="knopf" id="btn-platzl-oeffnen" type="button">Platzl öffnen</button>
+            <button class="knopf" id="btn-platzl-trennen" type="button">Trennen</button>
+          </div>
+        
+      </div>
+    </div>
+  </section>
+  <section class="seite unterseite" id="s-aussehen" hidden aria-labelledby="s-aussehen-titel">
+    <header class="seite-kopf"><button class="rund" type="button" data-zu="s-aussehen" aria-label="Zurück" data-icon="zurueck"></button><h2 id="s-aussehen-titel" tabindex="-1">Aussehen und Sprache</h2></header>
+    <div class="seite-innen">
+      <div class="karte">
+          <fieldset class="wahl" id="wahl-aussehen"><legend>Farbe</legend>
+            <label><input type="radio" name="aussehen" value="system"> Wie das Gerät</label>
+            <label><input type="radio" name="aussehen" value="hell"> Hell</label>
+            <label><input type="radio" name="aussehen" value="dunkel"> Dunkel</label>
+          </fieldset>
+          <fieldset class="wahl" id="wahl-schrift"><legend>Schriftgröße</legend>
+            <label><input type="radio" name="schrift" value="normal"> Normal</label>
+            <label><input type="radio" name="schrift" value="gross"> Groß</label>
+            <label><input type="radio" name="schrift" value="sehr-gross"> Sehr groß</label>
+          </fieldset>
+          
+          <fieldset class="wahl" id="wahl-sprache"><legend>Sprache</legend>
+            <label><input type="radio" name="sprache" value="auto"> Wie das Gerät</label>
+            <label translate="no"><input type="radio" name="sprache" value="de"> Deutsch</label>
+            <label translate="no"><input type="radio" name="sprache" value="en"> English</label>
+          </fieldset>
+        
+      </div>
+    </div>
+  </section>
+  <section class="seite unterseite" id="s-abgleich" hidden aria-labelledby="s-abgleich-titel">
+    <header class="seite-kopf"><button class="rund" type="button" data-zu="s-abgleich" aria-label="Zurück" data-icon="zurueck"></button><h2 id="s-abgleich-titel" tabindex="-1">Gespräche auf allen Geräten</h2></header>
+    <div class="seite-innen">
+      <div class="karte">
+          <p class="leise klein">Am Handy anfangen, am PC weiterschreiben. Deine Gespräche reisen verschlüsselt, lesen können sie nur deine eigenen Geräte.</p>
+          <div id="abgleich-inhalt" aria-live="polite"></div>
+        
+      </div>
+    </div>
+  </section>
+  <section class="seite unterseite" id="s-zuhause" hidden aria-labelledby="s-zuhause-titel">
+    <header class="seite-kopf"><button class="rund" type="button" data-zu="s-zuhause" aria-label="Zurück" data-icon="zurueck"></button><h2 id="s-zuhause-titel" tabindex="-1">PC daheim</h2></header>
+    <div class="seite-innen">
+      <div class="karte">
+        <h3>Frag dein Zuhause</h3>
+          <p class="leise klein">Brauchst du unterwegs einen Brief, eine Rechnung oder ein Foto von daheim, frag einfach hier. Dein PC daheim sucht in deinen Dateien und schickt dir, was du brauchst. Deine Dateien bleiben auf dem PC, und was du dir holst, ist unterwegs verschlüsselt.</p>
+          <p class="leise klein">So verbindest du dein Handy: Öffne am PC KIplatz, dann „Meine Community“ und „Frag dein Zuhause“. Dort siehst du einen QR-Code und darunter den Code zum Abtippen.</p>
+          <p id="e-zuhause" role="status"></p>
+          <div id="zuhause-eingabe">
+            <button class="knopf breit haupt" id="btn-zuhause-kamera" type="button" hidden>QR-Code mit der Kamera scannen</button>
+            <p class="leise klein" id="zuhause-kamera-hinweis" hidden>Beim ersten Mal fragt dein Handy, ob KIplatz die Kamera verwenden darf. Das Bild bleibt auf deinem Handy und wird nirgends gespeichert.</p>
+            <label>Oder den Code eintippen<small>Hast du mehrere PCs, verbinde jeden einmal.</small><input id="e-zuhause-code" maxlength="40" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXXX-XXXXX-XXXXX-XXXXX"></label>
+            <button class="knopf breit" id="btn-zuhause-koppeln" type="button">Verbinden</button>
+          </div>
+          <ul class="geraete-liste" id="zuhause-pcs" aria-live="polite"></ul>
+        
+      </div>
+      <div class="karte" id="k-pc-qr" hidden>
+        <h3>PC anmelden</h3>
+        <p class="leise klein">Das KIplatz-Programm am PC zeigt beim Anmelden einen QR-Code. Scanne ihn mit diesem Handy, dann ist der PC mit deinem Konto angemeldet, ohne Passwort.</p>
+        <button class="knopf breit" id="btn-pc-qr" type="button">QR-Code scannen</button>
+      </div>
+    </div>
+  </section>
+  <section class="seite unterseite" id="s-geraete" hidden aria-labelledby="s-geraete-titel">
+    <header class="seite-kopf"><button class="rund" type="button" data-zu="s-geraete" aria-label="Zurück" data-icon="zurueck"></button><h2 id="s-geraete-titel" tabindex="-1">Geräte</h2></header>
+    <div class="seite-innen">
+      <div class="karte" id="k-geraet">
+        <h3>Dieses Gerät</h3>
+          <p><strong id="e-name"></strong><br><span class="leise" id="e-ort"></span><br><span class="leise" id="e-tresor"></span></p>
+          <div class="knopf-paar">
+            <button class="knopf" id="btn-anmeldelink" type="button">Anmeldelink kopieren</button>
+            <button class="knopf" id="btn-meine-daten" type="button">Meine Daten</button>
+          </div>
+          <p class="leise klein">Mit dem Anmeldelink meldest du ein zweites Gerät von dir ohne Passwort an. Er gilt 10 Minuten und nur einmal, darum behalte ihn für dich.</p>
+          <div id="meine-daten" class="leise klein" hidden></div>
+        
+      </div>
+      <div class="karte">
+        <h3>Deine Geräte</h3>
+          <p class="leise klein">Überall, wo du mit deinem KIplatz-Konto angemeldet bist. Ein Gerät, das 90 Tage nicht benutzt wird, meldet sich von selbst ab.</p>
+          <ul class="geraete-liste" id="geraete-liste" aria-live="polite"></ul>
+          <p class="leise klein" id="geraete-meldung" role="status"></p>
+          <button class="knopf breit" id="btn-ueberall-abmelden" type="button" hidden>Alle anderen abmelden</button>
+        
+      </div>
+    </div>
+  </section>
+  <section class="seite unterseite" id="s-datenschutz" hidden aria-labelledby="s-datenschutz-titel">
+    <header class="seite-kopf"><button class="rund" type="button" data-zu="s-datenschutz" aria-label="Zurück" data-icon="zurueck"></button><h2 id="s-datenschutz-titel" tabindex="-1">Datenschutz</h2></header>
+    <div class="seite-innen">
+      <div class="karte">
+          <label class="schalter"><input type="checkbox" id="e-standort"> <span>Bei Wetterfragen ohne Ort den Standort verwenden<small>Den Ortsnamen sucht unser Server in Wien, grob auf etwa 1 km gerundet, und merkt sich deinen Standort nicht. Nur der Ortsname geht mit der Frage weiter. Aus, bis du es einschaltest.</small></span></label>
+          <p class="leise klein" id="e-standort-hinweis" role="status" hidden></p>
+          
+          <label class="schalter"><input type="checkbox" id="e-lernen" checked disabled> <span>Meine Fragen helfen beim Lernen<small id="e-lernen-text">KIplatz lernt aus allgemeinen Wissensfragen, nie wer gefragt hat und nie Persönliches. Schaltest du das aus, kommen deine Fragen, „Daumen hoch“ und Berichtigungen nicht mehr in die Lernliste. Das gilt für dein ganzes Konto, am Handy und am PC.</small></span></label>
+          <p class="leise klein" id="e-lernen-hinweis" role="status" hidden></p>
+          <p class="leise klein">Deine Gespräche liegen auf diesem Handy. Schaltest du „Gespräche auf allen Geräten“ ein, liegen sie zusätzlich verschlüsselt am Server, und lesen können sie nur deine Geräte. Eine Frage sieht der Server nur, solange ein PC an deiner Antwort arbeitet.</p>
+          <div class="knopf-paar">
+            <a class="knopf" href="https://kiplatz.at/datenschutz/" target="_blank" rel="noopener noreferrer">Datenschutzerklärung</a>
+            <button class="knopf gefahr" id="btn-alle-loeschen" type="button">Alle Gespräche löschen</button>
+          </div>
+        
+      </div>
+    </div>
+  </section>
+  <section class="seite unterseite" id="s-konto-loeschen" hidden aria-labelledby="s-konto-loeschen-titel">
+    <header class="seite-kopf"><button class="rund" type="button" data-zu="s-konto-loeschen" aria-label="Zurück" data-icon="zurueck"></button><h2 id="s-konto-loeschen-titel" tabindex="-1">Konto löschen</h2></header>
+    <div class="seite-innen">
+      <div class="karte">
+          <p class="leise klein">Dein KIplatz-Konto wird gelöscht und du bist überall abgemeldet. Was du geschrieben hast, bleibt ohne deinen Namen stehen, damit das Wissen für alle erhalten bleibt. Willst du etwas ganz weg haben, lösch es vorher selbst oder schreib uns an support@kiplatz.at. Das lässt sich nicht rückgängig machen.</p>
+          <button class="knopf breit gefahr" id="btn-konto-loeschen-start" type="button">Weiter zum Löschen</button>
+        
+      </div>
+    </div>
+  </section>
+  </section>
+
+  
+  <section id="platzl" class="seite" hidden aria-labelledby="platzl-titel">
+    <header class="seite-kopf">
+      <button class="rund" id="btn-platzl-zurueck" type="button" aria-label="Zurück" data-icon="zurueck"></button>
+      <h2 id="platzl-titel" tabindex="-1">Platzl</h2>
+    </header>
+    <div class="seite-innen" id="platzl-inhalt" aria-live="polite"></div>
+  </section>
+
+  
+  <section id="mithelfen" class="seite" hidden aria-labelledby="mithelfen-titel">
+    <header class="seite-kopf">
+      <button class="rund" id="btn-mithelfen-zurueck" type="button" aria-label="Zurück" data-icon="zurueck"></button>
+      <h2 id="mithelfen-titel" tabindex="-1">Mithelfen</h2>
+    </header>
+    <div class="seite-innen" id="mithelfen-inhalt" aria-live="polite"></div>
+  </section>
+  <section id="bestenliste" class="seite" hidden aria-labelledby="bestenliste-titel">
+    <header class="seite-kopf">
+      <button class="rund" id="btn-bestenliste-zurueck" type="button" aria-label="Zurück" data-icon="zurueck"></button>
+      <h2 id="bestenliste-titel" tabindex="-1">Bestenliste</h2>
+    </header>
+    <div class="seite-innen" id="bestenliste-inhalt" aria-live="polite"></div>
+  </section>
+
+  
+  <section id="wiki" class="seite" hidden aria-labelledby="wiki-titel">
+    <header class="seite-kopf">
+      <button class="rund" id="btn-wiki-zurueck" type="button" aria-label="Zurück" data-icon="zurueck"></button>
+      <h2 id="wiki-titel" tabindex="-1">Wiki</h2>
+    </header>
+    <div class="seite-innen" id="wiki-inhalt" aria-live="polite"></div>
+  </section>
+
+  
+  <section id="meineki" class="seite" hidden aria-labelledby="meineki-titel">
+    <header class="seite-kopf">
+      <button class="rund" id="btn-meineki-zu" type="button" aria-label="Zurück" data-icon="zurueck"></button>
+      <h2 id="meineki-titel" tabindex="-1">Meine KI</h2>
+    </header>
+    <div class="seite-innen">
+      <div class="karte">
+          
+          <label>Wie darf ich dich nennen?<small>Für die Begrüßung. Bleibt auf deinem Handy.</small><input id="e-anrede" maxlength="40" autocomplete="given-name"></label>
+          <label>Wo wohnst du?<small>Für Wetter und Fragen nach etwas in der Nähe. Geht nur mit so einer Frage mit.</small><input id="e-wohnort" maxlength="60" placeholder="z. B. Gmunden" autocomplete="address-level2"></label>
+          <p class="info" id="e-ueber-dich-ok" role="status"></p>
+          <p class="leise klein">Dazu drei Fragen zum Antippen. Daraus entsteht ein Skill, der in jedem Gespräch gilt, auch wenn ein PC der Community antwortet. Name und Wohnort kommen nicht hinein.</p>
+          <div id="mk-fragen"></div>
+          <details class="mk-vorschau"><summary class="leise klein">So steht es im Skill</summary><pre id="mk-vorschau" class="leise klein"></pre></details>
+          <div class="knopf-paar">
+            <button class="knopf" id="btn-mk-weg" type="button" hidden>Zurücksetzen</button>
+            <button class="knopf haupt" id="btn-mk-speichern" type="button">Speichern</button>
+          </div>
+          <p class="info" id="mk-ok" role="status"></p>
+      </div>
+    </div>
+  </section>
+
+  <section id="sperre" class="seite" hidden>
+    <div class="seite-innen mitte">
+      <img class="logo" src="marke/symbol-256.png" alt="">
+      <h2>Bitte die App aktualisieren</h2>
+      <p id="sperre-text"></p>
+      <a class="knopf haupt" id="sperre-laden" href="#" target="_blank" rel="noopener noreferrer" hidden>Neue Version holen</a>
+    </div>
+  </section>
+</div>
+
+
+<dialog id="qr-dialog" aria-labelledby="qr-titel">
+  <h3 id="qr-titel">Halte die Kamera auf den QR-Code am PC</h3>
+  <video id="qr-video" playsinline muted autoplay></video>
+  <p class="leise klein" id="qr-status">Sobald der Code erkannt ist, geht es von selbst weiter.</p>
+  <button class="knopf breit" id="qr-abbrechen" type="button">Abbrechen</button>
+</dialog>
+
+<dialog id="konten-blatt" class="blatt" aria-labelledby="kb-titel">
+  <form method="dialog">
+    <h3 id="kb-titel">Konten</h3>
+    <ul class="konten-liste" id="kb-liste"></ul>
+    <button class="zeile" value="hinzu" id="kb-hinzu" data-icon="neu">Konto hinzufügen</button>
+    <button class="zeile" value="einstellungen" data-icon="einstellungen">Konto und Einstellungen</button>
+    <button class="zeile abbrechen" value="">Schließen</button>
+  </form>
+</dialog>
+<dialog id="antwort-pruefen" class="blatt" aria-labelledby="ap-titel">
+  <form method="dialog">
+    <h3 id="ap-titel">Stimmt das?</h3>
+    <button class="zeile" value="nachpruefen" data-icon="suche">Live im Netz nachprüfen</button>
+    <button class="zeile" value="mitglied" id="ap-mitglied" data-icon="mitglied">Ein Mitglied fragen</button>
+    <button class="zeile abbrechen" value="">Abbrechen</button>
+  </form>
+</dialog>
+<dialog id="antwort-mehr" class="blatt" aria-labelledby="am-titel">
+  <form method="dialog">
+    <h3 id="am-titel">Antwort</h3>
+    <button class="zeile" value="teilen" data-icon="teilen">Teilen</button>
+    <button class="zeile" value="antwort-melden" data-icon="antwortmelden">Antwort melden</button>
+    <button class="zeile" value="wiki-vorschlag" data-icon="stift">Bessere Antwort vorschlagen</button>
+    <button class="zeile" value="melden" data-icon="melden">Fehler im Platzl melden</button>
+    <button class="zeile" value="details" data-icon="info">Details zur Antwort</button>
+    <button class="zeile abbrechen" value="">Abbrechen</button>
+  </form>
+</dialog>
+<dialog id="antwort-details" class="blatt" aria-labelledby="ad-titel">
+  <form method="dialog">
+    <h3 id="ad-titel">Details zur Antwort</h3>
+    <dl id="ad-inhalt" class="details-liste"></dl>
+    <button class="zeile abbrechen" value="">Schließen</button>
+  </form>
+</dialog>
+<dialog id="antwort-schlecht" class="blatt" aria-labelledby="as-titel">
+  <form method="dialog" id="as-form">
+    <h3 id="as-titel">Was hat nicht gepasst?</h3>
+    <div class="gruende" role="radiogroup" aria-labelledby="as-titel">
+      <label><input type="radio" name="as-grund" value="Falsch"><span>Falsch</span></label>
+      <label><input type="radio" name="as-grund" value="Unvollständig"><span>Unvollständig</span></label>
+      <label><input type="radio" name="as-grund" value="Frage nicht verstanden"><span>Frage nicht verstanden</span></label>
+      <label class="gefahr"><input type="radio" name="as-grund" value="Anstößig oder gefährlich"><span>Anstößig oder gefährlich</span></label>
+    </div>
+    <label class="versteckt" for="as-vorschlag">Wie wäre es richtig?</label>
+    <textarea id="as-vorschlag" rows="3" maxlength="600" placeholder="Wie wäre es richtig? (freiwillig)"></textarea>
+    <label class="schalter klein-schalter" id="as-teilen-zeile"><input type="checkbox" id="as-community"> <span>Mit der Community teilen, ohne deinen Namen<small>Ein anderes Mitglied prüft deinen Vorschlag, danach gilt er für alle.</small></span></label>
+    <p class="leise klein" id="as-hinweis" hidden>Das geht direkt an uns. Wir sehen es uns binnen 48 Stunden an.</p>
+    <p class="fehlertext" id="as-fehler" role="alert" hidden>Wähl einen Grund oder schreib, wie es richtig wäre.</p>
+    <div class="knopf-reihe">
+      <button class="knopf" value="">Abbrechen</button>
+      <button class="knopf haupt" value="senden">Senden</button>
+    </div>
+  </form>
+</dialog>
+<dialog id="gespraech-menue" class="blatt" aria-labelledby="gm-titel">
+  <form method="dialog">
+    <h3 id="gm-titel">Gespräch</h3>
+    <button class="zeile" value="umbenennen" data-icon="stift">Umbenennen</button>
+    <button class="zeile" value="anheften" id="gm-anheften" data-icon="nadel">Anheften</button>
+    <button class="zeile" value="projekt" id="gm-projekt" data-icon="ordner">In ein Projekt verschieben</button>
+    <button class="zeile" value="projekt-raus" id="gm-projekt-raus" data-icon="ordner">Aus dem Projekt lösen</button>
+    <button class="zeile" value="farbe" id="gm-farbe"><span class="farbpunkt" id="gm-farbpunkt" aria-hidden="true"></span>Farbe</button>
+    <button class="zeile" value="skill" id="gm-skill" data-icon="platzl">Skill wählen</button>
+    <button class="zeile" value="teilen" data-icon="teilen">Teilen</button>
+    <button class="zeile gefahr" value="loeschen" data-icon="loeschen">Löschen</button>
+    <button class="zeile abbrechen" value="abbrechen">Abbrechen</button>
+  </form>
+</dialog>
+
+
+
+<dialog id="pl-noetig" class="blatt" aria-labelledby="pln-titel">
+  <form method="dialog">
+    <h3 id="pln-titel">Dafür braucht es das Platzl</h3>
+    <p class="leise klein blatt-text">Dein Gerät ist noch nicht mit dem Platzl verbunden, darum ist noch nichts gemeldet. Nach dem Verbinden tippst du noch einmal auf „Fehler im Platzl melden“. Schneller: „Antwort melden“ kommt direkt bei uns an.</p>
+    <button class="zeile" value="verbinden" data-icon="platzl">Mit dem Platzl verbinden</button>
+    <button class="zeile abbrechen" value="">Abbrechen</button>
+  </form>
+</dialog>
+<dialog id="pl-schreiben" class="pl-schreiben" aria-labelledby="plw-kopf">
+  <form method="dialog">
+    <h3 id="plw-kopf">Im Platzl schreiben</h3>
+    
+    <label id="plw-grund-z" class="pflicht" hidden>Was ist an der Antwort falsch? <span class="pflicht-marke">Pflicht</span>
+      <textarea id="plw-grund" rows="3" maxlength="3000" placeholder="Zum Beispiel: Die Zahl stimmt nicht, richtig ist …"></textarea></label>
+    <label id="plw-titel-z">Titel<input id="plw-titel" maxlength="200" autocomplete="off"></label>
+    <label id="plw-kat-z">Kategorie<select id="plw-kat"></select></label>
+    <label>Text<textarea id="plw-text" rows="9" maxlength="30000"></textarea></label>
+    <p class="leise klein">Das Platzl ist öffentlich: Alle können lesen, was du schreibst. Nimm Namen, Adressen, Telefonnummern und anderes Persönliches heraus.</p>
+    <p class="fehler" id="plw-fehler" role="alert"></p>
+    <div class="knopf-reihe">
+      <button class="knopf" value="abbrechen" formnovalidate>Abbrechen</button>
+      <button class="knopf haupt" value="weiter" id="plw-weiter">Weiter</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="pl-bestaetigen" aria-labelledby="plb-kopf">
+  <form method="dialog">
+    <h3 id="plb-kopf">Im Platzl veröffentlichen?</h3>
+    <p id="plb-wo"></p>
+    <pre id="plb-text" class="plb-text"></pre>
+    <p class="leise klein">Alle können es lesen. Ändern oder löschen kannst du es danach im Platzl.</p>
+    <p class="fehler" id="plb-fehler" role="alert"></p>
+    <div class="knopf-reihe">
+      <button class="knopf" value="zurueck">Zurück</button>
+      <button class="knopf haupt" value="ja" id="plb-ja">Veröffentlichen</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="skill-dialog" class="blatt" aria-labelledby="sk-titel">
+  <form method="dialog">
+    <h3 id="sk-titel">Skill</h3>
+    <p class="leise" id="sk-beschreibung"></p>
+    <details class="sk-text"><summary>Was der Skill genau sagt</summary><pre id="sk-text"></pre></details>
+    <p class="info" id="sk-hinweis" hidden></p>
+    <button class="zeile" value="neu" data-icon="schreiben">Neues Gespräch mit diesem Skill</button>
+    <button class="zeile" value="hier" id="sk-hier" data-icon="senden">In diesem Gespräch verwenden</button>
+    <button class="zeile" value="merken" data-icon="nadel">Nur merken</button>
+    <button class="zeile abbrechen" value="">Abbrechen</button>
+  </form>
+</dialog>
+
+<dialog id="skill-waehlen" class="blatt" aria-labelledby="sw-titel">
+  <form method="dialog">
+    <h3 id="sw-titel">Skill für dieses Gespräch</h3>
+    <p class="leise klein" id="sw-immer-hinweis">Tippe auf einen Skill, dann gilt er in diesem Gespräch. Mit „Immer an“ gilt er in jedem Gespräch, auch in neuen.</p>
+    <p class="leise klein" id="sw-leer">Noch kein Skill gemerkt. Im Platzl in der Kategorie Skills tippst du bei einem Thema auf „Skill verwenden“, dann steht er hier.</p>
+    <div id="skill-liste-wahl"></div>
+    <button class="zeile" value="-" id="sw-keiner">Ohne Skill</button>
+    <button class="zeile abbrechen" value="">Abbrechen</button>
+  </form>
+</dialog>
+
+<dialog id="skill-schild-menue" class="blatt" aria-labelledby="ss-titel">
+  <form method="dialog">
+    <h3 id="ss-titel">Skill</h3>
+    <p class="leise klein" id="ss-beschreibung"></p>
+    <button class="zeile" value="laden" id="ss-laden" data-icon="nochmal">Neu aus dem Platzl laden</button>
+    <button class="zeile" value="platzl" id="ss-platzl" data-icon="platzl">Im Platzl ansehen</button>
+    <button class="zeile" value="weg" data-icon="zu">Aus diesem Gespräch nehmen</button>
+    <button class="zeile abbrechen" value="">Abbrechen</button>
+  </form>
+</dialog>
+
+<dialog id="farbe-dialog" class="blatt" aria-labelledby="fd-titel">
+  <form method="dialog">
+    <h3 id="fd-titel">Farbe in der Liste</h3>
+    <div class="farbwahl" id="farbwahl"></div>
+    <button class="zeile abbrechen" value="">Abbrechen</button>
+  </form>
+</dialog>
+
+<dialog id="projekt-waehlen" class="blatt" aria-labelledby="pw-titel">
+  <form method="dialog">
+    <h3 id="pw-titel">In welches Projekt?</h3>
+    <div id="projekt-liste-wahl"></div>
+    <button class="zeile" value="neu" data-icon="neu">Neues Projekt …</button>
+    <button class="zeile abbrechen" value="">Abbrechen</button>
+  </form>
+</dialog>
+
+<dialog id="projekt-menue" class="blatt" aria-labelledby="pm-titel">
+  <form method="dialog">
+    <h3 id="pm-titel">Projekt</h3>
+    <button class="zeile" value="umbenennen" data-icon="stift">Umbenennen</button>
+    <button class="zeile" value="farbe"><span class="farbpunkt" id="pm-farbpunkt" aria-hidden="true"></span>Farbe</button>
+    <button class="zeile" value="aufloesen" data-icon="ordner">Projekt auflösen (Gespräche bleiben)</button>
+    <button class="zeile gefahr" value="loeschen" data-icon="loeschen">Projekt samt Gesprächen löschen</button>
+    <button class="zeile abbrechen" value="">Abbrechen</button>
+  </form>
+</dialog>
+
+<dialog id="name-dialog" aria-labelledby="nd-titel">
+  <form method="dialog">
+    <h3 id="nd-titel">Name</h3>
+    <label class="versteckt" for="nd-name">Name</label>
+    <input id="nd-name" maxlength="60" enterkeyhint="done">
+    <div class="knopf-reihe">
+      <button class="knopf" value="abbrechen">Abbrechen</button>
+      <button class="knopf haupt" value="ok">Speichern</button>
+    </div>
+  </form>
+</dialog>
+
+
+<dialog id="anmelde-frage" aria-labelledby="af-titel">
+  <h3 id="af-titel">Anmelden</h3>
+  <p><strong id="af-wer"></strong></p>
+  <div id="af-knoepfe">
+    <p class="leise klein">Hast du die Anmeldung nicht selbst in KIplatz angetippt, dann tipp auf „Nein“.</p>
+    <div class="knopf-reihe">
+      <button class="knopf" type="button" id="af-nein">Nein</button>
+      <button class="knopf haupt" type="button" id="af-ja">Ja, anmelden</button>
+    </div>
+  </div>
+  <p class="leise klein" id="af-meldung" role="status"></p>
+</dialog>
+
+
+<dialog id="loeschen-dialog" aria-labelledby="ld-titel">
+  <h3 id="ld-titel">Konto löschen</h3>
+  <div id="ld-start">
+    <p class="leise klein">Damit sicher das richtige Konto gelöscht wird, bestätigst du kurz bei der Anmeldung, welches Konto es ist. Bist du dort schon angemeldet, geht das ohne Eingabe.</p>
+    <div class="knopf-reihe">
+      <button class="knopf" type="button" data-ld-zu>Abbrechen</button>
+      <button class="knopf haupt" type="button" id="ld-weiter">Weiter</button>
+    </div>
+  </div>
+  <div id="ld-bestaetigen" hidden>
+    <p><strong id="ld-wer"></strong></p>
+    <p class="leise klein">Dein KIplatz-Konto wird gelöscht und du bist überall abgemeldet. Was du geschrieben hast, bleibt ohne deinen Namen stehen, damit das Wissen für alle erhalten bleibt. Willst du etwas ganz weg haben, lösch es vorher selbst oder schreib uns an support@kiplatz.at. Das lässt sich nicht rückgängig machen.</p>
+    <label for="ld-wort">Zur Bestätigung „löschen“ eintippen</label>
+    <input id="ld-wort" type="text" autocomplete="off" spellcheck="false" autocapitalize="off" enterkeyhint="done">
+    <div class="knopf-reihe">
+      <button class="knopf" type="button" data-ld-zu>Abbrechen</button>
+      <button class="knopf gefahr" type="button" id="ld-loeschen" disabled>Konto löschen</button>
+    </div>
+  </div>
+  
+  <div id="ld-browser" hidden>
+    <p><strong id="ld-browser-wer"></strong></p>
+    <p class="leise klein">Möchtest du dieses Konto löschen? Hast du das nicht selbst in KIplatz angetippt, dann tipp auf „Nein“.</p>
+    <div class="knopf-reihe">
+      <button class="knopf" type="button" id="ld-nein">Nein</button>
+      <button class="knopf gefahr" type="button" id="ld-ja">Ja, löschen</button>
+    </div>
+  </div>
+  <p class="leise klein" id="ld-meldung" role="status"></p>
+</dialog>
+
+<dialog id="umbenennen-dialog" aria-labelledby="ub-titel">
+  <form method="dialog">
+    <h3 id="ub-titel">Gespräch umbenennen</h3>
+    <label class="versteckt" for="gm-name">Name</label>
+    <input id="gm-name" maxlength="80" enterkeyhint="done">
+    <div class="knopf-reihe">
+      <button class="knopf" value="abbrechen">Abbrechen</button>
+      <button class="knopf haupt" value="ok">Speichern</button>
+    </div>
+  </form>
+</dialog>
+<div class="fenster-fertig" id="fenster-fertig" role="status" hidden>
+  <div class="karte"><h2>Du bist angemeldet</h2><p id="ff-text"></p><button class="knopf haupt breit" id="ff-zu" type="button" hidden>Fenster schließen</button></div>
+</div>
+</body>
+</html>

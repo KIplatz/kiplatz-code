@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+
+<plist version="1.0">
+<dict>
+  <key>ITSAppUsesNonExemptEncryption</key>
+  <false/>
+  <key>NSLocationWhenInUseUsageDescription</key>
+  <string>Nur wenn du es in den Einstellungen einschaltest: Bei einer Wetterfrage ohne Ort schlägt KIplatz den Ortsnamen nach. Die Koordinaten gehen nie an unseren Server.</string>
+  <key>NSAppTransportSecurity</key>
+  <dict>
+    <key>NSAllowsArbitraryLoads</key>
+    <false/>
+    <key>NSPinnedDomains</key>
+    <dict>
+      <key>kiplatz.at</key>
+      <dict>
+        <key>NSIncludesSubdomains</key>
+        <false/>
+        <key>NSPinnedCAIdentities</key>
+        <array>
+          <dict><key>SPKI-SHA256-BASE64</key><string>sCkq5UWXjg+7mKu9lMhhYF5bGLsy7VI/UNW3tccdR7w=</string></dict>
+          <dict><key>SPKI-SHA256-BASE64</key><string>diGVwiVYbubAI3RW4hB9xU8e/CH2GnkuvVFZE8zmgzI=</string></dict>
+          <dict><key>SPKI-SHA256-BASE64</key><string>C5+lpZ7tcVwmwQIMcRtPbsQtWLABXhQzejna0wHFr8M=</string></dict>
+        </array>
+      </dict>
+    </dict>
+  </dict>
+</dict>
+</plist>

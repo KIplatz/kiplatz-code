@@ -1,0 +1,11 @@
+node_modules/
+www/js/nativ-gebaut.js
+# Signierschlüssel der App bleiben im Zugangsdaten-Ordner, nie hier
+*.jks
+*.keystore
+*.p12
+*.mobileprovision
+# gereinigte Fassung (ohne Notizen), entsteht mit `npm run sauber`
+auslieferung/
+ki-helfer/
+ki-helfer.neu/

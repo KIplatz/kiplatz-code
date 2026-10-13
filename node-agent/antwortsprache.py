@@ -1,0 +1,189 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+from __future__ import annotations
+
+import re
+import time
+from typing import Callable
+
+import absicht
+import pruefung
+import rechnen
+
+_EN = set("""the is are am be been what how why who whom whose where when which do does did can could would should will shall
+i you he she we they my your his her our their me him us them a of on for to and with from about this that these those there here
+it its please tell explain much many any some not no yes if than then because into over under between after before while
+weather today tomorrow yesterday best good better thanks thank thx""".split())
+_DE = set("""der das ist sind wie warum wer wo wann welche welcher welches ich du er sie wir ihr mein dein sein unser euer mich dich
+mir dir uns euch ein eine einen einem einer und mit von für auf zu nicht kein keine bitte es gibt kann können soll sollte wird
+werden hat habe haben den dem des noch auch schon nur sehr heute morgen gestern gut besser als oder aber weil dass wenn""".split())
+_WORT = re.compile(r"[A-Za-zÄÖÜäöüß']+")
+
+SYSTEM_FRAGE = (
+    "You translate English into German. Each input line starts with a number and a vertical bar, like 1| … "
+    "Translate every line on its own, keep its number and bar: one line in, one line out. Never answer a question, only translate it. "
+    "A line that is already German stays as it is. Keep names, numbers and units. Output only the lines.")
+SYSTEM_ANTWORT = (
+    "You translate German into natural English. Each input line starts with a number and a vertical bar, like 3| … "
+    "Translate every line on its own and keep its number and bar: one line in, one line out, never merge or split lines, add nothing. "
+    "Keep numbers, units, names, list dashes and marks like (Quelle 1) exactly as they are. Output only the translated lines.")
+_ZEILE = re.compile(r"^\s*(\d+)\s*\|\s?(.*)$")
+
+
+def frage_sprache(text: str) -> str:
+    gewuenscht = absicht.erkennen(text or "")
+    if gewuenscht.art == "sprache":
+        return gewuenscht.sprache
+    woerter = [w.lower() for w in _WORT.findall(text or "")]
+    if re.search(r"[äöüßÄÖÜ]", text or ""):
+        return "de"
+    if rechnen.englisch_rechnung(text or ""):
+        return "en"
+    en = sum(1 for w in woerter if w in _EN)
+    de = sum(1 for w in woerter if w in _DE)
+    if en >= 2 and en > 2 * de:
+        return "en"
+    if en == 1 and de == 0 and len(woerter) <= 4:
+        return "en"
+    return "de"
+
+
+def letzte_frage(nachrichten: list[dict]) -> str:
+    for n in reversed(nachrichten or []):
+        if n.get("role") == "user":
+            return str(n.get("content") or "")
+    return ""
+
+
+FrageFn = Callable[..., object]
+
+
+VERLAUF_NACHRICHTEN = 6
+VERLAUF_ZEICHEN = 600
+
+
+def frage_auf_deutsch(frage_fn: FrageFn, nachrichten: list[dict]) -> list[dict]:
+    neu = list(nachrichten)
+    stellen = [i for i, n in enumerate(neu) if n.get("role") in ("user", "assistant") and str(n.get("content") or "").strip()]
+    stellen = stellen[-VERLAUF_NACHRICHTEN:]
+    if not stellen or neu[stellen[-1]].get("role") != "user":
+        return nachrichten
+    zeilen = []
+    for i in stellen:
+        t = " ".join(str(neu[i].get("content") or "").split())
+        zeilen.append(t if i == stellen[-1] else t[:VERLAUF_ZEICHEN])
+    fertig = zeilen_uebersetzen(frage_fn, zeilen, system=SYSTEM_FRAGE)
+    letzte = fertig.get(len(zeilen) - 1, "").strip()
+    if not letzte or len(letzte) > 3 * len(zeilen[-1]) + 40:
+        return nachrichten
+    for j, i in enumerate(stellen):
+        if fertig.get(j, "").strip():
+            neu[i] = {**neu[i], "content": fertig[j].strip()}
+    return neu
+
+
+def _stellen(text: str, saetze: list[str]) -> list[tuple[int, int]] | None:
+    aus, pos = [], 0
+    for s in saetze:
+        i = text.find(s, pos)
+        if i < 0:
+            return None
+        aus.append((i, i + len(s)))
+        pos = i + len(s)
+    return aus
+
+
+def zeilen_uebersetzen(frage_fn: FrageFn, zeilen: list[str], bei_zeile: Callable[[dict[int, str]], None] | None = None,
+                       system: str = SYSTEM_ANTWORT) -> dict[int, str]:
+    if not zeilen:
+        return {}
+    eingabe = "\n".join(f"{i + 1}| {z}" for i, z in enumerate(zeilen))
+    fertig: dict[int, str] = {}
+    puffer = [""]
+
+    def zeile_lesen(roh: str) -> None:
+        m = _ZEILE.match(roh)
+        if m and 1 <= int(m.group(1)) <= len(zeilen) and m.group(2).strip() and int(m.group(1)) - 1 not in fertig:
+            z = m.group(2).strip()
+            h = re.fullmatch(r"(\*{1,2}|_)([^*_]+)\1", z)
+            fertig[int(m.group(1)) - 1] = (h.group(2) if h else z).strip()
+
+    def token(stueck: str) -> None:
+        puffer[0] += stueck
+        while "\n" in puffer[0]:
+            roh, puffer[0] = puffer[0].split("\n", 1)
+            vorher = len(fertig)
+            zeile_lesen(roh)
+            if bei_zeile is not None and len(fertig) != vorher:
+                try:
+                    bei_zeile(dict(fertig))
+                except Exception:
+                    pass
+
+    laenge = sum(len(z) for z in zeilen)
+    a = frage_fn([{"role": "user", "content": eingabe}], system=system, max_tokens=min(1800, 60 + laenge // 2),
+                 on_token=token)
+    rest = puffer[0]
+    if not fertig and getattr(a, "text", ""):
+        rest = a.text
+    for roh in rest.split("\n"):
+        zeile_lesen(roh)
+    return fertig
+
+
+def antwort_uebersetzen(frage_fn: FrageFn, text: str, lieferschein: dict, teil_melden: Callable[[str], None] | None = None,
+                        log: Callable[[str], None] | None = None) -> tuple[str, dict]:
+    t0 = time.time()
+    saetze = pruefung.saetze(text)
+    stellen = _stellen(text, saetze)
+    if stellen is None:
+        saetze, stellen = [text.strip()], [(text.find(text.strip()), text.find(text.strip()) + len(text.strip()))]
+    ls = dict(lieferschein or {})
+    extra: list[str] = []
+    zeilen = [s.replace("\n", " ") for s in saetze] + [ls[k].replace("\n", " ") for k in extra]
+
+    def zusammensetzen(fertig: dict[int, str], nur_bis_luecke: bool) -> str:
+        teile, pos = [], 0
+        for i, (a, b) in enumerate(stellen):
+            if i not in fertig and nur_bis_luecke:
+                return "".join(teile)
+            teile.append(text[pos:a])
+            teile.append(fertig.get(i, text[a:b]))
+            pos = b
+        teile.append(text[pos:])
+        return "".join(teile)
+
+    def weitergeben(fertig: dict[int, str]) -> None:
+        if teil_melden is not None:
+            stueck = zusammensetzen(fertig, nur_bis_luecke=True).strip()
+            if stueck:
+                teil_melden(stueck)
+
+    try:
+        fertig = zeilen_uebersetzen(frage_fn, zeilen, weitergeben)
+    except Exception as exc:
+        if log:
+            log(f"FEHLER uebersetzen: {type(exc).__name__}; die Antwort bleibt deutsch")
+        return text, {**ls, "sprache": "de", "uebersetzt": "nicht möglich"}
+    neu = zusammensetzen(fertig, nur_bis_luecke=False)
+    for j, k in enumerate(extra):
+        if len(saetze) + j in fertig:
+            ls[k] = fertig[len(saetze) + j]
+    pr = ls.get("pruefung")
+    if isinstance(pr, dict) and isinstance(pr.get("saetze"), list):
+        nach = {pruefung.ohne_quellenmarke(s).strip(): pruefung.ohne_quellenmarke(fertig[i]).strip() for i, s in enumerate(saetze) if i in fertig}
+        pr = {**pr, "saetze": [{**s, "text": nach.get(str(s.get("text", "")).strip(), s.get("text", ""))} if isinstance(s, dict) else s
+                               for s in pr["saetze"]]}
+        if isinstance(pr.get("text"), str) and "erfunden" in extra and len(saetze) + extra.index("erfunden") in fertig:
+            pr["text"] = fertig[len(saetze) + extra.index("erfunden")]
+        ls["pruefung"] = pr
+    fehlen = len(saetze) - sum(1 for i in range(len(saetze)) if i in fertig)
+    ls["sprache"] = "en"
+    ls["uebersetzt_s"] = round(time.time() - t0, 2)
+    if log:
+        log(f"OK uebersetzt ins Englische in {ls['uebersetzt_s']} s, {len(saetze)} Sätze" + (f", {fehlen} blieben deutsch" if fehlen else ""))
+    if teil_melden is not None:
+        try:
+            teil_melden(neu.strip())
+        except Exception:
+            pass
+    return neu, ls

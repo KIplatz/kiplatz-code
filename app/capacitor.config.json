@@ -1,0 +1,23 @@
+{
+  "appId": "at.kiplatz.app",
+  "appName": "KIplatz",
+  "webDir": "auslieferung",
+  "loggingBehavior": "none",
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    },
+    "CapacitorCookies": {
+      "enabled": false
+    }
+  },
+  "ios": {
+    "contentInset": "never",
+    "webContentsDebuggingEnabled": false
+  },
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false
+  }
+}

@@ -1,0 +1,13 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "at.kiplatz.app",
+      "sha256_cert_fingerprints": [
+        "87:8A:FE:76:E8:5E:7D:FF:4C:A8:BC:94:46:F4:63:C3:68:10:1D:C2:4E:62:DD:97:B4:65:84:44:F0:0E:F5:45",
+        "45:13:46:A2:65:64:8E:C9:70:0A:2A:6A:86:4F:5D:40:C7:F3:13:3D:B7:9E:B9:BC:C8:0A:B5:7D:71:E2:23:7C"
+      ]
+    }
+  }
+]

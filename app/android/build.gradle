@@ -1,0 +1,27 @@
+buildscript {
+
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()   // 06.10.2026: Gradle Play Publisher (Triple-T, Apache 2.0; 3.9.1, weil 4.x erst ab Gradle 9.1 läuft)
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.13.0'
+        classpath 'com.github.triplet.gradle:play-publisher:3.9.1'
+        classpath 'com.google.gms:google-services:4.4.4'
+
+    }
+}
+
+apply from: "variables.gradle"
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}

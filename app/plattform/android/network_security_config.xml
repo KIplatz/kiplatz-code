@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<network-security-config>
+  <base-config cleartextTrafficPermitted="false">
+    <trust-anchors>
+      <certificates src="system" />
+    </trust-anchors>
+  </base-config>
+  <domain-config cleartextTrafficPermitted="false">
+    <domain includeSubdomains="false">kiplatz.at</domain>
+    <pin-set expiration="2027-09-30">
+      <pin digest="SHA-256">sCkq5UWXjg+7mKu9lMhhYF5bGLsy7VI/UNW3tccdR7w=</pin>
+      <pin digest="SHA-256">diGVwiVYbubAI3RW4hB9xU8e/CH2GnkuvVFZE8zmgzI=</pin>
+      <pin digest="SHA-256">C5+lpZ7tcVwmwQIMcRtPbsQtWLABXhQzejna0wHFr8M=</pin>
+    </pin-set>
+  </domain-config>
+</network-security-config>

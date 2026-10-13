@@ -1,0 +1,6 @@
+psutil>=5.9,<6
+segno>=1.6,<2
+pypdf>=5,<7
+cryptography>=50.0.1,<51   # 27.09.2026: 43.0.3 had known vulnerabilities (old bundled OpenSSL), see node-agent/README.md Bau 26m
+truststore>=0.10,<0.11
+pywin32>=306; sys_platform == "win32"

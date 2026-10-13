@@ -1,0 +1,76 @@
+apply plugin: 'com.android.application'
+apply plugin: 'com.github.triplet.play'
+
+def appFassung = (file("../../www/js/version.js").text =~ /"(\d+)\.(\d+)\.(\d+)"/)[0]
+
+android {
+    namespace = "at.kiplatz.app"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "at.kiplatz.app"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode appFassung[1].toInteger() * 10000 + appFassung[2].toInteger() * 100 + appFassung[3].toInteger()
+        versionName "${appFassung[1]}.${appFassung[2]}.${appFassung[3]}"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    signingConfigs {
+        if (System.getenv("KIPLATZ_UPLOAD_KEYSTORE") && System.getenv("KIPLATZ_UPLOAD_PW")) {
+            upload {
+                storeFile file(System.getenv("KIPLATZ_UPLOAD_KEYSTORE"))
+                storeType "pkcs12"
+                storePassword System.getenv("KIPLATZ_UPLOAD_PW")
+                keyAlias "kiplatz-upload"
+                keyPassword System.getenv("KIPLATZ_UPLOAD_PW")
+            }
+        }
+    }
+    buildTypes {
+        release {
+            if (signingConfigs.findByName("upload")) signingConfig signingConfigs.upload
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}
+
+play {
+    def schluessel = System.getenv("KIPLATZ_PLAY_KEY")
+    enabled.set(schluessel != null)
+    if (schluessel != null) serviceAccountCredentials.set(file(schluessel))
+    track.set(System.getenv("KIPLATZ_PLAY_SPUR") ?: "internal")
+    defaultToAppBundles.set(true)
+    releaseStatus.set(com.github.triplet.gradle.androidpublisher.ReleaseStatus.COMPLETED)
+}

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">KIplatz</string>
+    <string name="title_activity_main">KIplatz</string>
+    <string name="package_name">at.kiplatz.app</string>
+    <string name="custom_url_scheme">at.kiplatz.app</string>
+</resources>
