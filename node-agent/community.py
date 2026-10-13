@@ -406,6 +406,12 @@ class Community:
         except app_core.AppError as exc:
             return Stand(False, 0, "Community", exc.detail)
 
+    def fenster_frei(self) -> bool:
+        try:
+            return bool(self._anfrage("/hallo").get("fenster"))
+        except app_core.AppError:
+            return False
+
     def quellen(self) -> list[dict]:
         return [q for q in self._anfrage("/quellen").get("quellen", []) if isinstance(q, dict)]
 

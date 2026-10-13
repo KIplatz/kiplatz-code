@@ -869,7 +869,7 @@
         </div>
         <div>
           
-          <div class="card" id="fenster-card"><h3>Frag-Fenster für deinen Betrieb oder Verein</h3>
+          <div class="card" id="fenster-card" style="display:none"><h3>Frag-Fenster für deinen Betrieb oder Verein</h3>
             <p class="muted small" style="margin-top:0">Ein Chatfenster auf deiner Website. Besucher stellen Fragen, und dieser PC beantwortet sie aus einem Ordner mit deinen Unterlagen (Preisliste, Öffnungszeiten, Anleitungen). Nur dieser Ordner, nie etwas anderes von diesem PC; die Unterlagen verlassen den PC nicht.</p>
             <div id="fenster-einrichten">
               <div class="mk-zeile"><label for="fenster-name">Name, der im Fenster steht</label><input type="text" id="fenster-name" maxlength="60" placeholder="z. B. Tischlerei Huber"></div>
@@ -2492,6 +2492,8 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
     api().fenster_stand().then((r) => {
       if (!r || !r.ok) return;
       const d = r.daten;
+      $("#fenster-card").style.display = d.frei ? "" : "none";
+      if (!d.frei) return;
       $("#fenster-einrichten").style.display = d.eingerichtet ? "none" : "";
       $("#fenster-stand").style.display = d.eingerichtet ? "" : "none";
       if (!d.eingerichtet) { $("#btn-fenster-einrichten").disabled = !d.angemeldet; return; }

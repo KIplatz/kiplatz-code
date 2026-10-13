@@ -4260,6 +4260,7 @@ class Api:
         def go():
             d = self._fenster.stand()
             d["angemeldet"] = self._community.geraet() is not None
+            d["frei"] = self._community.fenster_frei()
             return d
         return self._guarded("fenster_stand", go)
 

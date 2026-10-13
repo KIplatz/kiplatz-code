@@ -11,6 +11,9 @@ def dank(satz: str, wer: str, art: str = "Meldung") -> str:
 
 
 NEUERUNGEN: dict[str, list[str]] = {
+    "2026-10-13d": [
+        "Der Server kann neue Funktionen einzeln freischalten; das Programm zeigt sie erst dann.",
+    ],
     "2026-10-13c": [
         "Der Quelltext von Programm und App ist offen, Lizenz GNU AGPL 3. Unter „Über KIplatz“ im Programm und in den Einstellungen der App steht, wo du ihn findest: kiplatz.at/quelltext.",
         "Die Probefrage auf der Website darf mehr, je mehr PCs gerade online sind: Besucher ohne Konto bekommen pro Tag und alle zusammen pro Stunde so viele Fragen, wie die Community gerade hergibt.",
@@ -23,7 +26,6 @@ NEUERUNGEN: dict[str, list[str]] = {
         "„Meine KI“ kennt jetzt Fachgebiete: Wer Programmieren, Web oder KI am eigenen PC wählt, bekommt bei passenden Fragen zuerst Fundstellen aus geprüften Quellen, der Python-Dokumentation, den MDN Web Docs und der Ollama-Dokumentation, mit der Quelle unter der Antwort.",
     ],
     "2026-10-12d": [
-        "Neu unter „Meine KI“: ein Frag-Fenster für deinen Betrieb oder Verein. Besucher deiner Website stellen Fragen, und dein PC beantwortet sie aus einem Ordner mit deinen Unterlagen, ohne Cloud.",
         "Antwortest du auf die Rückfragen zu einem Brief oder einer Rechnung mit „weiter“, schreibt KIplatz ihn jetzt wirklich, mit Lücken für das Offene.",
     ],
     "2026-10-12c": [
@@ -898,6 +900,12 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-09-19j": [
         "Die Seite „Wissen“ ist kompakt: Summen, die neuesten Einträge, Suche und Filter nach Art.",
         "Ein zweiter Klick auf das Desktop-Symbol öffnet kein zweites Programm mehr, sondern holt das laufende nach vorne.",
+    ],
+}
+
+ZURUECKGEHALTEN: dict[str, list[str]] = {
+    "2026-10-12d": [
+        "Neu unter „Meine KI“: ein Frag-Fenster für deinen Betrieb oder Verein. Besucher deiner Website stellen Fragen, und dein PC beantwortet sie aus einem Ordner mit deinen Unterlagen, ohne Cloud.",
     ],
 }
 
