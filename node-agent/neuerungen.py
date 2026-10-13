@@ -11,6 +11,9 @@ def dank(satz: str, wer: str, art: str = "Meldung") -> str:
 
 
 NEUERUNGEN: dict[str, list[str]] = {
+    "2026-10-13e": [
+        "Der Liveticker versteht jetzt auch „Barca Live Spielstand“, „CL“ oder klein geschriebene Vereinsnamen und findet Bayern München, Rapid oder Salzburg auch dann, wenn die Datenbank sie anders schreibt.",
+    ],
     "2026-10-13d": [
         "Der Server kann neue Funktionen einzeln freischalten; das Programm zeigt sie erst dann.",
     ],

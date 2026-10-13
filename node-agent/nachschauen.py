@@ -39,8 +39,19 @@ _UA = wissen._UA
 LAENDER = {"at": "Österreich", "de": "Deutschland", "ch": "Schweiz"}
 NAMENSNENNUNG = {"wetter": "Open-Meteo (CC BY 4.0)", "schlagzeilen": "", "suche": "", "sport": sportdaten.QUELLE}
 
-_SPORT_LIVE = re.compile(r"\b(spielstand|zwischenstand|liveticker|live-ticker|livescore|live-score|live score|wie steht(?:'s| es|s)\b|steht es (?:bei|gerade|im)|"
-                         r"(?:läuft|laeuft|spielt) (?:gerade|jetzt|im moment)|wer führt|wer fuehrt|score\b|who(?:'s| is) (?:winning|leading)|playing (?:right )?now)", re.I)
+_SPORT_LIVE = re.compile(r"\b(spielstand|spielst[äa]nde|zwischenstand|zwischenst[äa]nde|livestand|live-stand|liveticker|live-ticker|livescores?|live-scores?|live scores?|"
+                         r"wie steht(?:'s| es|s)\b|steht es (?:bei|gerade|im)|wie sind die (?:spiel)?st[äa]nde|st[äa]nde der spiele|aktuelle[rn]? spielstand|"
+                         r"wie l[äa]uft das spiel|was l[äa]uft gerade|l[äa]uft gerade (?:ein|das) spiel|"
+                         r"(?:läuft|laeuft|spielt|spielen) (?:\w+ )?(?:gerade|jetzt|im moment|grad|momentan)|wer führt|wer fuehrt|scores?\b|current score|what(?:'s| is) the score|"
+                         r"who(?:'s| is) (?:winning|leading)|playing (?:right )?now|how (?:is|are) \w+ doing)", re.I)
+_SPORT_LIVE_SCHWACH = re.compile(r"\b(live|ticker|wie l[äa]uft(?:'s| es)|aktuelle[rn]? stand)\b", re.I)
+_SPORT_STOP = {"livestand", "live-stand", "spielstände", "spielstaende", "zwischenstände", "zwischenstaende", "stände", "staende", "stand", "ticker", "live-ticker",
+               "live-score", "livescores", "wieviel", "viel", "viele", "momentan", "derzeit", "moment", "grad", "läuft", "laeuft", "laufen", "laufende", "laufenden",
+               "denn", "so", "ob", "dass", "kann", "gib", "sage", "auch", "wieder", "heut", "aktueller", "ergebnisse", "resultate", "tabelle", "führt", "fuehrt",
+               "wer", "stehen", "stehts", "steht's", "gerad", "eigentlich", "momentane", "aktuellen", "cl", "ucl", "el", "em", "wm", "bl",
+               "fährt", "faehrt", "fahren", "startet", "beginnt", "anfang", "beginn", "uhr", "uhrzeit", "wieviel", "wievielt", "mal", "nochmal", "nächstes", "nächste",
+               "welche", "welcher", "welches", "welchen", "welchem", "wessen", "wem", "wen", "warum", "wieso", "weshalb", "alle", "aller", "allen", "gerade",
+               "scores", "live-scores", "winning", "leading", "doing", "current", "whats", "what's", "who's", "right", "league", "champions"}
 _SPORT_LETZTE = re.compile(r"\b(ergebnis(?:se)?|ausgegangen|gewonnen|verloren|gespielt|endstand|resultat\w*|letzte[snr]? (?:spiel|match|partie|rennen|runde)|gestern|"
                            r"result(?:s)?|final score|who won|yesterday|last (?:game|match|race|round))\b", re.I)
 _SPORT_NAECHSTE = re.compile(r"\b(wann (?:spiel|fährt|faehrt|ist|startet|beginnt|läuft|laeuft)\w*|wer spielt|spielplan|n[äa]chste[snr]? (?:spiel|match|partie|rennen|runde|grand prix|termin)|"
@@ -50,7 +61,8 @@ _SPORT_WORT = re.compile(r"\b(spiel|spiele|spielt|match|partie|rennen|grand prix
                          r"fu[ßs]ball|soccer|football|basketball|eishockey|hockey|handball|tennis|formel|formula|motogp|nba|nfl|nhl|mlb|bundesliga|champions league|"
                          r"premier league|serie a|la liga|mannschaft|verein|team|saison|season|tabelle|meisterschaft)\b", re.I)
 _SPORT_NICHT = re.compile(r"\b(wetter|regen|schnee|gedicht|geschichte|rezept|aktie\w*|börse|boerse|kurs|wahl\w*|umfrage|ergebnisse? der (?:wahl|umfrage|studie|prüfung|pruefung)|"
-                          r"prüfungsergebnis\w*|wahlergebnis\w*|testergebnis\w*|blutwert\w*|spielzeug|spielplatz|spielfilm|computerspiel|videospiel|brettspiel|kartenspiel|kinderspiel)\b", re.I)
+                          r"prüfungsergebnis\w*|wahlergebnis\w*|testergebnis\w*|blutwert\w*|spielzeug|spielplatz|spielfilm|computerspiel|videospiel|brettspiel|kartenspiel|kinderspiel|"
+                          r"election|vote|poll|konzert|concert|ticket\w*|karten für|suche live|live nachpr[üu]fen|live suchen|im internet)\b", re.I)
 _SPORT_FUELL = {"wie", "steht", "stehts", "steht's", "es", "bei", "beim", "gerade", "jetzt", "im", "in", "der", "die", "das", "den", "dem", "des", "ein", "eine", "einen", "einem", "und",
                 "oder", "wer", "wann", "was", "wo", "spielt", "spielen", "spiel", "spiele", "heute", "morgen", "abend", "abends", "nachmittag", "wochenende", "am", "an", "als",
                 "nächstes", "naechstes", "nächste", "naechste", "nächsten", "naechsten", "letzte", "letztes", "letzten", "gegen", "von", "vom", "für", "fuer", "mit", "nach",
@@ -69,23 +81,39 @@ def sport_erkennen(frage: str) -> "Auftrag | None":
         return None
     liga = sportdaten.liga_alias(f)
     live, letzte, naechste = _SPORT_LIVE.search(f), _SPORT_LETZTE.search(f), _SPORT_NAECHSTE.search(f)
-    if not (live or letzte or naechste):
+    schwach = _SPORT_LIVE_SCHWACH.search(f) if not live else None
+    if not (live or letzte or naechste or schwach or liga):
         return None
-    was = "live" if live and not letzte else ("letzte" if letzte else "naechste")
-    if was == "live" and naechste and not re.search(r"\b(spielstand|zwischenstand|liveticker|livescore|live score|wie steht|steht es|score)\b", f, re.I):
+    if liga and not (live or letzte or naechste or schwach):
+        live = liga
+    was = "live" if (live or schwach) and not letzte else ("letzte" if letzte else "naechste")
+    if was == "live" and naechste and not re.search(r"\b(spielstand|spielst[äa]nde|zwischenstand|livestand|liveticker|livescore|live score|wie steht|steht es|scores?)\b", f, re.I):
         was = "naechste"
-    sache = liga
-    if not sache:
-        vorne = re.split(r"\s+(?:gegen|vs\.?|versus|against)\s+", f, flags=re.I)[0]
-        woerter = []
-        for w in re.findall(r"[A-ZÄÖÜ][\wäöüß.\-']*|\b[A-Z]{2,5}\b|\d+\.\s*(?:FC|SC|SV|FSV|TSV)\b", vorne):
+    vorne = re.split(r"\s+(?:gegen|vs\.?|versus|against)\s+", f, flags=re.I)[0]
+    liga_woerter = set(liga.lower().split()) if liga else set()
+    def brauchbar(w: str) -> bool:
+        k = w.lower()
+        return bool(w) and k not in _SPORT_FUELL and k not in _SPORT_STOP and k not in liga_woerter and not (liga and liga.lower() in k) and not _SPORT_WORT.fullmatch(w) \
+            and not _SPORT_LIVE.fullmatch(w) and not _SPORT_LETZTE.fullmatch(w) and not _SPORT_NAECHSTE.fullmatch(w)
+    woerter = []
+    for w in re.findall(r"[A-ZÄÖÜ][\wäöüß.\-']*|\b[A-Z]{2,5}\b|\d+\.\s*(?:FC|SC|SV|FSV|TSV)\b", vorne):
+        w2 = w.strip(" .,;:!?'\"")
+        if brauchbar(w2) and w2 not in sportdaten.LIGEN_KURZ:
+            woerter.append(w2)
+    if not woerter:
+        for w in re.findall(r"[\wäöüßÄÖÜ.\-']+", vorne):
             w2 = w.strip(" .,;:!?'\"")
-            if w2 and w2.lower() not in _SPORT_FUELL and not _SPORT_WORT.fullmatch(w2):
+            if len(w2) >= 3 and brauchbar(w2) and not w2.isdigit():
                 woerter.append(w2)
-        sache = " ".join(woerter)[:sportdaten.MAX_SACHE]
+    sache = (" ".join(woerter) or liga)[:sportdaten.MAX_SACHE]
+    if schwach and not (letzte or naechste) and live is None and not (liga or sportdaten.verein_bekannt(sache)):
+        return None
     if not (liga or _SPORT_WORT.search(f)):
-        allein = re.search(r"\b(spielstand|zwischenstand|liveticker|live-ticker|livescore|live score|steht(?:'s| es|s) (?:bei|gerade bei)|wer führt|wer fuehrt|"
-                           r"gewonnen|verloren|ausgegangen|who won|score of)\b", f, re.I)
+        allein = re.search(r"\b(spielstand|spielst[äa]nde|zwischenstand|livestand|live-stand|liveticker|live-ticker|livescores?|live scores?|steht(?:'s| es|s) (?:bei|gerade bei)|"
+                           r"wer führt|wer fuehrt|gewonnen|verloren|ausgegangen|who won|score of|what(?:'s| is) the score|who(?:'s| is) (?:winning|leading)|"
+                           r"when (?:do|does|is|will) [\w .]+ play|who (?:plays|is playing)|next (?:game|match))\b", f, re.I)
+        if not allein and schwach and sache and sportdaten.verein_bekannt(sache):
+            allein = schwach
         if not (allein and sache):
             return None
     land = "de" if re.search(r"\b(deutsch\w*|germany|german)\b", f, re.I) else "at"

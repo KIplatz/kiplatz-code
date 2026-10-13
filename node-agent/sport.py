@@ -40,8 +40,80 @@ LIGEN: dict[str, str] = {
     "motogp": "MotoGP", "nba": "NBA", "nfl": "NFL", "nhl": "NHL", "mlb": "MLB", "wnba": "WNBA", "euroleague": "Euroleague Basketball",
     "del": "German DEL", "ice hockey league": "Austrian ICE Hockey League", "ice liga": "Austrian ICE Hockey League", "eishockey liga": "Austrian ICE Hockey League",
     "superliga": "Austrian Basketball Superliga", "basketball superliga": "Austrian Basketball Superliga", "bbl": "German Basketball Bundesliga",
+    "champions-league": "UEFA Champions League", "championsleague": "UEFA Champions League", "königsklasse": "UEFA Champions League", "koenigsklasse": "UEFA Champions League",
+    "europa-league": "UEFA Europa League", "europaleague": "UEFA Europa League", "conference-league": "UEFA Conference League", "conferenceleague": "UEFA Conference League",
+    "europameisterschaft": "UEFA European Championships", "fußball-em": "UEFA European Championships", "fussball-em": "UEFA European Championships",
+    "weltmeisterschaft": "FIFA World Cup", "fußball-wm": "FIFA World Cup", "fussball-wm": "FIFA World Cup", "world cup": "FIFA World Cup",
+    "champions hockey league": "Champions Hockey League", "icehl": "Austrian ICE Hockey League", "ice hockey liga": "Austrian ICE Hockey League",
+    "win2day ice hockey league": "Austrian ICE Hockey League", "österreichische eishockey liga": "Austrian ICE Hockey League", "eishockeyliga": "Austrian ICE Hockey League",
+    "deutsche eishockey liga": "German DEL", "deutsche eishockeyliga": "German DEL", "ligue1": "French Ligue 1", "laliga": "Spanish La Liga", "serie-a": "Italian Serie A",
+    "zweite liga": "Austrian 2. Liga", "2.liga": "Austrian 2. Liga", "admiral 2. liga": "Austrian 2. Liga", "2. deutsche bundesliga": "German 2. Bundesliga",
+    "zweite deutsche bundesliga": "German 2. Bundesliga", "deutsche liga": "German Bundesliga", "österreichische liga": "Austrian Bundesliga", "dfb pokal": "DFB Pokal",
 }
+LIGEN["conference league"] = "UEFA Conference League"
 _LIGA_RE = re.compile(r"(?<![\w])(" + "|".join(re.escape(k) for k in sorted(LIGEN, key=len, reverse=True)) + r")(?![\w])", re.I)
+LIGEN_KURZ: dict[str, str] = {"CL": "champions league", "UCL": "champions league", "EL": "europa league", "UEL": "europa league", "ECL": "conference league",
+                              "UECL": "conference league", "EM": "europameisterschaft", "WM": "weltmeisterschaft", "CHL": "champions hockey league",
+                              "ICEHL": "ice hockey league", "BL": "bundesliga", "PL": "premier league", "NL": "nations league"}
+_KURZ_RE = re.compile(r"(?<![\w])(" + "|".join(sorted(LIGEN_KURZ, key=len, reverse=True)) + r")(?![\w])")
+
+VEREINE: dict[str, str] = {
+    "rapid": "Rapid Vienna", "rapid wien": "Rapid Vienna", "sk rapid": "Rapid Vienna", "sk rapid wien": "Rapid Vienna", "austria wien": "Austria Vienna",
+    "fk austria wien": "Austria Vienna", "fak": "Austria Vienna", "salzburg": "Red Bull Salzburg", "red bull salzburg": "Red Bull Salzburg", "rb salzburg": "Red Bull Salzburg",
+    "fc salzburg": "Red Bull Salzburg", "fc red bull salzburg": "Red Bull Salzburg", "sturm": "Sturm Graz", "sturm graz": "Sturm Graz", "sk sturm": "Sturm Graz",
+    "sk sturm graz": "Sturm Graz", "lask": "LASK", "lask linz": "LASK", "wac": "Wolfsberger AC", "wolfsberg": "Wolfsberger AC", "wolfsberger ac": "Wolfsberger AC",
+    "wsg": "WSG Tirol", "wsg tirol": "WSG Tirol", "gak": "Grazer AK", "grazer ak": "Grazer AK", "ried": "SV Ried", "sv ried": "SV Ried",
+    "bayern": "Bayern Munich", "fc bayern": "Bayern Munich", "bayern münchen": "Bayern Munich", "bayern muenchen": "Bayern Munich", "fc bayern münchen": "Bayern Munich",
+    "fc bayern muenchen": "Bayern Munich", "fcb": "Bayern Munich", "die bayern": "Bayern Munich", "dortmund": "Borussia Dortmund", "bvb": "Borussia Dortmund",
+    "borussia dortmund": "Borussia Dortmund", "leverkusen": "Bayer Leverkusen", "bayer leverkusen": "Bayer Leverkusen", "bayer 04": "Bayer Leverkusen",
+    "leipzig": "RB Leipzig", "rb leipzig": "RB Leipzig", "gladbach": "Monchengladbach", "mönchengladbach": "Monchengladbach", "moenchengladbach": "Monchengladbach",
+    "borussia mönchengladbach": "Monchengladbach", "frankfurt": "Eintracht Frankfurt", "eintracht": "Eintracht Frankfurt", "eintracht frankfurt": "Eintracht Frankfurt",
+    "stuttgart": "Stuttgart", "vfb": "Stuttgart", "vfb stuttgart": "Stuttgart", "wolfsburg": "Wolfsburg", "vfl wolfsburg": "Wolfsburg", "hoffenheim": "Hoffenheim",
+    "tsg hoffenheim": "Hoffenheim", "freiburg": "Freiburg", "sc freiburg": "Freiburg", "köln": "Koln", "koeln": "Koln", "fc köln": "Koln", "1. fc köln": "Koln",
+    "hsv": "Hamburger SV", "hamburg": "Hamburger SV", "hamburger sv": "Hamburger SV", "bremen": "Werder Bremen", "werder": "Werder Bremen", "werder bremen": "Werder Bremen",
+    "schalke": "Schalke", "schalke 04": "Schalke", "s04": "Schalke", "union berlin": "Union Berlin", "hertha": "Hertha", "hertha bsc": "Hertha", "mainz": "Mainz",
+    "mainz 05": "Mainz", "augsburg": "Augsburg", "fc augsburg": "Augsburg", "heidenheim": "Heidenheim",
+    "real": "Real Madrid", "real madrid": "Real Madrid", "barca": "Barcelona", "barça": "Barcelona", "barcelona": "Barcelona", "fc barcelona": "Barcelona",
+    "manu": "Manchester United", "man united": "Manchester United", "manchester united": "Manchester United", "man city": "Manchester City",
+    "manchester city": "Manchester City", "psg": "Paris", "paris": "Paris", "paris saint-germain": "Paris", "paris sg": "Paris", "juve": "Juventus", "juventus": "Juventus",
+    "juventus turin": "Juventus", "inter": "Inter Milan", "inter mailand": "Inter Milan", "inter milan": "Inter Milan", "milan": "AC Milan", "ac milan": "AC Milan",
+    "ac mailand": "AC Milan", "atletico": "Atletico Madrid", "atlético": "Atletico Madrid", "atletico madrid": "Atletico Madrid", "atlético madrid": "Atletico Madrid",
+    "liverpool": "Liverpool", "arsenal": "Arsenal", "chelsea": "Chelsea", "tottenham": "Tottenham", "spurs": "Tottenham", "napoli": "Napoli", "neapel": "Napoli",
+    "benfica": "Benfica", "porto": "Porto", "fc porto": "Porto", "ajax": "Ajax", "celtic": "Celtic", "basel": "Basel", "fc basel": "Basel", "yb": "BSC Young Boys",
+    "young boys": "BSC Young Boys", "zürich": "Zurich", "fc zürich": "Zurich", "fcz": "Zurich",
+    "österreich": "Austria", "oesterreich": "Austria", "deutschland": "Germany", "schweiz": "Switzerland", "england": "England", "frankreich": "France",
+    "spanien": "Spain", "italien": "Italy", "niederlande": "Netherlands", "holland": "Netherlands", "portugal": "Portugal", "belgien": "Belgium", "kroatien": "Croatia",
+    "türkei": "Turkey", "tuerkei": "Turkey", "ungarn": "Hungary", "tschechien": "Czech Republic",
+}
+_ZWEITE = re.compile(r"(?<![\w])(II|III|B|Youth|Women|Frauen|Femenino|Feminino|WFC|Ladies|U\d\d|Reserves?|Amateure|Next Gen|Castilla|Primavera|Jong|Atl[èe]tic|Madrile[ñn]o)(?![\w])")
+_KUERZEL = re.compile(r"^(?:1\.\s*|fc|sk|sv|sc|tsv|fk|rb|vfb|vfl|tsg|bsc|spvgg|fsv|ac|as|ss|cf|cd|ud|rcd|afc)\s+", re.I)
+_UMLAUTE = str.maketrans({"ä": "a", "ö": "o", "ü": "u", "ß": "ss", "Ä": "A", "Ö": "O", "Ü": "U", "é": "e", "è": "e", "á": "a", "ó": "o", "ñ": "n", "ç": "c"})
+
+
+def verein_bekannt(name: str) -> bool:
+    return " ".join(str(name or "").lower().split()) in VEREINE
+
+
+def _gefaltet(s: str) -> str:
+    return " ".join(str(s or "").translate(_UMLAUTE).lower().replace("-", " ").split())
+
+
+def _suchbegriffe(name: str) -> list[str]:
+    n = " ".join(name.split())
+    klein = n.lower()
+    aus: list[str] = []
+    ohne = n
+    while True:
+        kurz = _KUERZEL.sub("", ohne)
+        if kurz == ohne:
+            break
+        ohne = kurz
+    for kandidat in (VEREINE.get(klein), n, n.translate(_UMLAUTE).replace("München", "Munich").replace("Munchen", "Munich").replace("Wien", "Vienna"),
+                     ohne, ohne.split()[-1] if ohne.split() else ""):
+        k = " ".join((kandidat or "").split())
+        if k and k not in aus and len(k) >= 3:
+            aus.append(k)
+    return aus[:4]
 
 ZUSTAND = {"NS": "noch nicht begonnen", "1H": "1. Halbzeit", "HT": "Halbzeitpause", "2H": "2. Halbzeit", "ET": "Verlängerung", "BT": "Pause vor der Verlängerung",
            "P": "Elfmeterschießen", "PEN": "Elfmeterschießen", "FT": "Spiel beendet", "AET": "beendet nach Verlängerung", "LIVE": "läuft",
@@ -167,9 +239,22 @@ class Sport:
         n = " ".join(str(name or "").split())[:MAX_SACHE]
         if not n:
             return None
-        treffer = [e for e in self._holen("search/team/" + _suchwort(n), SUCHE_S) if isinstance(e, dict) and e.get("idTeam")]
-        if sport:
-            treffer = [e for e in treffer if str(e.get("strSport") or "").lower() == sport.lower()] or treffer
+        zweite_gewollt = bool(_ZWEITE.search(n))
+        gewuenscht = sport.lower()
+        treffer: list[dict] = []
+        for begriff in _suchbegriffe(n):
+            liste = [e for e in self._holen("search/team/" + _suchwort(begriff), SUCHE_S) if isinstance(e, dict) and e.get("idTeam")]
+            if not zweite_gewollt:
+                liste = [e for e in liste if not _ZWEITE.search(str(e.get("strTeam") or ""))] or liste
+            if liste:
+                ziel = _gefaltet(begriff)
+                def rang(e: dict) -> tuple:
+                    nm, sp, land = _gefaltet(e.get("strTeam")), str(e.get("strSport") or "").lower(), str(e.get("strCountry") or "")
+                    return (nm != ziel, bool(gewuenscht) and sp != gewuenscht, sp != "soccer", land not in ("Austria", "Germany", "Switzerland"))
+                treffer = sorted(liste, key=rang)
+                if gewuenscht and str(treffer[0].get("strSport") or "").lower() != gewuenscht and begriff != _suchbegriffe(n)[-1]:
+                    continue
+                break
         if not treffer:
             return None
         e = treffer[0]
@@ -235,8 +320,12 @@ def _passt(name: str, spiel: dict) -> bool:
 
 
 def liga_alias(text: str) -> str:
-    m = _LIGA_RE.search(str(text or ""))
-    return m.group(1) if m else ""
+    t = str(text or "")
+    m = _LIGA_RE.search(t)
+    if m:
+        return m.group(1)
+    k = _KURZ_RE.search(t)
+    return LIGEN_KURZ[k.group(1)] if k else ""
 
 
-__all__ = ["Sport", "SportError", "spiel_kurz", "liga_alias", "LIGEN", "ZUSTAND", "LAEUFT", "VORBEI", "QUELLE", "SEITE", "SCHLUESSEL_DATEI", "LIVE_S", "PLAN_S", "JE_MINUTE"]
+__all__ = ["Sport", "SportError", "spiel_kurz", "liga_alias", "verein_bekannt", "VEREINE", "LIGEN_KURZ", "LIGEN", "ZUSTAND", "LAEUFT", "VORBEI", "QUELLE", "SEITE", "SCHLUESSEL_DATEI", "LIVE_S", "PLAN_S", "JE_MINUTE"]
