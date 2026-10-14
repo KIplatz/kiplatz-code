@@ -11,6 +11,9 @@ def dank(satz: str, wer: str, art: str = "Meldung") -> str:
 
 
 NEUERUNGEN: dict[str, list[str]] = {
+    "2026-10-14a": [
+        "Allgemeine Optimierungen wurden durchgeführt.",
+    ],
     "2026-10-13f": [
         "Spielstände nennen die Vereine jetzt so, wie wir sie sagen: Inter Mailand, AC Mailand, Bayern München, Rapid Wien, und die Ligen heißen Deutsche Bundesliga oder Europameisterschaft.",
     ],

@@ -111,6 +111,8 @@ TRAINING_NACHHOLEN_NAECHTE = 2
 TRAINING_NACHHOLEN_BIS = 12
 PRUEFSTAND_VERSUCHE = 3
 PRUEFSTAND_ABSTAND_S = 12.0
+MESS_SUCHE_ABSTAND_S = 20.0
+MESS_SUCHEN_NACHT_MAX = 400
 PRUEFSTAND_AB_B = 8.0
 WARTEN_UNGENOMMEN_S = 25
 WARTEN_UNGENOMMEN_BESCHAEFTIGT_S = 70
@@ -646,6 +648,8 @@ class Api:
         self._community.bei_weitergeben = self._weitergeber.halter_auftrag
         self._nacht_memo: dict | None = None
         self._memo_frage, self._memo_nutzen = "", False
+        self._mess_suche_zuletzt, self._mess_suchen, self._mess_suche_gemeldet = 0.0, 0, False
+        self._mess_uhr, self._mess_schlafen = time.monotonic, time.sleep
         self._nachschauer = nachschauer or nachschauen.Nachschauer(suche_fn=lambda frage, **kw: self._websuche(frage, **kw),
                                                                    sport_fn=lambda felder: self._community.sport(felder))
         self._schnittstelle = schnittstelle.Schnittstelle(self._schnittstelle_antwort, self._schnittstelle_schluessel, log=lambda line: _log(core, line),
@@ -1280,6 +1284,7 @@ class Api:
         if erzwingen and not self._rechen.anhalten(hoechstens_s=120.0):
             raise app_core.AppError("PRUEFSTAND_BESCHAEFTIGT", "Die Rechenarbeit ist gerade mitten in einem Auftrag; bitte in einer Minute noch einmal.")
         self._nacht_memo = {} if nacht else None
+        self._mess_suche_zuletzt, self._mess_suchen, self._mess_suche_gemeldet = 0.0, 0, False
         b = None
         try:
             try:
@@ -1323,10 +1328,27 @@ class Api:
             alt = je[schl] if schl in je else (next((v for v in je.values() if v), []) if je else None)
             if alt is not None:
                 return [dict(t) for t in alt]
+        if memo is not None and not self._memo_nutzen:
+            self._mess_suche_budget(vorrang)
         treffer = self._community.websuche(frage, 8, **kw)
         if memo is not None and k and not self._memo_nutzen:
             memo.setdefault(k, {})[schl] = [dict(t) for t in treffer]
         return treffer
+
+    def _mess_suche_budget(self, vorrang) -> None:
+        if self._mess_suchen >= MESS_SUCHEN_NACHT_MAX:
+            if not self._mess_suche_gemeldet:
+                self._mess_suche_gemeldet = True
+                _log(self._core, f"INFO pruefstand: {MESS_SUCHEN_NACHT_MAX} Internet-Suchen in dieser Nacht erreicht, weitere Prüffragen laufen ohne Suche")
+            raise app_core.AppError("SUCHE_GESCHONT", "Die Messnacht schont die Suchmaschinen; diese Prüffrage läuft ohne Suche.")
+        jetzt = self._mess_uhr()
+        ziel = self._mess_suche_zuletzt + MESS_SUCHE_ABSTAND_S if self._mess_suche_zuletzt else jetzt
+        while jetzt < ziel:
+            if isinstance(vorrang, threading.Event) and vorrang.is_set():
+                raise app_core.AppError("SUCHE_GESCHONT", "Jemand fragt gerade selbst; diese Prüffrage läuft ohne Suche.")
+            self._mess_schlafen(min(0.5, ziel - jetzt))
+            jetzt = self._mess_uhr()
+        self._mess_suche_zuletzt, self._mess_suchen = jetzt, self._mess_suchen + 1
 
     def _pruefstand_takt(self, letzt: float, *, mitglied: bool = True) -> float:
         ziel = letzt + PRUEFSTAND_ABSTAND_S
