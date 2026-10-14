@@ -1366,8 +1366,10 @@ async function geraeteZeichnen() {
     const name = document.createElement("strong"); name.translate = false; name.textContent = g.name || g.art;
     const info = document.createElement("small");
     const seit = g.angemeldet ? new Date(g.angemeldet) : null;
+
     info.textContent = [g.art, seit && !isNaN(seit) ? "angemeldet seit " + seit.toLocaleDateString(kiplatzSprache.datumSprache(), { day: "2-digit", month: "2-digit", year: "numeric" }) : "",
-                        g.dieses ? "dieses Gerät" : (g.zuletzt ? "zuletzt aktiv " + tagText(g.zuletzt) : "")].filter(Boolean).join(" · ");
+                        g.dieses ? "dieses Gerät" : (g.zuletzt ? "zuletzt aktiv " + tagText(g.zuletzt) : ""),
+                        g.gruendung ? "Gründungsmitglied Nr. " + g.gruendung : ""].filter(Boolean).join(" · ");
     text.append(name, info);
     li.append(text);
     if (!g.dieses) {

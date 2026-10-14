@@ -56,6 +56,7 @@ GERAETE_MAX_BYTES = 64 * 1024 * 1024
 AUFTRAEGE_SCHREIB_MAX_BYTES = 6 * 1024 * 1024
 AUFTRAEGE_KUERZEN_AUF_BYTES = 5 * 1024 * 1024
 AUFTRAEGE_LESEN_MAX_BYTES = 32 * 1024 * 1024
+GRUENDUNG_MAX = 100
 AKTIV_SAMMELN_S = 2.0
 DIRNAME = "rechen"
 INDEX_DIRNAME = "index"
@@ -386,6 +387,8 @@ class Verteiler:
         self._streng_pruefer: set[str] = set()
         self._aktiv_timer: threading.Timer | None = None
         self._credits_offen: dict[str, dict[str, int]] = {}
+        self._gruendung_pfad = self.dir / "gruendung.json"
+        self.admin_konten_lesen = lambda: set()
         self._abschnitte_cache: tuple[int, list] | None = None
         self._texte_cache: tuple[list, dict] | None = None
         self._index_sig: tuple | None = None
@@ -674,11 +677,12 @@ class Verteiler:
 
     def konto_geraete(self, sub: str) -> list[dict]:
         aus = []
+        gr = self.gruendung()
         for k, e in self._geraete().items():
             if isinstance(e, dict) and sub and e.get("konto_sub") == str(sub):
                 aus.append({"kennung": k, "name": str(e.get("name", "")), "art": str(e.get("art") or ("PC" if e.get("herkunft") != "konto" else "Gerät")),
                             "angemeldet": str(e.get("konto_seit") or e.get("angelegt", "")), "zuletzt": str(e.get("zuletzt", "")),
-                            "sitzung": e.get("herkunft") == "konto"})
+                            "sitzung": e.get("herkunft") == "konto", "gruendung": gr.get(k, 0)})
         return sorted(aus, key=lambda x: (x["zuletzt"], x["angemeldet"]), reverse=True)
 
     @_gesperrt
@@ -771,8 +775,9 @@ class Verteiler:
                  "antworten": int(e.get("antworten", 0)), "admin": bool(e.get("admin")),
                  "vertieft": int(e.get("vertieft", 0)), "vertieft_geprueft": int(e.get("vertieft_geprueft", 0)),
                  "konto_sub": str(e.get("konto_sub", "") or ""), "konto_name": str(e.get("konto_name", "") or ""),
-                 "zuletzt": str(e.get("zuletzt", "") or ""), "art": str(e.get("art", "") or "")}
-                for k, e in self._geraete().items() if isinstance(e, dict)]
+                 "zuletzt": str(e.get("zuletzt", "") or ""), "art": str(e.get("art", "") or ""),
+                 "gruendung": gr.get(k, 0)}
+                for gr in [self.gruendung()] for k, e in self._geraete().items() if isinstance(e, dict)]
 
 
     def ist_admin(self, kennung: str) -> bool:
@@ -805,6 +810,56 @@ class Verteiler:
         if not e:
             self._credits_offen.pop(str(kennung), None)
         self._wecker()
+        if int(credits) > 0:
+            self._gruendung_vergeben(str(kennung))
+
+
+    def gruendung(self) -> dict[str, int]:
+        d = sicher_schreiben.json_laden_gemerkt(self._gruendung_pfad, {})
+        g = d.get("geraete") if isinstance(d, dict) else None
+        return {str(k): int(v.get("nr", 0)) for k, v in (g or {}).items() if isinstance(v, dict) and int(v.get("nr", 0)) > 0}
+
+    def gruendung_eintraege(self) -> list[dict]:
+        d = sicher_schreiben.json_laden_gemerkt(self._gruendung_pfad, {})
+        g = d.get("geraete") if isinstance(d, dict) else None
+        geraete = self._geraete_lesen()
+        aus = []
+        for k, v in sorted((g or {}).items(), key=lambda kv: int((kv[1] or {}).get("nr", 0)) if isinstance(kv[1], dict) else 0):
+            e = geraete.get(str(k))
+            if not isinstance(v, dict) or not isinstance(e, dict):
+                continue
+            aus.append({"nr": int(v.get("nr", 0)), "zeit": str(v.get("zeit", "")), "benutzer": str(e.get("konto_benutzer", "") or ""),
+                        "konto_name": str(e.get("konto_name", "") or ""), "konto_sub": str(e.get("konto_sub", "") or "")})
+        return aus
+
+    def _gruendung_vergeben(self, kennung: str) -> int:
+        bekannt = self.gruendung()
+        if kennung in bekannt:
+            return bekannt[kennung]
+        if len(bekannt) >= GRUENDUNG_MAX:
+            return 0
+        geraete = self._geraete_lesen()
+        e = geraete.get(kennung)
+        if not isinstance(e, dict) or e.get("admin") or e.get("gesperrt"):
+            return 0
+        sub = str(e.get("konto_sub", "") or "")
+        if sub:
+            try:
+                admin_konten = set(self.admin_konten_lesen() or ())
+            except Exception:
+                admin_konten = set()
+            if sub in admin_konten or any(isinstance(x, dict) and x.get("admin") and str(x.get("konto_sub", "")) == sub for x in geraete.values()):
+                return 0
+        nr = max(bekannt.values(), default=0) + 1
+        d = sicher_schreiben.json_laden(self._gruendung_pfad, {})
+        d = d if isinstance(d, dict) else {}
+        g = d.setdefault("geraete", {})
+        if not isinstance(g, dict):
+            g = d["geraete"] = {}
+        g[kennung] = {"nr": nr, "zeit": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(self._jetzt()))}
+        _schreiben(self._gruendung_pfad, d)
+        self._log(f"GRUENDUNG Nr. {nr} für {kennung}")
+        return nr
 
 
     def _index_pfad(self, quelle: str) -> Path:

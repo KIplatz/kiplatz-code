@@ -11,6 +11,9 @@ def dank(satz: str, wer: str, art: str = "Meldung") -> str:
 
 
 NEUERUNGEN: dict[str, list[str]] = {
+    "2026-10-14b": [
+        "Die ersten 100 PCs, die für andere mithelfen, sind Gründungsmitglieder: Die Nummer steht in der Bestenliste, in deiner Geräteliste und als Abzeichen im Platzl, und sie bleibt.",
+    ],
     "2026-10-14a": [
         "Allgemeine Optimierungen wurden durchgeführt.",
     ],
@@ -919,6 +922,10 @@ ZURUECKGEHALTEN: dict[str, list[str]] = {
 }
 
 KURZ_JE_TAG: dict[str, list[str]] = {
+    "2026-10-14": [
+        "Die ersten 100 PCs, die mithelfen, sind Gründungsmitglieder, mit einer Nummer, die bleibt",
+        "Die Nummer steht in der Bestenliste, in deiner Geräteliste und als Abzeichen im Platzl",
+    ],
     "2026-10-13": [
         "KIplatz hat jetzt einen Liveticker: Spielstände und Livescores aus Fußball, Eishockey, NFL und NBA auf Frage",
         "Frag einfach: Wie steht es bei Sturm Graz, wer spielt heute in der Bundesliga, wann ist das nächste Rennen",
