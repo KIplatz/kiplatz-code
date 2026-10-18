@@ -49,8 +49,12 @@ def test_bei_einer_zahlenfrage_antwortet_das_modell_streng_neu_statt_ohne_zahlen
     t, _ = app_web.belege_anwenden(ANTWORT, FRAGE, QUELLE, _quellen(), heute=HEUTE, nochmal=lambda e: "Innsbruck hat 140.000 Einwohner.")
     assert t == "Das weiß ich noch nicht."
     auftraege.clear()
-    t, _ = app_web.belege_anwenden("Kompany kam 2023 von Burnley. Bremen liegt an der Weser.", "Wer trainiert Bayern?", QUELLE, _quellen(), heute=HEUTE, nochmal=nochmal)
-    assert t == "Bremen liegt an der Weser." and auftraege == []
+    t, _ = app_web.belege_anwenden("Kompany kam 2023 von Burnley. Bremen liegt an der Weser.", "Wer trainiert Bayern?", QUELLE, _quellen(), heute=HEUTE,
+                                   nochmal=lambda e: auftraege.append(e) or "Kompany kam 2023 von Burnley.")
+    assert len(auftraege) == 1 and t == "Das weiß ich noch nicht."
+    t, _ = app_web.belege_anwenden("Bremen hat 569.396 Einwohner. Bremen liegt an der Weser. Kompany kam 2023 von Burnley. Bremen ist eine Hansestadt.",
+                                   "Erzähl mir was über Bremen", QUELLE, _quellen(), heute=HEUTE, nochmal=lambda e: "Kompany kam 2023 von Burnley.")
+    assert t.startswith("Bremen hat 569.396 Einwohner.") and "Kompany" not in t
 
 
 def test_der_teilgeber_schickt_den_ganzen_entwurf_am_schluss_und_nie_zweimal_dasselbe():

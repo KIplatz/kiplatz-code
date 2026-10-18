@@ -1,11 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 from __future__ import annotations
 
-import os
 import queue
 import secrets
 import struct
-import threading
 import time
 from pathlib import Path
 

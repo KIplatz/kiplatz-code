@@ -12,7 +12,7 @@ import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-import sport as sportdaten
+import belege
 import wissen
 
 WETTER_API = "https://api.open-meteo.com/v1/forecast"
@@ -31,109 +31,25 @@ SUCHE_NICHT_DURCH = "Community-Suche (nicht durchgekommen)"
 SUCHE_NICHTS = "NACHSCHAU_NICHTS"
 TIMEOUT_S = 15.0
 MAX_ANTWORT = 1024 * 1024
-GUELTIG = {"wetter": timedelta(hours=6), "schlagzeilen": timedelta(hours=3), "suche": timedelta(days=7),
-           "sport": timedelta(minutes=2), "sport-plan": timedelta(hours=6), "sport-ergebnis": timedelta(days=1)}
+GUELTIG = {"wetter": timedelta(hours=6), "schlagzeilen": timedelta(hours=3), "suche": timedelta(days=7)}
 MAX_GUELTIG_TAGE = 30
 MAX_TEXT = 20_000
 _UA = wissen._UA
 LAENDER = {"at": "Österreich", "de": "Deutschland", "ch": "Schweiz"}
-NAMENSNENNUNG = {"wetter": "Open-Meteo (CC BY 4.0)", "schlagzeilen": "", "suche": "", "sport": sportdaten.QUELLE}
-
-_SPORT_LIVE = re.compile(r"\b(spielstand|spielst[äa]nde|zwischenstand|zwischenst[äa]nde|livestand|live-stand|liveticker|live-ticker|livescores?|live-scores?|live scores?|"
-                         r"wie steht(?:'s| es|s)\b|steht es (?:bei|gerade|im)|wie sind die (?:spiel)?st[äa]nde|st[äa]nde der spiele|aktuelle[rn]? spielstand|"
-                         r"wie l[äa]uft das spiel|was l[äa]uft gerade|l[äa]uft gerade (?:ein|das) spiel|"
-                         r"(?:läuft|laeuft|spielt|spielen) (?:\w+ )?(?:gerade|jetzt|im moment|grad|momentan)|wer führt|wer fuehrt|scores?\b|current score|what(?:'s| is) the score|"
-                         r"who(?:'s| is) (?:winning|leading)|playing (?:right )?now|how (?:is|are) \w+ doing)", re.I)
-_SPORT_LIVE_SCHWACH = re.compile(r"\b(live|ticker|wie l[äa]uft(?:'s| es)|aktuelle[rn]? stand)\b", re.I)
-_SPORT_STOP = {"livestand", "live-stand", "spielstände", "spielstaende", "zwischenstände", "zwischenstaende", "stände", "staende", "stand", "ticker", "live-ticker",
-               "live-score", "livescores", "wieviel", "viel", "viele", "momentan", "derzeit", "moment", "grad", "läuft", "laeuft", "laufen", "laufende", "laufenden",
-               "denn", "so", "ob", "dass", "kann", "gib", "sage", "auch", "wieder", "heut", "aktueller", "ergebnisse", "resultate", "tabelle", "führt", "fuehrt",
-               "wer", "stehen", "stehts", "steht's", "gerad", "eigentlich", "momentane", "aktuellen", "cl", "ucl", "el", "em", "wm", "bl",
-               "fährt", "faehrt", "fahren", "startet", "beginnt", "anfang", "beginn", "uhr", "uhrzeit", "wieviel", "wievielt", "mal", "nochmal", "nächstes", "nächste",
-               "welche", "welcher", "welches", "welchen", "welchem", "wessen", "wem", "wen", "warum", "wieso", "weshalb", "alle", "aller", "allen", "gerade",
-               "scores", "live-scores", "winning", "leading", "doing", "current", "whats", "what's", "who's", "right", "league", "champions"}
-_SPORT_LETZTE = re.compile(r"\b(ergebnis(?:se)?|ausgegangen|gewonnen|verloren|gespielt|endstand|resultat\w*|letzte[snr]? (?:spiel|match|partie|rennen|runde)|gestern|"
-                           r"result(?:s)?|final score|who won|yesterday|last (?:game|match|race|round))\b", re.I)
-_SPORT_NAECHSTE = re.compile(r"\b(wann (?:spiel|fährt|faehrt|ist|startet|beginnt|läuft|laeuft)\w*|wer spielt|spielplan|n[äa]chste[snr]? (?:spiel|match|partie|rennen|runde|grand prix|termin)|"
-                             r"spielt (?:\w+ )?(?:heute|morgen|am wochenende|diese woche|als n[äa]chstes)|anpfiff|ansto[ßs]|kick-?off|fixtures?|schedule|"
-                             r"when (?:do|does|is|will)\b.*\b(?:play|race|start|kick)|who (?:plays|is playing)|next (?:game|match|race|round|grand prix))", re.I)
-_SPORT_WORT = re.compile(r"\b(spiel|spiele|spielt|match|partie|rennen|grand prix|qualifying|qualifikation|liga|league|cup|pokal|derby|tor|tore|goals?|"
-                         r"fu[ßs]ball|soccer|football|basketball|eishockey|hockey|handball|tennis|formel|formula|motogp|nba|nfl|nhl|mlb|bundesliga|champions league|"
-                         r"premier league|serie a|la liga|mannschaft|verein|team|saison|season|tabelle|meisterschaft)\b", re.I)
-_SPORT_NICHT = re.compile(r"\b(wetter|regen|schnee|gedicht|geschichte|rezept|aktie\w*|börse|boerse|kurs|wahl\w*|umfrage|ergebnisse? der (?:wahl|umfrage|studie|prüfung|pruefung)|"
-                          r"prüfungsergebnis\w*|wahlergebnis\w*|testergebnis\w*|blutwert\w*|spielzeug|spielplatz|spielfilm|computerspiel|videospiel|brettspiel|kartenspiel|kinderspiel|"
-                          r"election|vote|poll|konzert|concert|ticket\w*|karten für|suche live|live nachpr[üu]fen|live suchen|im internet)\b", re.I)
-_SPORT_FUELL = {"wie", "steht", "stehts", "steht's", "es", "bei", "beim", "gerade", "jetzt", "im", "in", "der", "die", "das", "den", "dem", "des", "ein", "eine", "einen", "einem", "und",
-                "oder", "wer", "wann", "was", "wo", "spielt", "spielen", "spiel", "spiele", "heute", "morgen", "abend", "abends", "nachmittag", "wochenende", "am", "an", "als",
-                "nächstes", "naechstes", "nächste", "naechste", "nächsten", "naechsten", "letzte", "letztes", "letzten", "gegen", "von", "vom", "für", "fuer", "mit", "nach",
-                "ergebnis", "ergebnisse", "spielstand", "zwischenstand", "liveticker", "livescore", "live", "match", "partie", "rennen", "runde", "ausgegangen", "gewonnen",
-                "verloren", "gespielt", "gestern", "hat", "haben", "ist", "sind", "war", "waren", "wird", "gibt", "noch", "schon", "eigentlich", "bitte", "sag", "mir", "mal",
-                "zeig", "zeige", "schau", "nach", "ich", "mich", "du", "kannst", "mich", "interessiert", "endstand", "resultat", "spielplan", "anpfiff", "anstoß", "anstoss",
-                "mannschaft", "verein", "team", "fußball", "fussball", "basketball", "eishockey", "handball", "tennis", "sport", "zur", "zum", "aktuell", "aktuelle", "aktuellen",
-                "a", "an", "the", "of", "is", "are", "was", "were", "how", "what", "when", "who", "does", "do", "did", "play", "plays", "playing", "game", "games", "score",
-                "scores", "result", "results", "live", "tonight", "today", "tomorrow", "yesterday", "next", "last", "race", "fixtures", "schedule", "kick", "off", "kickoff",
-                "won", "win", "lost", "match", "matches", "it", "there", "me", "tell", "show", "please", "right", "now", "standing", "standings", "in", "on", "at", "for", "vs"}
-
-
-def sport_erkennen(frage: str) -> "Auftrag | None":
-    f = " ".join(str(frage or "").split())
-    if not f or _SPORT_NICHT.search(f):
-        return None
-    liga = sportdaten.liga_alias(f)
-    live, letzte, naechste = _SPORT_LIVE.search(f), _SPORT_LETZTE.search(f), _SPORT_NAECHSTE.search(f)
-    schwach = _SPORT_LIVE_SCHWACH.search(f) if not live else None
-    if not (live or letzte or naechste or schwach or liga):
-        return None
-    if liga and not (live or letzte or naechste or schwach):
-        live = liga
-    was = "live" if (live or schwach) and not letzte else ("letzte" if letzte else "naechste")
-    if was == "live" and naechste and not re.search(r"\b(spielstand|spielst[äa]nde|zwischenstand|livestand|liveticker|livescore|live score|wie steht|steht es|scores?)\b", f, re.I):
-        was = "naechste"
-    vorne = re.split(r"\s+(?:gegen|vs\.?|versus|against)\s+", f, flags=re.I)[0]
-    liga_woerter = set(liga.lower().split()) if liga else set()
-    def brauchbar(w: str) -> bool:
-        k = w.lower()
-        return bool(w) and k not in _SPORT_FUELL and k not in _SPORT_STOP and k not in liga_woerter and not (liga and liga.lower() in k) and not _SPORT_WORT.fullmatch(w) \
-            and not _SPORT_LIVE.fullmatch(w) and not _SPORT_LETZTE.fullmatch(w) and not _SPORT_NAECHSTE.fullmatch(w)
-    woerter = []
-    for w in re.findall(r"[A-ZÄÖÜ][\wäöüß.\-']*|\b[A-Z]{2,5}\b|\d+\.\s*(?:FC|SC|SV|FSV|TSV)\b", vorne):
-        w2 = w.strip(" .,;:!?'\"")
-        if brauchbar(w2) and w2 not in sportdaten.LIGEN_KURZ:
-            woerter.append(w2)
-    if not woerter:
-        for w in re.findall(r"[\wäöüßÄÖÜ.\-']+", vorne):
-            w2 = w.strip(" .,;:!?'\"")
-            if len(w2) >= 3 and brauchbar(w2) and not w2.isdigit():
-                woerter.append(w2)
-    sache = (" ".join(woerter) or liga)[:sportdaten.MAX_SACHE]
-    if schwach and not (letzte or naechste) and live is None and not (liga or sportdaten.verein_bekannt(sache)):
-        return None
-    if not (liga or _SPORT_WORT.search(f)):
-        allein = re.search(r"\b(spielstand|spielst[äa]nde|zwischenstand|livestand|live-stand|liveticker|live-ticker|livescores?|live scores?|steht(?:'s| es|s) (?:bei|gerade bei)|"
-                           r"wer führt|wer fuehrt|gewonnen|verloren|ausgegangen|who won|score of|what(?:'s| is) the score|who(?:'s| is) (?:winning|leading)|"
-                           r"when (?:do|does|is|will) [\w .]+ play|who (?:plays|is playing)|next (?:game|match))\b", f, re.I)
-        if not allein and schwach and sache and sportdaten.verein_bekannt(sache):
-            allein = schwach
-        if not (allein and sache):
-            return None
-    land = "de" if re.search(r"\b(deutsch\w*|germany|german)\b", f, re.I) else "at"
-    sportart = ""
-    for wort, art in (("fußball", "Soccer"), ("fussball", "Soccer"), ("soccer", "Soccer"), ("basketball", "Basketball"), ("eishockey", "Ice Hockey"), ("ice hockey", "Ice Hockey"),
-                      ("handball", "Handball"), ("tennis", "Tennis"), ("formel", "Motorsport"), ("formula", "Motorsport"), ("motogp", "Motorsport"), ("american football", "American Football")):
-        if wort in f.lower():
-            sportart = art
-            break
-    return Auftrag("sport", f, land=land, was=was, sache=sache, sportart=sportart)
+NAMENSNENNUNG = {"wetter": "Open-Meteo (CC BY 4.0)", "schlagzeilen": "", "suche": ""}
 
 _WETTER_STARK = re.compile(r"\b(wetter|wettervorhersage|wetterbericht|regnet|schneit)\b", re.I)
 _WETTER_MESS = re.compile(r"\b(wie warm|wie kalt|wie hei[ßs]|temperatur\w*|grad)\b", re.I)
 _WETTER_ZEIT = re.compile(r"\b(heute|morgen|[üu]bermorgen|drau[ßs]en|am wochenende|diese woche|n[äa]chste woche|in der nacht|nachts|tags[üu]ber|hat es|haben wir|jetzt|gerade)\b", re.I)
 _WETTER_SCHWACH = re.compile(r"\b(regen|schnee|sonnig|sonne|gewitter|wind|wolk\w*|bew[öo]lkt|nebel|hitze|frost)\b", re.I)
 _FRAGEFORM = re.compile(r"\b(wird es|ist es|gibt es|kommt|bleibt es|scheint)\b", re.I)
+_KEIN_WETTER = re.compile(r"\b(warum|wieso|weshalb|wie entsteh\w*|wie weit|entfernt|entfernung|sekunden|was ist|was sind|was bedeutet|fahrenheit|in celsius|in grad celsius)\b", re.I)
 _SCHREIBEN = re.compile(r"\b(schreib\w*|gedicht|geschichte|erkl[äa]r\w*|was ist ein|was bedeutet|übersetz\w*|uebersetz\w*)\b", re.I)
 _SCHLAGZEILEN = re.compile(r"\b(schlagzeil|nachrichten|news\b|neuigkeit|was ist (heute |gerade )?(passiert|los)|was gibt es neues|aktuelle meldung)", re.I)
 _RECHNEN = re.compile(r"\b(zu je|je stück|pro stück|stückpreis|zusammen|insgesamt|gesamt|summe|mal\b|prozent|rabatt|umrechn\w*|in meilen|in kilometer|in euro|wie viele tage)\b|[×x*]\s*\d|\d\s*[×x*]|%", re.I)
-_SUCHE = re.compile(r"\b(wie ?viel|wie hoch|wie teuer|was kostet|kosten|preis|f[öo]rderung|zuschuss|frist|termin|[öo]ffnungszeit|gesetz|steuer|aktuell|derzeit|neu(?:e|en|es)?\b|20(?:2[4-9]|3\d)|wer ist|wann ist|wo ist|wo gibt)", re.I)
+_SUCHE = re.compile(r"\b(wie ?viel|wie hoch|wie teuer|was kostet|kosten|preis|f[öo]rderung|zuschuss|frist|termin|[öo]ffnungszeit|gesetz|steuer|aktuell|derzeit|neu(?:e|en|es)?\b|20(?:2[4-9]|3\d)|wer ist|wann ist|wo ist|wo gibt|"
+                    r"how much|how many|how high|how expensive|costs?\b|price|subsid\w+|grant|deadline|appointment|opening hours|law\b|tax\w*|"
+                    r"current\w*|new\b|who is|when is|where is|where can i)", re.I)
 _ANGEBOT = re.compile(r"\b(aktion(?:en)?|angebot(?:e|en)?|sonderangebot\w*|flugbl[äa]tt\w*|prospekt\w*|rabattaktion\w*|abverkauf|schn[äa]ppchen|"
                       r"g[üu]nstig\w*|billig\w*|lagernd|verf[üu]gbar\w*|wo (?:bekomm|krieg|kauf|find)\w*|gibt es (?:\w+ )?(?:irgend)?wo|"
                       r"durchsuch\w*|recherchier\w*|such(?:e|st)? (?:im|online|nach)|schau (?:im|online|nach)|im (?:internet|netz)|online)\b", re.I)
@@ -150,7 +66,23 @@ _WANN_FAEHRT = re.compile(r"\b(wann (?:f[äa]hrt|geht|kommt|startet|landet|flieg
 _VON_NACH = re.compile(r"\bvon\s+\S+.*\bnach\s+\S+|\bfrom\s+\S+.*\bto\s+\S+", re.I)
 _JETZT_PRAKTISCH = re.compile(r"\b(preis(?:e)?|kostet|kosten|tarif\w*|ticket\w*|eintritt\w*|[öo]ffnungszeit\w*|ge[öo]ffnet|hat (?:\w+ )*offen|"
                               r"termin\w*|heute|morgen|[üu]bermorgen|aktuell\w*|derzeit|gerade jetzt|diese woche|n[äa]chste woche|am wochenende|"
-                              r"price|costs?|opening hours|open today|today|tomorrow|currently|right now)\b", re.I)
+                              r"price|costs?|opening hours|open today|today|tomorrow|currently|right now|deadline\w*|this year|dieses jahr|heuer)\b", re.I)
+
+
+_AMT_WER = re.compile(r"(?i)\b(?:wer (?:ist|sind)|who (?:is|are|'s))\b|\bwho's\b")
+_AMT_DIREKT = re.compile(r"(?i)\b(?:wer regiert|wer führt|who (?:governs|rules|runs|leads))\b")
+_AMT_ROLLE = re.compile(r"(?i)\b(?:\w*präsident\w*|\w*kanzler\w*|premier\w*|\w*minister\w*|regierungschef\w*|staatsoberhaupt|\w*bürgermeister\w*|"
+                        r"landeshauptm[äa]nn\w*|landeshauptfrau|gouverneur\w*|könig\w*|kaiser\w*|papst|vorsitzende\w*|parteichef\w*|ceo|"
+                        r"trainer\w*|kapitän\w*|president|chancellor|head of (?:state|government)|mayor|governor|king|queen|emperor|pope|"
+                        r"chair(?:man|woman|person)?|party leader|coach|manager|captain)\b")
+_AMT_FRUEHER = re.compile(r"(?i)\b(?:erste[nmrs]?|ehemalig\w*|damalig\w*|frühere[nmrs]?|first|former|previous)\b")
+
+
+def amtsfrage(frage: str) -> bool:
+    f = frage or ""
+    if _AMT_FRUEHER.search(f):
+        return False
+    return bool(_AMT_DIREKT.search(f) or (_AMT_WER.search(f) and _AMT_ROLLE.search(f)))
 
 
 def nicht_im_lexikon(frage: str) -> bool:
@@ -161,7 +93,9 @@ def nicht_im_lexikon(frage: str) -> bool:
         return True
     if _DAUER_WEG.search(f) and _VON_NACH.search(f):
         return True
-    return bool(_JETZT_PRAKTISCH.search(f))
+    if _SCHLAGZEILEN.search(f) and belege.gefragtes_land(f) not in ("", *LAENDER):
+        return True
+    return bool(_JETZT_PRAKTISCH.search(f)) or belege.regelfrage(f) or amtsfrage(f)
 
 
 def erkennen_im_gespraech(nachrichten: list[dict]) -> "Auftrag | None":
@@ -196,16 +130,11 @@ class Auftrag:
     ort: str = ""
     tag: int = 0
     land: str = "at"
-    was: str = ""
-    sache: str = ""
-    sportart: str = ""
 
     @property
     def rueckfrage(self) -> str:
         if self.art == "wetter" and not self.ort:
             return "Für welchen Ort soll ich das Wetter nachschauen? Schreib zum Beispiel: Wie wird das Wetter morgen in Linz?"
-        if self.art == "sport" and self.was != "live" and not self.sache:
-            return "Für welchen Verein oder welche Liga soll ich nachschauen? Schreib zum Beispiel: Wann spielt Sturm Graz? oder Wer spielt heute in der Bundesliga?"
         return ""
 
     @property
@@ -214,12 +143,6 @@ class Auftrag:
             return f"Wetter {['heute', 'morgen', 'übermorgen'][self.tag]} in {self.ort}"
         if self.art == "schlagzeilen":
             return f"Schlagzeilen {LAENDER.get(self.land, 'Österreich')}"
-        if self.art == "sport":
-            if self.was == "letzte":
-                return f"Ergebnisse {self.sache}".strip()
-            if self.was == "naechste":
-                return f"Nächste Spiele {self.sache}".strip()
-            return f"Spielstand {self.sache}".strip() if self.sache else "Live-Spielstände"
         return ""
 
 
@@ -280,12 +203,11 @@ def erkennen(frage: str) -> Auftrag | None:
         return None
     if _RECHNEN.search(f) and re.search(r"\d", f):
         return None
-    sp = sport_erkennen(f)
-    if sp is not None:
-        return sp
     mess_wetter =bool(_WETTER_MESS.search(f)) and bool(_FRAGEFORM.search(f) or _WETTER_ZEIT.search(f) or _ORT_OHNE.search(f)
                                                          or any(m.group(1).strip(" .,;:!?") not in _ORT_NICHT for m in _ORT.finditer(f)))
-    if (_WETTER_STARK.search(f) or mess_wetter or (_WETTER_SCHWACH.search(f) and _FRAGEFORM.search(f))) and not _SCHLAGZEILEN.search(f):
+    if (_WETTER_STARK.search(f) or mess_wetter or (_WETTER_SCHWACH.search(f) and _FRAGEFORM.search(f))) and not _SCHLAGZEILEN.search(f) \
+            and not (_KEIN_WETTER.search(f) and not re.search(r"\b(wetter|wettervorhersage|wetterbericht)\b", f, re.I)
+                     and not re.search(r"\b(heute|morgen|[üu]bermorgen|am wochenende|diese woche|n[äa]chste woche|in der nacht)\b", f, re.I)):
         tag = 2 if "übermorgen" in unten or "uebermorgen" in unten else (1 if re.search(r"\bmorgen\b", unten) else 0)
         ort = ""
         for m in _ORT.finditer(f):
@@ -299,6 +221,9 @@ def erkennen(frage: str) -> Auftrag | None:
                 ort = m.group(1)
         return Auftrag("wetter", f, ort=ort, tag=tag)
     if _SCHLAGZEILEN.search(f):
+        genannt = belege.gefragtes_land(f)
+        if genannt and genannt not in LAENDER:
+            return Auftrag("suche", f) if len(wissen.woerter(f)) >= 2 else None
         land = "de" if re.search(r"deutschland|tagesschau", unten) else ("ch" if re.search(r"schweiz|\bsrf\b", unten) else "at")
         return Auftrag("schlagzeilen", f, land=land)
     if (_SUCHE.search(f) or _ANGEBOT.search(f)) and len(wissen.woerter(f)) >= 2:
@@ -312,6 +237,9 @@ rede redest eh halt ja nein nicht kein keine ob wo was wie wer wann gibt gibts g
 und oder aber auch dass daß mal noch schon gerade jetzt heute bitte danke gesamten gesamte ganzen ganze alle allen handel irgendwo irgendwie
 mir nach im in am an auf bei für fuer von vom zu zum zur mit über ueber live nachprüfen nachpruefen internet netz online bitte
 ist sind war hat haben wird werden kann soll sollte gibt's""".split())
+_NICHT_SUCHEN |= set("""brauche brauchst braucht brauchen benötige benötigst benötigt benötigen muss musst müssen darf darfst dürfen als
+do does did i you we he she it they a an the to of for is are was were be can could should would will must need needs my your our their
+what how when where who which why there please tell me""".split())
 
 
 def suchbegriffe_regel(text: str, frueher: str = "") -> str:
@@ -456,9 +384,8 @@ def _json(adresse: str, *, oeffner=None) -> dict:
 
 class Nachschauer:
 
-    def __init__(self, *, oeffner=None, schlafen=time.sleep, jetzt=_jetzt, seiten_oeffner=None, suche_fn=None, sport_fn=None) -> None:
+    def __init__(self, *, oeffner=None, schlafen=time.sleep, jetzt=_jetzt, seiten_oeffner=None, suche_fn=None) -> None:
         self._suche_fn = suche_fn
-        self._sport_fn = sport_fn
         self._oeffner = oeffner
         self._seiten_oeffner = seiten_oeffner or oeffner
         self._schlafen = schlafen
@@ -469,63 +396,7 @@ class Nachschauer:
             return [self.wetter(a)]
         if a.art == "schlagzeilen":
             return [self.schlagzeilen(a)]
-        if a.art == "sport":
-            return [self.sport(a)]
         return self.suche(a)
-
-
-    def sport(self, a: Auftrag) -> Ergebnis:
-        if a.rueckfrage:
-            raise NachschauError("NACHSCHAU_SACHE", a.rueckfrage)
-        if self._sport_fn is None:
-            raise NachschauError("NACHSCHAU_SPORT", "Spielstände holt der Community-Server; dieses Gerät ist dort nicht angemeldet")
-        try:
-            d = self._sport_fn({"was": a.was or "live", "sache": a.sache, "sport": a.sportart, "land": a.land})
-        except wissen.WissenError:
-            raise
-        except Exception as exc:
-            detail = getattr(exc, "detail", None) or type(exc).__name__
-            code = getattr(exc, "code", "") or ""
-            if code in ("SPORT_SACHE",):
-                raise NachschauError("NACHSCHAU_SACHE", str(detail)) from None
-            if code in ("SPORT_AUS",):
-                raise NachschauError("NACHSCHAU_SPORT", "Spielstände sind am Community-Server gerade nicht eingerichtet") from None
-            raise NachschauError("NACHSCHAU_SPORT", f"Spielstände waren gerade nicht zu holen ({detail})") from None
-        if not isinstance(d, dict):
-            raise NachschauError("NACHSCHAU_ANTWORT", "die Antwort des Servers ist nicht lesbar")
-        was = str(d.get("was") or a.was or "live")
-        spiele = [s for s in (d.get("spiele") or []) if isinstance(s, dict)]
-        liga, verein = d.get("liga") if isinstance(d.get("liga"), dict) else None, d.get("verein") if isinstance(d.get("verein"), dict) else None
-        lang = _sprache()
-        wofuer = (sportdaten.anzeige(verein["name"], lang) if verein else sportdaten.liga_anzeige(liga["name"], lang) if liga else "") or a.sache
-        jetzt = self._jetzt()
-        if not spiele:
-            wer = f" zu {wofuer}" if wofuer else ""
-            raise NachschauError("NACHSCHAU_LEER", {"live": f"gerade läuft kein Spiel{wer}", "naechste": f"kein Termin{wer} gefunden",
-                                                     "letzte": f"kein Ergebnis{wer} gefunden"}.get(was, "nichts gefunden"))
-        kopf = {"live": "Laufende Spiele", "naechste": "Nächste Spiele", "letzte": "Letzte Ergebnisse"}.get(was, "Spiele")
-        if wofuer:
-            kopf += f" {wofuer}"
-        if liga and verein is None and liga.get("land"):
-            kopf += f" ({liga['land']})"
-        zeilen = [frage_kennung(a.frage), f"{kopf}, Daten von {sportdaten.QUELLE}, Stand {jetzt.strftime('%d.%m.%Y um %H:%M UTC')}"
-                  + (" (Spielstände können bis zu 2 Minuten alt sein):" if was == "live" else ":")]
-        if d.get("hinweis"):
-            zeilen.append(str(d["hinweis"])[:200])
-        for s in spiele[:sportdaten.MAX_SPIELE]:
-            zeilen.append(_spielzeile(s, was))
-        if any(s.get("sport") == "Motorsport" for s in spiele):
-            zeilen.append("Für Motorsport gibt es keine Live-Stände, nur Termine und Ergebnisse.")
-        art_gueltig = {"live": "sport", "naechste": "sport-plan", "letzte": "sport-ergebnis"}.get(was, "sport")
-        titel = Auftrag("sport", a.frage, was=was, sache=wofuer).titel
-        if liga:
-            adresse = f"{sportdaten.SEITE}league/{re.sub(r'[^0-9]', '', str(liga.get('id', '')))}"
-        elif verein:
-            adresse = f"{sportdaten.SEITE}team/{re.sub(r'[^0-9]', '', str(verein.get('id', '')))}"
-        else:
-            adresse = sportdaten.SEITE + "livescore"
-        woher = {"live": "Spielstände bei TheSportsDB nachgeschaut", "naechste": "Spielplan bei TheSportsDB nachgeschaut", "letzte": "Ergebnisse bei TheSportsDB nachgeschaut"}[was]
-        return Ergebnis("sport", titel, adresse, "\n".join(zeilen)[:MAX_TEXT], gueltig_bis(art_gueltig, jetzt), woher)
 
 
     def wetter(self, a: Auftrag) -> Ergebnis:
@@ -630,7 +501,9 @@ class Nachschauer:
             raise NachschauError("NACHSCHAU_LEER", "die Suche hat nichts gefunden oder wurde gebremst")
         out: list[Ergebnis] = []
         gueltig = gueltig_bis("suche", self._jetzt())
-        zeilen = [f"{i + 1}. {urllib.parse.urlsplit(l).hostname or l}: {schnipsel[i]}" if i < len(schnipsel) and schnipsel[i] else f"{i + 1}. {l}" for i, l in enumerate(links[:8])]
+        zeilen = [(f"{i + 1}. {urllib.parse.urlsplit(l).hostname or l}: {schnipsel[i]}" if not vermittler(schnipsel[i], l)
+                   else f"{i + 1}. {urllib.parse.urlsplit(l).hostname or l} ({VERMITTLER_ZEILE})")
+                  if i < len(schnipsel) and schnipsel[i] else f"{i + 1}. {l}" for i, l in enumerate(links[:8])]
         if sum(1 for z in zeilen if ": " in z) >= 2:
             out.append(Ergebnis("suche", SUCHERGEBNISSE_TITEL, links[0], "\n\n".join([frage_kennung(a.frage), f"Suchergebnisse ({woher}), gelesen am " + self._jetzt().strftime("%d.%m.%Y") + ":"] + zeilen)[:MAX_TEXT], gueltig, f"im Internet gesucht ({woher}) und die Seiten gelesen"))
         uebersicht = len(out)
@@ -638,10 +511,10 @@ class Nachschauer:
             if len(out) - uebersicht >= SUCHE_SEITEN:
                 break
             try:
-                q, _text, tr = wissen.live_lesen(adresse, a.frage, n=3, oeffner=self._seiten_oeffner)
+                q, text, tr = wissen.live_lesen(adresse, a.frage, n=3, oeffner=self._seiten_oeffner)
             except wissen.WissenError:
                 continue
-            teile = [frage_kennung(a.frage), f"Gefunden über die Suche, Seite „{q.titel}“ ({q.adresse}), gelesen am " + self._jetzt().strftime("%d.%m.%Y") + "."]
+            teile = [frage_kennung(a.frage), gefunden_zeile(q.titel, q.adresse, self._jetzt().strftime("%d.%m.%Y"), text)]
             if i < len(schnipsel) and schnipsel[i]:
                 teile.append(schnipsel[i])
             teile += [t.text for t in tr]
@@ -687,17 +560,8 @@ class Nachschauer:
         out: list[Ergebnis] = []
         gueltig = gueltig_bis("suche", self._jetzt())
         tag = self._jetzt().strftime("%d.%m.%Y")
-        zeilen = []
-        for i, t in enumerate(reihe[:RUNDE_UEBERSICHT]):
-            kopf = " ".join(str(t.get("titel", "")).split())[:160]
-            auszug = " ".join(str(t.get("text", "")).split())[:500]
-            zeilen.append(f"{i + 1}. {_host(t['adresse'])}" + (f" – {kopf}" if kopf else "") + (f": {auszug}" if auszug else ""))
-        uebersicht = Ergebnis("suche", SUCHERGEBNISSE_TITEL, reihe[0]["adresse"], "\n\n".join(
-            [frage_kennung(frage), f"Suchergebnisse ({woher}), gelesen am {tag}."] + zeilen)[:MAX_TEXT],
-            gueltig, f"im Internet gesucht ({woher}) und die Seiten gelesen")
         auszuege = sum(1 for t in reihe[:RUNDE_UEBERSICHT] if t.get("text"))
-        if auszuege >= 2:
-            out.append(uebersicht)
+
         def eine(t: dict):
             try:
                 return t, wissen.live_lesen(t["adresse"], frage, n=4, oeffner=self._seiten_oeffner, extra=(lambda s: zeit_punkte(s, heute, r)) if r else None)
@@ -745,22 +609,28 @@ class Nachschauer:
                 break
         gelesen: list[str] = []
         seiten = 0
+        vermittler_hosts = {_host(t["adresse"]) for t, e in fertig if e is not None and vermittler(e[1], t["adresse"])}
         for t, ergebnis in fertig:
             if ergebnis is None or seiten >= RUNDE_SEITEN:
                 continue
-            q, _text, tr = ergebnis
+            q, text, tr = ergebnis
             gelesen.append(t["adresse"])
             inhalt = " ".join(x.text for x in tr)
             if zeitlich_vorbei(inhalt, heute, r) or veraltet_text(q.titel + " " + q.adresse + " " + inhalt, *ziel):
                 continue
-            teile = [frage_kennung(frage), f"Gefunden über die Suche, Seite „{q.titel}“ ({q.adresse}), gelesen am {tag}."]
+            teile = [frage_kennung(frage), gefunden_zeile(q.titel, q.adresse, tag, text)]
             if t.get("text"):
                 teile.append(" ".join(str(t["text"]).split())[:500])
             teile += [x.text for x in tr]
             out.append(Ergebnis("suche", f"Nachgeschaut: {q.titel}"[:160], q.adresse, "\n\n".join(teile)[:MAX_TEXT], gueltig, f"im Internet gesucht ({woher}) und die Seiten gelesen"))
             seiten += 1
-        if not out and auszuege:
-            out.append(uebersicht)
+        zeilen = [trefferzeile(i + 1, _host(t["adresse"]), " ".join(str(t.get("titel", "")).split())[:160], " ".join(str(t.get("text", "")).split())[:500],
+                               vermittler_hosts) for i, t in enumerate(reihe[:RUNDE_UEBERSICHT])]
+        uebersicht = Ergebnis("suche", SUCHERGEBNISSE_TITEL, reihe[0]["adresse"], "\n\n".join(
+            [frage_kennung(frage), f"Suchergebnisse ({woher}), gelesen am {tag}."] + zeilen)[:MAX_TEXT],
+            gueltig, f"im Internet gesucht ({woher}) und die Seiten gelesen")
+        if auszuege >= 2 or (not out and auszuege):
+            out.insert(0, uebersicht)
         if not out:
             raise NachschauError("NACHSCHAU_LEER", "die gefundenen Seiten ließen sich nicht lesen oder waren veraltet")
         return out, gelesen, woher
@@ -915,10 +785,60 @@ def sperren(adresse: str, jetzt_s: float | None = None) -> None:
         _GESPERRT[h] = (jetzt_s if jetzt_s is not None else time.monotonic()) + GESPERRT_S
 
 
+_AMTLICH = ("gv.at", "oeamtc.at", "arboe.at", "wko.at", "arbeiterkammer.at", "bund.de", "gesetze-im-internet.de", "bundesregierung.de", "adac.de",
+            "verbraucherzentrale.de", "admin.ch", "ch.ch", "tcs.ch", "gov", "gov.uk", "europa.eu", "canada.ca", "service-public.fr")
+_AMTLICH_ENDUNG = re.compile(r"\.(?:gov|gob|gouv|govt|go|gc|gv)\.[a-z]{2}$")
+AMTLICH_PUNKTE = 2.0
+
+
+def amtlich(adresse: str) -> bool:
+    host = re.sub(r"^[a-z]+://", "", str(adresse or "").lower()).split("/", 1)[0].split(":", 1)[0]
+    return any(host == d or host.endswith("." + d) for d in _AMTLICH) or bool(_AMTLICH_ENDUNG.search(host))
+
+
+_VERMITTLER = re.compile(
+    r"(?i)\b(?:we are|we're|this (?:web)?site is|our (?:company|service|website|site) is)\s+(?:not|in no way|neither)\s+(?:an?\s+)?"
+    r"(?:official|government|governmental|affiliated|associated|connected|linked|endorsed|part of)\b"
+    r"|\bnot\s+(?:affiliated|associated|connected|linked|endorsed)\s+(?:with|to|by)\s+(?:any|the)\s+(?:[\w.-]+\s+){0,3}(?:government|authorit\w+|agenc\w+|embass\w+)"
+    r"|\bhas no (?:link|connection|affiliation) (?:with|to) (?:any|the)\s+(?:[\w.-]+\s+){0,3}government"
+    r"|\b(?:we are|we're)\s+an?\s+(?:private|independent|commercial|third[- ]party)\s+(?:[\w-]+\s+){0,2}(?:company|agency|service|provider|business)"
+    r"|\bour\s+(?:service|processing|handling|support|agency|consulting)\s+fees?\b"
+    r"|\b(?:wir sind|diese (?:web)?seite ist|diese website ist|dieses angebot ist)\s+(?:kein\w*\s+(?:offizielle\w*\s+|staatliche\w*\s+)?"
+    r"(?:behörde|amt|regierungs\w*|offizielle\w*|staatliche\w*)|nicht\s+(?:mit|teil|offiziell|staatlich)|ein\w*\s+private\w*|ein\w*\s+unabhängige\w*)"
+    r"|\bnicht mit (?:der|einer|irgendeiner)\s+(?:\w+\s+){0,2}(?:regierung|behörde|botschaft)\w*\s+(?:verbunden|assoziiert|verknüpft)"
+    r"|\bunsere\w*\s+(?:service|bearbeitungs|vermittlungs|dienstleistungs)gebühr\w*"
+    r"|\bnous ne sommes pas (?:affilié|lié|associé|une agence|un site officiel)|\bce site n['’]est pas (?:un site officiel|affilié)"
+    r"|\bno (?:somos|estamos) (?:afiliados|una agencia gubernamental|un sitio oficial)|\beste sitio (?:web )?no es (?:oficial|un sitio oficial)"
+    r"|\bnon siamo (?:affiliati|collegati|un sito ufficiale|un ente)|\bquesto sito non è (?:ufficiale|un sito ufficiale)")
+VERMITTLER_SATZ = ("Diese Seite sagt selbst, dass sie ein privater Vermittler ist und keine Behörde: nimm von ihr keine Preise, Gebühren, "
+                   "Adressen und keinen Antragsweg, und nenne sie nicht als Weg zum Antrag.")
+VERMITTLER_ZEILE = "privater Vermittler, keine Behörde"
+
+
+def vermittler(text: str, adresse: str = "") -> bool:
+    return not amtlich(adresse) and bool(_VERMITTLER.search(" ".join((text or "").split())))
+
+
+def vermittler_adressen(quellen: list[dict]) -> set[str]:
+    return {str(q.get("adresse") or "") for q in quellen or [] if VERMITTLER_SATZ in str(q.get("text") or "") and q.get("adresse")}
+
+
+def gefunden_zeile(titel: str, adresse: str, tag: str, seitentext: str) -> str:
+    zeile = f"Gefunden über die Suche, Seite „{titel}“ ({adresse}), gelesen am {tag}."
+    return zeile + " " + VERMITTLER_SATZ if vermittler(seitentext, adresse) else zeile
+
+
+def trefferzeile(i: int, host: str, kopf: str, auszug: str, vermittler_hosts: set[str]) -> str:
+    if host in vermittler_hosts or (auszug and vermittler(auszug, "https://" + host)):
+        return f"{i}. {host}" + (f" – {kopf}" if kopf else "") + f" ({VERMITTLER_ZEILE})"
+    return f"{i}. {host}" + (f" – {kopf}" if kopf else "") + (f": {auszug}" if auszug else "")
+
+
 def treffer_reihen(treffer: list[dict], frage: str, *, heute, r: str = "", ziel: tuple = (None, None), ausser=frozenset()) -> list[dict]:
     fw = set(wissen.woerter(frage))
     gesehen: set[str] = set()
     bewertet = []
+    regel = belege.regelfrage(frage)
     for rang, t in enumerate(treffer):
         adresse = str(t.get("adresse", ""))
         if not adresse.lower().startswith("https://") or adresse in gesehen or adresse in ausser:
@@ -929,6 +849,8 @@ def treffer_reihen(treffer: list[dict], frage: str, *, heute, r: str = "", ziel:
         p = (len(fw & tw) / max(1, len(fw))) * 3.0 + zeit_punkte(kopf, heute, r) * 0.75 + 1.0 / (1 + rang)
         if veraltet_text(kopf + " " + adresse, *ziel) or zeitlich_vorbei(kopf, heute, r):
             p -= 3.0
+        if regel and amtlich(adresse):
+            p += AMTLICH_PUNKTE
         if gesperrt(adresse):
             p -= 10.0
         bewertet.append((p, rang, t))
@@ -942,66 +864,9 @@ def _rein(s: str) -> str:
     return " ".join(html.unescape(s).split())
 
 
-def _wiener_zeit(datum: str, zeit: str) -> str:
-    if not zeit:
-        return ""
-    try:
-        utc = datetime.strptime(f"{datum} {zeit[:5]}", "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
-    except ValueError:
-        return zeit[:5] + " UTC"
-    try:
-        import rechnen_zeit
-        lok = rechnen_zeit.ortszeit(rechnen_zeit._zone("wien"), utc)
-        return f"{zeit[:5]} UTC ({lok.strftime('%H:%M')} Uhr in Wien)"
-    except Exception:
-        return zeit[:5] + " UTC"
-
-
-def _tag_text(datum: str) -> str:
-    try:
-        dt = datetime.strptime(datum, "%Y-%m-%d")
-        return f"{WOCHENTAGE[dt.weekday()]} {dt.strftime('%d.%m.%Y')}"
-    except ValueError:
-        return datum
-
-
-def _sprache() -> str:
-    try:
-        import community
-        return "en" if str(getattr(community, "SPRACHE", "de")).lower().startswith("en") else "de"
-    except Exception:
-        return "de"
-
-
-def _spielzeile(s: dict, was: str) -> str:
-    lang = _sprache()
-    heim, gast, liga = sportdaten.anzeige(str(s.get("heim") or ""), lang), sportdaten.anzeige(str(s.get("gast") or ""), lang), sportdaten.liga_anzeige(str(s.get("liga") or ""), lang)
-    ht, gt = str(s.get("heim_tore") or ""), str(s.get("gast_tore") or "")
-    zustand, fort = str(s.get("zustand") or ""), str(s.get("fortschritt") or "")
-    paar = f"{heim} gegen {gast}" if heim and gast else str(s.get("name") or "Spiel")
-    klammer = liga + (f", Runde {s['runde']}" if s.get("runde") and was != "live" else "")
-    klammer = f" ({klammer})" if klammer else ""
-    if was == "live":
-        if zustand in sportdaten.VORBEI or fort == "Final":
-            stand = f"{heim} {ht}:{gt} {gast}, Spiel beendet" if heim and gast and ht and gt else f"{paar}, beendet"
-        elif zustand == "NS" or (not ht and not gt and zustand not in sportdaten.LAEUFT):
-            stand = f"{paar}, noch nicht begonnen" + (f", Anstoß {_wiener_zeit(str(s.get('datum') or ''), str(s.get('zeit') or ''))}" if s.get("zeit") else "")
-        else:
-            wort = sportdaten.ZUSTAND.get(zustand, zustand or "läuft")
-            minute = f", {fort}. Minute" if zustand in ("1H", "2H", "ET", "LIVE") and re.fullmatch(r"\d{1,3}(\+\d{1,2})?", fort) else ""
-            stand = f"{heim} {ht}:{gt} {gast}, {wort}{minute}" if heim and gast else f"{paar}, {wort}"
-        return stand + klammer
-    wann = _tag_text(str(s.get("datum") or ""))
-    if was == "letzte":
-        erg = f"{heim} {ht}:{gt} {gast}" if heim and gast and ht and gt else f"{paar}, kein Ergebnis eingetragen"
-        return f"{wann}: {erg}" + (f" ({sportdaten.ZUSTAND[zustand]})" if zustand in ("AET", "PEN", "AWD", "WO") else "") + klammer
-    zeit = _wiener_zeit(str(s.get("datum") or ""), str(s.get("zeit") or ""))
-    return f"{wann}" + (f", {zeit}" if zeit else "") + f": {paar}" + (" (verschoben)" if s.get("verschoben") else "") + klammer
-
-
 def als_quelle(e: Ergebnis) -> tuple[wissen.Quelle, list[wissen.Treffer]]:
     q = wissen.Quelle(wissen.kennung_fuer("nachgeschaut", e.adresse), "nachgeschaut", e.titel, e.adresse, _jetzt().strftime("%Y-%m-%dT%H:%M:%SZ"), len(e.text), e.gueltig_bis)
     return q, [wissen.Treffer(q, t, 1.0) for t in wissen.abschnitte(e.text)[:4]]
 
 
-__all__ = ["Auftrag", "Ergebnis", "Nachschauer", "NachschauError", "erkennen", "sport_erkennen", "gueltig_bis", "als_quelle", "FEEDS", "WETTER_API", "ORTE_API"]
+__all__ = ["Auftrag", "Ergebnis", "Nachschauer", "NachschauError", "erkennen", "gueltig_bis", "als_quelle", "FEEDS", "WETTER_API", "ORTE_API"]

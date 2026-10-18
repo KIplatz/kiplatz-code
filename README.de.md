@@ -6,6 +6,12 @@
 
 [kiplatz.at](https://kiplatz.at/) · [Programm holen](https://kiplatz.at/rechenkraft-teilen/) · [Die App](https://kiplatz.at/app/) · [Platzl (Forum)](https://forum.kiplatz.at/) · [Werkstatt](https://werkstatt.kiplatz.at/KIplatz/mitbauen) · [Was nie passiert](https://kiplatz.at/was-nie-passiert/)
 
+**Ohne Installation ausprobieren:** Stell auf [kiplatz.at](https://kiplatz.at/) eine Frage.
+
+## Windows 11 oder die App im Browser
+
+Das Programm läuft auf Windows 11. Auf dem Mac, unter Linux oder am Handy nimmst du die App im Browser unter [kiplatz.at/app](https://kiplatz.at/app/). Das Programm nimmt das Modell, das zu deinem PC passt. Das ist Ministral 3 mit 14, 8 oder 3 Milliarden Parametern, jeweils das größte, das in den freien Speicher der Grafikkarte passt. Ohne passende Grafikkarte arbeitet der Prozessor (ab 16 GB Arbeitsspeicher das 8B-Modell, sonst das 3B). Ist der PC dafür zu schwach, antwortet ein freier PC der Community.
+
 ## Was hier liegt
 
 - Das Windows-Programm (`node-agent/`): das Fenster, die KI-Laufzeit am PC, der Wissensspeicher, das Heimnetz, die Verbindung zu kiplatz.at.

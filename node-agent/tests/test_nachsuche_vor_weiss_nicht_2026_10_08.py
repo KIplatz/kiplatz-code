@@ -127,3 +127,22 @@ def test_no_extra_look_up_when_this_answer_already_searched(tmp_path, monkeypatc
     api._ki_starten_blockierend()
     api._antwort_fuer_mitglied([{"role": "user", "content": FRAGE}], [], "Besucher auf kiplatz.at")
     assert True not in suchen
+
+
+def test_after_a_search_with_the_rules_words_only_one_more_round_with_the_models_words(tmp_path, monkeypatch):
+    monkeypatch.setattr(app_web, "belege_anwenden", _streichen_ohne_beleg)
+    monkeypatch.setattr(app_web, "im_netz_gesucht", lambda nachgeholt, quellen, lauf: True)
+    api, fake, _ = _api(tmp_path)
+    suchen: list = []
+    fake.frage = _modell([])
+    innen = _wissen(suchen, internet_hat_es=True)
+
+    def mit_wissen(nachrichten, **kw):
+        lauf = getattr(app_web._SUCHLAUF, "stand", None)
+        if lauf is not None and not kw.get("frisch"):
+            lauf["nur_regel"] = True
+        return innen(nachrichten, **kw)
+    api._mit_wissen = mit_wissen
+    api._ki_starten_blockierend()
+    text, _ls = api._antwort_fuer_mitglied([{"role": "user", "content": FRAGE}], [], "Besucher auf kiplatz.at")
+    assert suchen.count(True) == 1 and "350 Kilometer" in text

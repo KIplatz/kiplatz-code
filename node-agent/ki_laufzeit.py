@@ -21,6 +21,7 @@ import weakref
 import urllib.request
 import zipfile
 from contextlib import contextmanager
+from datetime import datetime
 
 _ABBRUCH_FADEN = threading.local()
 
@@ -274,7 +275,15 @@ def probemodell(ordner: KiOrdner, nacht: str) -> tuple[Path, dict] | None:
     if not isinstance(d, dict):
         return None
     datei, sha, basis = str(d.get("datei", "")), str(d.get("sha256", "")).lower(), str(d.get("basis", ""))
-    if (str(d.get("nacht", "")) != nacht or str(d.get("erledigt", "")) == nacht or not _PROBE_NAME.fullmatch(datei)
+    bestellt = str(d.get("nacht", ""))
+    if bestellt != nacht and _nachholen(bestellt, nacht) and str(d.get("gemeldet", "")) != bestellt:
+        d["nacht"], d["erledigt"] = nacht, ""
+        try:
+            (ordner.ki_dir / PROBEMODELL).write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8", newline="\n")
+        except OSError:
+            return None
+        bestellt = nacht
+    if (bestellt != nacht or str(d.get("erledigt", "")) == nacht or not _PROBE_NAME.fullmatch(datei)
             or not re.fullmatch(r"[0-9a-f]{64}", sha) or basis not in MODELLE
             or any(datei == m.datei or (m.bilder and datei == m.bilder.datei) for m in MODELLE.values())):
         return None
@@ -285,6 +294,28 @@ def probemodell(ordner: KiOrdner, nacht: str) -> tuple[Path, dict] | None:
     except OSError:
         return None
     return p, {"datei": datei, "sha256": sha, "basis": basis, "nacht": nacht}
+
+
+PROBE_NACHHOLEN_TAGE = 7
+
+
+def _nachholen(bestellt: str, nacht: str) -> bool:
+    try:
+        tage = (datetime.strptime(nacht, "%Y-%m-%d").date() - datetime.strptime(bestellt, "%Y-%m-%d").date()).days
+    except ValueError:
+        return False
+    return 0 < tage <= PROBE_NACHHOLEN_TAGE
+
+
+def probemodell_gemeldet(ordner: KiOrdner, nacht: str) -> None:
+    p = ordner.ki_dir / PROBEMODELL
+    try:
+        d = json.loads(p.read_text(encoding="utf-8"))
+        if isinstance(d, dict) and str(d.get("nacht", "")) == nacht:
+            d["gemeldet"] = nacht
+            p.write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8", newline="\n")
+    except (OSError, ValueError, UnicodeDecodeError):
+        pass
 
 
 def probemodell_erledigt(ordner: KiOrdner, nacht: str) -> None:
@@ -319,7 +350,7 @@ def probemodell_freigeben(ordner: KiOrdner, nacht: str) -> bool:
         d = json.loads(p.read_text(encoding="utf-8"))
         if not isinstance(d, dict) or str(d.get("nacht", "")) != nacht or str(d.get("erledigt", "")) != nacht:
             return False
-        d["erledigt"] = ""
+        d["erledigt"], d["unterbrochen"] = "", nacht
         p.write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8", newline="\n")
         return True
     except (OSError, ValueError, UnicodeDecodeError):
@@ -1225,7 +1256,7 @@ class KiServer:
 
     def frage(self, nachrichten: list[dict], *, max_tokens: int = 700, temperature: float = TEMPERATUR, on_token: Callable[[str], None] | None = None,
               zusatz: str = "", kurz: bool = False, abbruch: threading.Event | None = None, system: str | None = None,
-              platz: int = SLOT_ANTWORT) -> Antwort:
+              platz: int = SLOT_ANTWORT, art: str | None = None) -> Antwort:
         fest = selbstauskunft.feste_antwort(nachrichten) if system is None else None
         if fest:
             if on_token is not None:
@@ -1265,7 +1296,7 @@ class KiServer:
                         if data["choices"][0].get("finish_reason") == "length":
                             text = bis_zum_letzten_satz(text)
                         u = data.get("usage") or {}
-                        _messen("eigen" if system is not None else "antwort", time.time() - t0, data.get("timings"), max=max_tokens)
+                        _messen(art or ("eigen" if system is not None else "antwort"), time.time() - t0, data.get("timings"), max=max_tokens)
                         return Antwort(text.strip(), int(u.get("prompt_tokens", 0)), int(u.get("completion_tokens", 0)), round(time.time() - t0, 1), gekuerzt=gekuerzt)
                     parts: list[str] = []
                     usage: dict = {}
@@ -1316,7 +1347,7 @@ class KiServer:
                     text = "".join(parts)
                     if zu_lang and not abgebrochen:
                         text = bis_zum_letzten_satz(text)
-                    _messen("eigen" if system is not None else "antwort", time.time() - t0, timings, max=max_tokens, **({"abgebrochen": 1} if abgebrochen else {}))
+                    _messen(art or ("eigen" if system is not None else "antwort"), time.time() - t0, timings, max=max_tokens, **({"abgebrochen": 1} if abgebrochen else {}))
                     return Antwort(text.strip(), int(usage.get("prompt_tokens", 0)), int(usage.get("completion_tokens", len(parts))), round(time.time() - t0, 1), abgebrochen, gekuerzt)
             except urllib.error.HTTPError as exc:
                 try:

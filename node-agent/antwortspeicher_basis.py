@@ -1,16 +1,11 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 from __future__ import annotations
 import hashlib
-import hmac
 import json
-import os
 import re
-import sqlite3
-import threading
 import time
 import unicodedata
 import zlib
-from pathlib import Path
 
 
 MIN_ANTWORT, MAX_ANTWORT = 20, 4000
@@ -44,6 +39,14 @@ _PERSON = frozenset("""ich mein meine meinen meinem meiner meines mich mir wir u
 _NIE = _ZEIT | _PERSON
 
 
+_WANDEL = ("kost", "preis", "gebuehr", "maut", "vignett", "tarif", "ticket", "eintritt", "pflicht", "erlaubt", "verbot", "straf", "bussgeld",
+           "frist", "tempolimit", "hoechstgeschwindigkeit", "vorgeschrieb", "gesetz", "mindestalter", "pickerl")
+
+
+def wandelt_sich(woerter) -> bool:
+    return any((x.startswith(s) if s == "kost" else s in x) for x in woerter for s in _WANDEL)
+
+
 _GLEICH = {"einwohnerzahl": "einwohner", "bewohner": "einwohner", "einwohnern": "einwohner", "groesse": "gross", "groess": "gross",
           "hoehe": "hoch", "laenge": "lang", "tiefe": "tief", "breite": "breit", "alter": "alt", "gewicht": "schwer"}
 
@@ -72,7 +75,7 @@ def frage_taugt(nachrichten, *, frisch: bool = False, skill=None, zuhause=None) 
     if not text or len(text) > MAX_FRAGE:
         return ""
     w = _woerter(text)
-    if not w or len(w) > MAX_WOERTER or any(x in _NIE for x in w):
+    if not w or len(w) > MAX_WOERTER or any(x in _NIE for x in w) or wandelt_sich(w):
         return ""
     if any(x in _VERGLEICH for x in w):
         return ""
@@ -112,9 +115,32 @@ def woertlich(antwort: str, quelle: str, n: int = WOERTLICH_WOERTER) -> bool:
     return any(tuple(a[i:i + n]) in stuecke for i in range(len(a) - n + 1))
 
 
+_NACHGEBESSERT = re.compile(r"gestrichen|neu geantwortet|nicht ausgegeben|kein Rest|fehlte der Anfang|von jemand anderem", re.I)
+
+
+def nachgebessert(lieferschein) -> bool:
+    ls = lieferschein if isinstance(lieferschein, dict) else {}
+    notizen = ls.get("belege") if isinstance(ls.get("belege"), list) else []
+    return any(_NACHGEBESSERT.search(str(n)) for n in notizen)
+
+
+MINDEST_BAU = "2026-10-18m"
+
+
+def vor_mindest_bau(lieferschein) -> bool:
+    ls = lieferschein if isinstance(lieferschein, dict) else {}
+    return str(ls.get("bau") or "") < MINDEST_BAU
+
+
+def ausliefern_ok(lieferschein) -> bool:
+    return not nachgebessert(lieferschein) and not vor_mindest_bau(lieferschein)
+
+
 def antwort_taugt(text: str, lieferschein) -> bool:
     ls = lieferschein if isinstance(lieferschein, dict) else {}
     if not isinstance(text, str) or not MIN_ANTWORT <= len(text.strip()) <= MAX_ANTWORT or _WEISS_NICHT.search(text):
+        return False
+    if not ausliefern_ok(ls):
         return False
     if ls.get("gemacht") not in ("geantwortet", "nachgeschaut und geantwortet") or ls.get("skill") or ls.get("kleineres_modell") or ls.get("aus_speicher"):
         return False

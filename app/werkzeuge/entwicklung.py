@@ -209,6 +209,83 @@ def schein_pc(adresse: str, schaubild: bool = False) -> None:
         time.sleep(0.5)
 
 
+ZUHAUSE_DATEIEN = {"de": (("Bewerbung", "Bewerbung_Muster.pdf"), ("Bewerbung", "Lebenslauf_Muster.docx")),
+                   "en": (("Job application", "Job_application_sample.pdf"), ("Job application", "CV_sample.docx"))}
+ZUHAUSE_STAND = (2026, 10, 16, 9, 30)
+
+
+def zuhause_dateien(ordner: Path) -> list[tuple[str, Path]]:
+    import datetime
+    wurzel = ordner / "zuhause-dateien" / "Dokumente"
+    stand = datetime.datetime(*ZUHAUSE_STAND).timestamp()
+    for unter, name in ZUHAUSE_DATEIEN["de"] + ZUHAUSE_DATEIEN["en"]:
+        p = wurzel / unter / name
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(f"{name}: Beispieldatei aus app/werkzeuge/entwicklung.py, keine echten Daten.\n", encoding="utf-8")
+        import os
+        os.utime(p, (stand, stand))
+    return [("Dokumente", wurzel)]
+
+
+def schein_zuhause(adresse: str, ordner: Path, code: str, name: str) -> None:
+    import hmac as _hmac
+    import antwortsprache
+    import app_web
+    import dateisuche
+    import pruefung
+    import zuhause
+    schl = zuhause.schluessel(zuhause.code_normal(code))
+    kid = zuhause.kennung(schl)
+    liste = dateisuche.Dateiliste(lambda w=zuhause_dateien(ordner): w)
+    d = _json(adresse, "/geraet-mit-code", {"code": "spielwiese", "name": name})
+    kopf = {"X-Geraet": d["kennung"], "X-Geraet-Schluessel": d["schluessel"]}
+    _json(adresse, "/zuhause-anbieten", {"kid": kid}, kopf)
+
+    def schein(gemacht: str) -> dict:
+        return {"modell": "ohne Modell", "geraet": f"{name}, dein PC daheim", "dauer_s": 0.0, "wortstuecke": 0, "gelesen": 0, "quellen": "",
+                "quellen_liste": [], "gemacht": gemacht, "erfunden": "nichts", "pruefung": pruefung.pruefen("", []).kurz(), "zuhause": "mit_unterlagen"}
+
+    def ablegen(daten: bytes) -> str:
+        req = urllib.request.Request(adresse + "/zuhause-ablage", data=daten, method="POST",
+                                     headers={**kopf, "X-Zuhause-Kid": kid, "Content-Type": "application/octet-stream"})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return json.loads(r.read().decode("utf-8"))["token"]
+
+    while True:
+        try:
+            a = _json(adresse, "/auftrag?antworten=1&warm=1&skills=1", kopf=kopf)
+            if a.get("auftrag") and a.get("art") == "antwort":
+                k, z, n = a["auftrag"], a.get("zuhause") or {}, a.get("nachrichten") or []
+                modus = str(z.get("modus", ""))
+                echt = z.get("kid") == kid and _hmac.compare_digest(str(z.get("sig", "")), zuhause.unterschrift(
+                    schl, kid, int(z.get("zeit", 0)), str(z.get("einmal", "")), zuhause.inhalt(n, a.get("skill"), modus)))
+                if not z:
+                    text, ls = UEBUNG, LIEFERSCHEIN
+                elif not echt:
+                    text, ls = "Das Siegel dieser Frage stimmt nicht; der Schein-PC daheim sucht nicht.", {**schein("nachgesehen"), "zuhause": "ohne_unterlagen"}
+                elif modus == "holen":
+                    bereit = []
+                    for i in [str(x)[:32] for x in (json.loads(str(n[-1]["content"])).get("holen") or [])][:20]:
+                        e = liste.datei(i)
+                        if e is not None:
+                            daten = Path(e.pfad).read_bytes()
+                            bereit.append({"id": i, "name": e.name, "token": ablegen(zuhause.datei_verschluesseln(schl, i, daten)),
+                                           "groesse": len(daten), "art": dateisuche.art_der_datei(e.name)})
+                    text, ls = app_web.holen_satz(len(bereit), 0, 0, [], []), {**schein("für dein Handy bereitgelegt"), "abholen": bereit, "spaeter": []}
+                else:
+                    frage = app_web.suchfrage(n)
+                    englisch = antwortsprache.frage_sprache(frage) == "en"
+                    text, dateien = liste.suchen(frage, name, englisch=englisch)
+                    ls = {**schein("in deinen Dateien gesucht"), "dateien": dateien, "quellen":
+                          "Names of the files in Documents, Pictures, Desktop, Downloads, Music, Videos and OneDrive on your PC; not searched on the internet."
+                          if englisch else "Namen der Dateien in Dokumente, Bilder, Desktop, Downloads, Musik, Videos und OneDrive auf deinem PC; nicht im Internet gesucht."}
+                _json(adresse, "/antwort", {"auftrag": k, "text": text, "lieferschein": ls, "dauer_s": ls["dauer_s"]}, kopf)
+                continue
+        except (urllib.error.URLError, OSError, ValueError, KeyError) as exc:
+            print("Schein-PC daheim:", exc, file=sys.stderr)
+        time.sleep(0.5)
+
+
 class ScheinPlatzl:
     FALLE = ('<p>Hallo <strong>Community</strong>, schaut euch <a href="https://kiplatz.at/wiki/">das Wiki</a> an.</p>'
              '<script>window.platzlFalle=1</script><img src="x" onerror="window.platzlFalle=2" alt="Foto vom Stammtisch">'
@@ -408,6 +485,9 @@ def main() -> None:
     ap.add_argument("--schaubild", action="store_true", help="Schein-PC antwortet auf die Fragen für die Store-Bildschirmfotos (SCHAUBILD)")
     ap.add_argument("--stoer", action="append", default=[], metavar="DATEI:N",
                     help="Probe der Lade-Wache: diese Datei der App (z. B. js/symbole.js:2) bekommt N-mal 429 wie von der Bremse des Live-Servers")
+    ap.add_argument("--zuhause", nargs="?", const="", default=None, metavar="CODE",
+                    help="dazu ein Schein-PC daheim mit Beispieldateien auf Deutsch und Englisch; die App koppelt sich mit CODE (ohne Angabe: ein neuer, steht in der Ausgabe)")
+    ap.add_argument("--zuhause-name", default="PC Wohnzimmer", help="Name des Schein-PCs daheim")
     a = ap.parse_args()
     for s in a.stoer:
         weg, _, n = s.rpartition(":")
@@ -423,6 +503,11 @@ def main() -> None:
     _, dienst = dienst_starten(ordner)
     if not a.ohne_pc:
         threading.Thread(target=schein_pc, args=(dienst, a.schaubild), daemon=True).start()
+    if a.zuhause is not None:
+        import zuhause
+        code = a.zuhause if zuhause.code_normal(a.zuhause) else zuhause.code_neu()
+        threading.Thread(target=schein_zuhause, args=(dienst, ordner, code, a.zuhause_name), daemon=True).start()
+        print(f"Schein-PC daheim „{a.zuhause_name}“: in der App unter Einstellungen, PC daheim, den Code {code} eintippen", flush=True)
     web = webserver(a.port, dienst)
     print(f"KIplatz-App: http://127.0.0.1:{a.port}/  (Dienst {dienst}, Werkstatt zum Probieren {werkstatt}, Ordner {ordner}, Code „spielwiese“)", flush=True)
     web.serve_forever()

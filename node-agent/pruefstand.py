@@ -95,6 +95,23 @@ MESSREIHE_NAECHTE_DATEI = "messreihe-naechte.json"
 MESSREIHE_MAX = 1400
 MESSREIHE_BERICHTE = 20
 SUCHE_AUS_MERKMAL = "Suche im Internet ist gerade nicht durchgekommen"
+NOTIZ_MAX = 600
+_NOTIZ = re.compile(r"[^.]*(?:neu geantwortet|gestrichen|nicht ausgegeben|ausgelassen|nachübersetzt|Zeit je Schritt)[^.]*\.(?:[^.]*\d s[^.]*\.)?")
+
+
+def notiz_aus(quellen) -> str:
+    t = " ".join(str(quellen or "").split())
+    return " ".join(m.group(0).strip() for m in _NOTIZ.finditer(t))[:NOTIZ_MAX]
+
+
+SUCHE_AUS_EN = re.compile(r"internet search (is ?n.t|is not|did ?n.t|did not|has ?n.t|has not|could ?n.t|could not) (working|work|get through|gotten through|come through|go through)", re.I)
+
+
+def suche_aus(antwort) -> bool:
+    t = str(antwort or "")
+    return SUCHE_AUS_MERKMAL in t or bool(SUCHE_AUS_EN.search(t))
+
+
 PROBE_UNSICHER_AB = 15
 PROBE_UNSICHER_ANTEIL = 0.10
 PROBE_UNSICHER_ART = 0.15
@@ -102,7 +119,7 @@ PROBE_UNSICHER_ART = 0.15
 
 def ohne_suche_raus(probe: list, vorher: list) -> set:
     def aus(liste):
-        return {str(x.get("kennung")): str(x.get("art", "")) for x in liste if isinstance(x, dict) and SUCHE_AUS_MERKMAL in str(x.get("antwort", ""))}
+        return {str(x.get("kennung")): str(x.get("art", "")) for x in liste if isinstance(x, dict) and suche_aus(x.get("antwort"))}
     pa, va = aus(probe), aus(vorher)
     return {k for k, art in pa.items() if art == "erfunden"} | {k for k, art in va.items() if art != "erfunden"}
 
@@ -158,6 +175,21 @@ def _pflicht_ok(text: str, pflicht) -> bool:
         if not any((w in text) if (w.isupper() and len(w) > 1) else (_ohne_tausender(w).lower() in _ohne_tausender(text).lower()) for w in teile):
             return False
     return True
+
+
+OHNE_ANTWORT_ANTEIL = 0.02
+
+
+def ohne_antwort(antwort) -> bool:
+    t = str(antwort or "").strip()
+    return not t or t.startswith("(keine Antwort")
+
+
+def vollstaendig(bericht: dict) -> bool:
+    try:
+        return int(bericht.get("ohne_antwort", 0) or 0) <= max(5, OHNE_ANTWORT_ANTEIL * int(bericht.get("gesamt", 0) or 0))
+    except (TypeError, ValueError):
+        return True
 
 
 def messreihe_bewerten(f: dict, antwort: str) -> bool:
@@ -253,10 +285,10 @@ class Pruefstand:
     def fragen(self) -> list[dict]:
         return [dict(f) for f in self._laden()["fragen"]]
 
-    def fragen_fuer_geraet(self, *, admin: bool = False) -> list[dict]:
+    def fragen_fuer_geraet(self, *, admin: bool = False, stark: bool = True) -> list[dict]:
         import zufallsfragen
         heute = self._jetzt().astimezone().date()
-        mess = messreihe_laden() if admin and heute.isoformat() in self.messreihe_naechte() else []
+        mess = messreihe_laden() if admin and stark else []
         return ([{"kennung": f["kennung"], "frage": f["frage"]} for f in self._laden()["fragen"]]
                 + [{"kennung": f["kennung"], "frage": f["frage"]} for f in zufallsfragen.ziehen(heute)]
                 + [{"kennung": f["kennung"], "frage": f["frage"]} for f in mess])
@@ -338,7 +370,7 @@ class Pruefstand:
                 except (TypeError, ValueError):
                     ms = 0.0
                 gemessen.append({"kennung": mf["kennung"], "art": mf["art"], "frage": mf["frage"], "richtig": messreihe_bewerten(mf, a.get("antwort", "")),
-                                 "antwort": mt[:MAX_ANTWORT], "dauer_s": ms})
+                                 "antwort": mt[:MAX_ANTWORT], "dauer_s": ms, **({"notiz": str(a.get("notiz"))[:NOTIZ_MAX]} if a.get("notiz") else {})})
                 continue
             f = nach_kennung.get(str(a.get("kennung", "")))
             zf = zufallsfragen.aus_kennung(str(a.get("kennung", ""))) if f is None else None
@@ -396,7 +428,10 @@ class Pruefstand:
         d["berichte"].append(b)
         self._speichern(d)
         if gemessen:
-            self._messreihe_ablegen(b, gemessen)
+            vorher = [x for x in self.messreihe_stand() if not x.get("modell") and vollstaendig(x)]
+            neu = self._messreihe_ablegen(b, gemessen)
+            b["messreihe"] = {k: v for k, v in neu.items() if k != "fragen"}
+            b["messreihe_mail"] = self.nacht_mail(neu, vorher[-1] if vorher else None)
         return b
 
     def _messreihe_ablegen(self, b: dict, gemessen: list[dict], *, modell: str = "") -> dict:
@@ -410,7 +445,17 @@ class Pruefstand:
             e["richtig"] += 1 if x["richtig"] else 0
         neu = {"zeit": b["zeit"], "tag": b["tag"], "geraet": b["geraet"], "geraet_name": b["geraet_name"], "je_art": je_art,
                "richtig": sum(1 for x in gemessen if x["richtig"]), "gesamt": len(gemessen),
-               "dauer_s": round(sum(x["dauer_s"] for x in gemessen), 1), "fragen": gemessen, **({"modell": modell} if modell else {})}
+               "dauer_s": round(sum(x["dauer_s"] for x in gemessen), 1), "fragen": gemessen, **({"modell": modell} if modell else {}),
+               "ohne_antwort": sum(1 for x in gemessen if ohne_antwort(x.get("antwort")))}
+        if not modell:
+            def gleich(x) -> bool:
+                try:
+                    return (isinstance(x, dict) and not x.get("modell") and x.get("geraet") == neu["geraet"] and x.get("gesamt") == neu["gesamt"]
+                            and abs((datetime.fromisoformat(str(neu["zeit"]).replace("Z", "+00:00"))
+                                     - datetime.fromisoformat(str(x.get("zeit")).replace("Z", "+00:00"))).total_seconds()) < 1800)
+                except ValueError:
+                    return False
+            berichte = [x for x in berichte if not gleich(x)]
         if modell:
             berichte = [x for x in berichte if not (isinstance(x, dict) and x.get("modell") == modell and x.get("geraet") == neu["geraet"]
                                                     and x.get("tag") == neu["tag"])]
@@ -462,7 +507,8 @@ class Pruefstand:
         b = {"zeit": _jetzt(), "tag": _tag(self._jetzt()), "geraet": str(geraet)[:40], "geraet_name": _norm(geraet_name)[:60]}
         neu = self._messreihe_ablegen(b, gemessen, modell=modell)
         berichte = self._messreihe_berichte()
-        vorher = next((x for x in reversed(berichte[:-1]) if x.get("geraet") == neu["geraet"] and not x.get("modell") and x.get("tag") == neu["tag"]), None)
+        vorher = next((x for x in reversed(berichte[:-1]) if x.get("geraet") == neu["geraet"] and not x.get("modell") and x.get("tag") == neu["tag"]
+                       and vollstaendig(x)), None)
         e = {"probe": {k: v for k, v in neu.items() if k != "fragen"}, "vorher": {k: v for k, v in vorher.items() if k != "fragen"} if vorher else None}
         naechte = sum(1 for x in berichte if x.get("modell") == modell)
         if not vorher and naechte < PROBE_NAECHTE_MAX:
@@ -490,6 +536,45 @@ class Pruefstand:
             a["gesamt"] += 1
             a["richtig"] += 1 if x.get("richtig") else 0
         return je_art
+
+    @staticmethod
+    def nacht_mail(neu: dict, vorher: dict | None) -> tuple[str, str]:
+        import statistics
+        namen = (("wissen", "Wissen"), ("alltag", "Alltag und Praxis"), ("alltag_en", "Alltag und Praxis auf Englisch"), ("erfunden", "Erfundenes erkennen"),
+                 ("rueckfrage", "Nachfragen"), ("grenze", "Formatvorgaben"))
+        fr = neu.get("fragen") or []
+        tag = str(neu.get("tag", ""))[:10]
+        try:
+            tag_de = datetime.strptime(tag, "%Y-%m-%d").strftime("%d.%m.%Y")
+        except ValueError:
+            tag_de = tag
+        zuvor = f" (davor {vorher.get('richtig')})" if vorher and vorher.get("gesamt") == neu.get("gesamt") else ""
+        betreff = f"KIplatz Prüfnacht {tag_de}: {neu.get('richtig')} von {neu.get('gesamt')} richtig{zuvor}"
+        zeilen = [f"Die Prüfung von {neu.get('geraet_name') or 'dem Admin-PC'} ist fertig: {neu.get('richtig')} von {neu.get('gesamt')} Fragen richtig{zuvor}.", ""]
+        for art, name in namen:
+            x = (neu.get("je_art") or {}).get(art)
+            if not x:
+                continue
+            v = ((vorher or {}).get("je_art") or {}).get(art) or {}
+            dazu = f" (davor {v.get('richtig')})" if v.get("gesamt") == x.get("gesamt") else ""
+            zeilen.append(f"{name}: {x.get('richtig')} von {x.get('gesamt')}{dazu}")
+        ohne = sum(1 for f in fr if suche_aus(f.get("antwort")))
+        neu_geschrieben = sum(1 for f in fr if "neu geantwortet" in str(f.get("notiz") or ""))
+        mit_notiz = sum(1 for f in fr if f.get("notiz"))
+        d = sorted(float(f.get("dauer_s") or 0) for f in fr)
+        leer = sum(1 for f in fr if ohne_antwort(f.get("antwort")))
+        if leer > max(5, OHNE_ANTWORT_ANTEIL * len(fr)):
+            betreff = betreff.replace("Prüfnacht", "Prüfnacht UNVOLLSTÄNDIG", 1)
+            zeilen.insert(0, f"Achtung: {leer} von {len(fr)} Fragen blieben ohne Antwort (die KI war aus oder der Lauf brach ab). "
+                             "Diese Zahlen messen nicht die KI und zählen nie als Vergleich.")
+            zeilen.insert(1, "")
+        zeilen += ["", f"Ohne Suche beantwortet: {ohne}"]
+        if mit_notiz:
+            zeilen.append(f"Neu geschrieben: {neu_geschrieben} von {mit_notiz} Antworten mit Notiz")
+        if d:
+            zeilen.append(f"Antwortzeit: die Hälfte unter {statistics.median(d):.1f} s, 9 von 10 unter {d[int(len(d) * 0.9)]:.1f} s".replace(".", ","))
+        zeilen += ["", "Ausgerollt wird damit nichts. Die genaue Auswertung macht der Chat am Morgen (werkzeuge/messnacht_vergleich.py)."]
+        return betreff, "\n".join(zeilen)
 
     @staticmethod
     def probe_mail(e: dict) -> tuple[str, str]:
@@ -577,7 +662,9 @@ class Pruefstand:
 
     def messreihe_stand(self) -> list[dict]:
         d = sicher_schreiben.json_laden(self.datei.parent / MESSREIHE_DATEI, {"berichte": []}, art=dict)
-        return [{k: v for k, v in x.items() if k != "fragen"} for x in d.get("berichte", []) if isinstance(x, dict)]
+        return [{**{k: v for k, v in x.items() if k != "fragen"},
+                 "ohne_antwort": x.get("ohne_antwort", sum(1 for f in x.get("fragen") or [] if ohne_antwort(f.get("antwort"))))}
+                for x in d.get("berichte", []) if isinstance(x, dict)]
 
     @staticmethod
     def _schwach(naechte: list) -> bool:

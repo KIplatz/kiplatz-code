@@ -49,12 +49,12 @@ def test_first_start_keeps_the_chosen_device_name_and_shows_once(tmp_path):
 
 
 def test_news_show_once_after_an_update(tmp_path):
-    assert neuerungen.fuer(app_core.APP_BUILD), "every build that goes to the server needs its three sentences"
+    assert neuerungen.seit("2026-01-01a", app_core.APP_BUILD), "the news since an old build are never empty"
     api, _fake, _ = _api(tmp_path)
     api.erststart_fertig("x")
     api._ki.einstellung_setzen(gesehen_bau="2026-01-01a")
     neu = api.zustand()["daten"]["neu"]
-    assert neu[:len(neuerungen.fuer(app_core.APP_BUILD))] == neuerungen.fuer(app_core.APP_BUILD) and len(neu) <= 8 and len(neu) > len(neuerungen.fuer(app_core.APP_BUILD))
+    assert neu == neuerungen.seit("2026-01-01a", app_core.APP_BUILD) and len(neu) <= 8
     api.neu_gesehen()
     assert api.zustand()["daten"]["neu"] == []
     baue = sorted(neuerungen.NEUERUNGEN)

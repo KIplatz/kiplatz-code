@@ -1,15 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 from __future__ import annotations
 import functools
-import hashlib
-import heapq
-import math
 import re
-import secrets
-import threading
-import time
-import urllib.parse
-import antwortspeicher_basis as antwortspeicher
 
 
 ART = "antwort"

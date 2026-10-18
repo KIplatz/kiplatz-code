@@ -11,7 +11,6 @@ import urllib.parse
 import urllib.request
 import webbrowser
 from html import escape
-from pathlib import Path
 
 
 SCOPE = "openid profile email"

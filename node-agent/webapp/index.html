@@ -76,6 +76,8 @@
   .kontext li { padding: 7px 12px; border-radius: 6px; cursor: pointer; }
   .kontext li:hover { background: var(--hover); }
   .kontext li.gefahr { color: var(--danger, #b3261e); }
+  .kontext li.aus { opacity: .45; pointer-events: none; }
+  .kontext li.trenner { padding: 0; margin: 4px 6px; height: 1px; background: var(--border); cursor: default; }
 
 
   aside { background: var(--ground); border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
@@ -395,6 +397,8 @@
   <div class="menu"><button type="button">Hilfe</button><div class="items"><button type="button" data-tun="hausordnung">Platzordnung</button><button type="button" data-tun="update">Nach Update suchen</button><button type="button" data-tun="fehler">Fehler melden</button><button type="button" data-seite="ueber">Über KIplatz</button></div></div>
 </div>
 <ul id="kontext-farbe" class="kontext" hidden></ul>
+
+<ul id="kontext-text" class="kontext" role="menu" hidden><li id="kt-undo" role="menuitem">Rückgängig machen</li><li id="kt-redo" role="menuitem">Wiederholen</li><li class="trenner" aria-hidden="true"></li><li id="kt-cut" role="menuitem">Ausschneiden</li><li id="kt-copy" role="menuitem">Kopieren</li><li id="kt-paste" role="menuitem">Einfügen</li><li class="trenner" aria-hidden="true"></li><li id="kt-all" role="menuitem">Alles auswählen</li></ul>
 <ul id="kontext-projekt" class="kontext" hidden><li id="kp-umbenennen">Projekt umbenennen</li><li id="kp-farbe">Farbe …</li><li id="kp-aufloesen">Projekt auflösen (Gespräche bleiben)</li><li id="kp-loeschen" class="gefahr">Projekt samt Gesprächen löschen</li></ul>
 <ul id="kontext" class="kontext" hidden><li id="kx-umbenennen">Umbenennen</li><li id="kx-anheften">Anheften</li><li id="kx-farbe">Farbe …</li><li id="kx-projekt">In ein Projekt verschieben …</li><li id="kx-projekt-raus" hidden>Aus dem Projekt nehmen</li><li id="kx-archiv">Archivieren</li><li id="kx-export">Als Textdatei speichern</li><li id="kx-loeschen" class="gefahr">Löschen</li></ul>
 
@@ -482,7 +486,7 @@
     <header><div class="row" style="flex-wrap:nowrap;min-width:0"><button class="leiste-knopf" id="btn-leiste" type="button" title="Seitenleiste ein- oder ausblenden (Strg+B)">☰</button><h1 id="titel" style="margin:0;font-size:inherit;font-weight:inherit">Gespräche</h1></div><div class="row" id="kopf-rechts"></div></header>
 
     
-    <div class="card tint" id="anmelde-band" role="status" style="display:none;margin:12px 16px 0"><div class="row" style="justify-content:space-between;gap:12px"><span><b>Dieses Gerät arbeitet gerade nicht für die Community mit.</b> Es ist nicht angemeldet. Mit einem Code vom Admin ist es in einer Minute wieder dabei.</span><button class="btn primary" id="btn-anmelde-band" type="button">Jetzt dazukommen</button></div></div>
+    <div class="card tint" id="anmelde-band" role="status" style="display:none;margin:12px 16px 0"><div class="row" style="justify-content:space-between;gap:12px"><span><b>Dieses Gerät arbeitet gerade nicht für die Community mit.</b> Es ist nicht angemeldet. Mit deinem KIplatz-Konto ist es in einer Minute wieder dabei.</span><button class="btn primary" id="btn-anmelde-band" type="button">Jetzt dazukommen</button></div></div>
 
     
     
@@ -495,7 +499,7 @@
         <div class="row" style="margin:6px 0"><span class="small" style="min-width:150px">Wo wohnst du?</span><input aria-label="Wo wohnst du?" type="text" id="er-ort" placeholder="z. B. Gmunden (für Wetter und Ortsfragen)" style="flex:1;min-width:160px" maxlength="60"></div>
         <p class="small" style="margin:10px 0 4px">Wofür willst du KIplatz vor allem?</p><div id="er-wofuer"></div>
         <div class="row" style="margin:6px 0"><span class="small" style="min-width:150px">Ein eigenes Thema?</span><input aria-label="Ein eigenes Thema?" type="text" id="er-themen" placeholder="z. B. Pferde, Steuern (mit Komma)" style="flex:1;min-width:160px" maxlength="300"></div>
-        <p class="muted small" style="margin:6px 0 8px">Wofür du KIplatz brauchst, gilt ab dann in jedem Gespräch, auch wenn ein PC der Community antwortet. Wie es antworten soll, stellst du unter Bereiche bei „Meine KI“ ein. Zu deinen Themen sammelt dein Gerät in freier Zeit Wissen aus der Community.</p>
+        <p class="muted small" style="margin:6px 0 8px">Wofür du KIplatz brauchst, gilt ab dann in jedem Gespräch, auch wenn ein PC der Community antwortet. Wie es antworten soll, stellst du unter „Meine KI“ ein. Zu deinen Themen sammelt dein Gerät in freier Zeit Wissen aus der Community.</p>
         <div class="row" style="justify-content:flex-end"><button class="btn" id="btn-er-spaeter" type="button">Später</button><button class="btn primary" id="btn-er-speichern" type="button">Speichern</button></div></div>
       <div class="card tint" id="neu-card" style="display:none;margin:12px 16px 0"><h3 style="margin-top:0">Neu in dieser Version</h3><ul id="neu-liste" class="small" style="margin:6px 0 10px;padding-left:18px"></ul><div class="row" style="justify-content:flex-end"><button class="btn primary" id="btn-neu-ok" type="button">Verstanden</button></div></div>
       <div id="kibanner">
@@ -748,7 +752,7 @@
             <label class="switch"><input type="checkbox" id="zuhause-an"> <span>Meine Handys und Laptops dürfen hier suchen</span></label>
             <div class="row" style="margin-top:10px"><button class="btn primary" id="btn-zuhause-code">Handy oder Laptop dazunehmen</button></div>
             <div id="zuhause-code-box" class="row" style="display:none;margin-top:10px;align-items:flex-start"><img id="zuhause-qr" alt="QR-Code zum Koppeln" width="150" height="150" style="border-radius:8px;background:#fff">
-              <div class="small" style="max-width:340px"><p style="margin:0 0 6px">Halte die Kamera deines Handys auf den Code, oder tipp ihn in der KIplatz-App unter „Mein Zuhause“ ein:</p>
+              <div class="small" style="max-width:340px"><p style="margin:0 0 6px">Halte die Kamera deines Handys auf den Code, oder tipp ihn in der KIplatz-App unter „PC daheim“ ein:</p>
                 <p class="num" id="zuhause-code" style="font-size:18px;letter-spacing:1px;margin:0 0 6px;user-select:all"></p>
                 <p class="muted" style="margin:0" id="zuhause-code-frist">Der Code gilt 10 Minuten und für ein Gerät.</p></div></div>
             <div id="zuhause-liste" class="small" style="margin-top:10px"></div>
@@ -925,8 +929,9 @@
             <label class="switch"><input type="checkbox" id="autostart"> <span>Programm beim Anmelden automatisch starten</span></label>
             <p class="muted small" id="autostart-hinweis"></p></div>
           <div class="card"><h3>Die KI zum Fragen</h3><div class="kv" id="ki-kv2"></div>
-            <label class="switch" style="margin-top:10px"><input type="checkbox" id="ki-auto"> <span>Beim Öffnen und mit der ersten Frage automatisch starten</span></label>
+            <label class="switch" style="margin-top:10px"><input type="checkbox" id="ki-auto"> <span id="ki-auto-text">Beim Öffnen und mit der ersten Frage automatisch starten</span></label>
             <p class="muted small">Eingeschaltet belegt sie Grafikkarte oder Arbeitsspeicher.</p>
+            <p class="small" id="ki-empfehlung" hidden><b>Empfohlen: ausgeschaltet lassen.</b> Dieses Gerät hat keine passende Grafikkarte. Ein Rechner der Community antwortet schneller und besser; die eigene KI springt nur ein, wenn gerade keiner frei ist.</p>
             <div class="row" style="margin-top:10px"><button class="btn" id="btn-ki-aus">KI ausschalten</button><button class="btn" id="btn-ki-an2">KI einschalten</button></div></div>
           <div class="card"><h3>Wer beantwortet deine Fragen</h3>
             <p class="muted small" style="margin-top:0">Ohne starke Grafikkarte geht die Frage an einen freien Rechner der Community; ist keiner frei, antwortet dieses Gerät selbst.</p>
@@ -1206,6 +1211,11 @@ window.addEventListener("unhandledrejection", (e) => __fehlerZeigen(String(e.rea
     if ($("#vorwaermen")) $("#vorwaermen").checked = z.vorwaermen !== false;
     zeichneSchnittstelle(z.schnittstelle);
     $("#ki-auto").checked = z.ki_auto !== false;
+
+
+    $("#ki-auto-text").textContent = z.kann_antworten === false ? "Mit deiner ersten Frage automatisch starten, wenn gerade kein Rechner der Community frei ist"
+      : "Beim Öffnen und mit der ersten Frage automatisch starten";
+    $("#ki-empfehlung").hidden = !(z.kann_antworten === false && z.fragt_community);
     $("#dunkel").checked = !!z.dunkel;
     document.documentElement.dataset.theme = z.dunkel ? "dark" : "light";
 
@@ -1389,7 +1399,12 @@ window.addEventListener("unhandledrejection", (e) => __fehlerZeigen(String(e.rea
 
 
     const startet = k.phase === "laden" || k.phase === "starten";
-    $("#kopf-rechts").innerHTML = k.laeuft && !startet ? `<span class="credits-chip" title="${esc(k.geraet)}">KIplatz ist an</span>` : `<span class="muted small">${startet ? "KI startet …" : "KI aus"}</span>`;
+
+
+    const community = !k.laeuft && !startet && Z && Z.fragt_community;
+    $("#kopf-rechts").innerHTML = k.laeuft && !startet ? `<span class="credits-chip" title="${esc(k.geraet)}">KIplatz ist an</span>`
+      : community ? `<span class="credits-chip" title="Ein freier Rechner der Community beantwortet deine Fragen.">Community antwortet</span>`
+      : `<span class="muted small">${startet ? "KI startet …" : "KI aus"}</span>`;
     const b = $("#kibanner"); b.classList.toggle("bereit", k.phase === "bereit" && k.laeuft);
     const bar = $("#ki-bar");
     if (k.phase === "laden" || k.phase === "starten") {
@@ -1471,7 +1486,7 @@ window.addEventListener("unhandledrejection", (e) => __fehlerZeigen(String(e.rea
 
     m.hidden = false; m.style.left = Math.max(4, Math.min(e.clientX, window.innerWidth - m.offsetWidth - 8)) + "px"; m.style.top = Math.max(4, Math.min(e.clientY, window.innerHeight - m.offsetHeight - 8)) + "px";
   }
-  function kontextZu() { $("#kontext").hidden = true; $("#kontext-projekt").hidden = true; $("#kontext-farbe").hidden = true; }
+  function kontextZu() { $("#kontext").hidden = true; $("#kontext-projekt").hidden = true; $("#kontext-farbe").hidden = true; $("#kontext-text").hidden = true; }
   let farbeFuer = null;
   $("#kx-farbe").addEventListener("click", (e) => { e.stopPropagation(); const m = $("#kontext"); const g = (letzteListe || []).find((x) => x.kennung === m.dataset.kennung) || {}; farbMenue(e, { kennung: m.dataset.kennung, farbe: g.farbe || "" }); });
   $("#kp-farbe").addEventListener("click", (e) => { e.stopPropagation(); const p = $("#kontext-projekt").dataset.projekt; farbMenue(e, { projekt: p, farbe: projektFarben[p] || "" }); });
@@ -1495,6 +1510,40 @@ window.addEventListener("unhandledrejection", (e) => __fehlerZeigen(String(e.rea
     Promise.all(gs.map((g) => api().gespraech_loeschen(g.kennung))).then(() => api().projekt_entfernen(p)).then(() => { projekteZu.delete(p); if (aktuell && gs.some((g) => g.kennung === aktuell.kennung)) { aktuell = null; zeichneGespraech(); $("#titel").textContent = titel.gespraeche; $("#titel").translate = true; } sag("Projekt gelöscht."); ladeListe(); });
   });
   document.addEventListener("click", kontextZu); document.addEventListener("keydown", (e) => { if (e.key === "Escape") kontextZu(); });
+
+
+  let textFeld = null;
+  const TEXTFELD = "textarea, input:not([type]), input[type=text], input[type=search], input[type=email], input[type=url], input[type=number], input[type=password], [contenteditable=true]";
+  function feldAuswahl(f) { return f && typeof f.selectionStart === "number" ? String(f.value || "").slice(f.selectionStart, f.selectionEnd) : String(window.getSelection ? window.getSelection() : ""); }
+  function textMenue(e) {
+    if (e.defaultPrevented) return;
+    const feld = e.target && e.target.closest ? e.target.closest(TEXTFELD) : null;
+    const markiert = feldAuswahl(feld);
+    if (!feld && !markiert) return;
+    e.preventDefault(); kontextZu(); textFeld = feld;
+    const schreibbar = !!feld && !feld.readOnly && !feld.disabled;
+    const verdeckt = !!feld && feld.type === "password";
+    $("#kt-undo").classList.toggle("aus", !schreibbar); $("#kt-redo").classList.toggle("aus", !schreibbar);
+    $("#kt-cut").classList.toggle("aus", !schreibbar || !markiert || verdeckt); $("#kt-copy").classList.toggle("aus", !markiert || verdeckt);
+    $("#kt-paste").classList.toggle("aus", !schreibbar); $("#kt-all").classList.toggle("aus", false);
+    const m = $("#kontext-text"); m.hidden = false;
+    m.style.left = Math.max(4, Math.min(e.clientX, window.innerWidth - m.offsetWidth - 8)) + "px"; m.style.top = Math.max(4, Math.min(e.clientY, window.innerHeight - m.offsetHeight - 8)) + "px";
+  }
+  function insFeld(text) {
+    const f = textFeld; if (!f) return; f.focus();
+    if (!document.execCommand("insertText", false, text) && typeof f.setRangeText === "function") {
+      f.setRangeText(text, f.selectionStart, f.selectionEnd, "end"); f.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  }
+  document.addEventListener("contextmenu", textMenue);
+  $("#kontext-text").addEventListener("mousedown", (e) => e.preventDefault());
+  $("#kt-undo").addEventListener("click", () => { if (textFeld) { textFeld.focus(); document.execCommand("undo"); } });
+  $("#kt-redo").addEventListener("click", () => { if (textFeld) { textFeld.focus(); document.execCommand("redo"); } });
+  $("#kt-copy").addEventListener("click", () => { kopiere(feldAuswahl(textFeld), "Kopiert."); });
+  $("#kt-cut").addEventListener("click", () => { const f = textFeld, s = feldAuswahl(f); kopiere(s, "Ausgeschnitten.").then((ok) => { if (ok && f) { textFeld = f; insFeld(""); } }); });
+
+  $("#kt-paste").addEventListener("click", () => { if (!textFeld) return; textFeld.focus(); api().einfuegen_druecken().then((r) => { if (r && !r.ok && r.text) sag(r.text, true); }); });
+  $("#kt-all").addEventListener("click", () => { if (textFeld) { textFeld.focus(); if (typeof textFeld.select === "function") textFeld.select(); else document.execCommand("selectAll"); } else { const ziel = $("#messages") || document.body; const r = document.createRange(); r.selectNodeContents(ziel); const s = window.getSelection(); s.removeAllRanges(); s.addRange(r); } });
   $("#kx-umbenennen").addEventListener("click", () => {
     const m = $("#kontext"); const neu = prompt("Neuer Name für das Gespräch:", m.dataset.titel);
     if (neu === null) return;
@@ -1702,7 +1751,7 @@ window.addEventListener("unhandledrejection", (e) => __fehlerZeigen(String(e.rea
       $("#plw-dialog").showModal(); (e.fehler ? $("#plw-grund") : antwort || e.titel ? $("#plw-text") : $("#plw-titel")).focus();
     };
     api().platzl_stand().then((r) => {
-      if (!r.ok || !r.daten.verbunden) { sag("Verbinde zuerst das Platzl: Bereiche → Platzl → „Mit dem Platzl verbinden“."); return; }
+      if (!r.ok || !r.daten.verbunden) { sag("Verbinde zuerst das Platzl: links auf „Platzl“, dann „Mit dem Platzl verbinden“."); return; }
       if (pl.kats.length) los(); else api().platzl_kategorien().then((r2) => nach(r2, (d) => { pl.kats = d.kategorien; los(); }));
     });
   }
@@ -1739,7 +1788,7 @@ window.addEventListener("unhandledrejection", (e) => __fehlerZeigen(String(e.rea
   function plSkillsZeichnen() {
     const box = $("#skill-platzl"); if (!box) return;
     api().platzl_stand().then((r) => {
-      if (!r.ok || !r.daten.verbunden) { box.innerHTML = '<p class="muted small" style="margin:0">Verbinde zuerst das Platzl (Bereiche → Platzl), dann stehen hier die Skills der Community.</p>'; return; }
+      if (!r.ok || !r.daten.verbunden) { box.innerHTML = '<p class="muted small" style="margin:0">Verbinde zuerst das Platzl (links auf „Platzl“), dann stehen hier die Skills der Community.</p>'; return; }
       api().platzl_skills().then((r2) => nach(r2, (d) => {
         box.innerHTML = d.skills.length ? d.skills.map((t) => `<div class="geraet-zeile"><span><b>${esc(String(t.titel).replace(/^Skill:\s*/i, ""))}</b><br><span class="muted small"><span>${t.antworten === 1 ? `1 Antwort · ${esc(plDatum(t.zuletzt))}` : `${t.antworten} Antworten · ${esc(plDatum(t.zuletzt))}`}</span>${d.hier[String(t.id)] ? `<span> · liegt bei dir als „${esc(d.hier[String(t.id)])}“</span>` : ""}</span></span><button class="btn klein" data-pl-skill="${t.id}">${d.hier[String(t.id)] ? "Neu laden" : "Übernehmen"}</button></div>`).join("") : '<p class="muted small" style="margin:0">Im Platzl ist noch kein Skill geteilt.</p>';
         box.querySelectorAll("[data-pl-skill]").forEach((b) => b.addEventListener("click", () => api().platzl_skill_holen(Number(b.dataset.plSkill)).then((r3) => nach(r3, (x) => zeichneSkills({ skills: x.skills, ordner: "" })))));
@@ -2249,20 +2298,17 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
     schritt: (text) => { if (arbeit) arbeit.d.querySelector(".schritt").textContent = String(text || ""); },
     hinweis: (text) => sag(text),
 
-    tokenNeu: () => { if (live && liveRoh) { liveNeu = true; entwurfZeigen("Entwurf, wird überarbeitet"); live.classList.add("ueberarbeitet"); } },
+
+    tokenNeu: () => {},
     fokus: (vorgabe) => { zeige("gespraeche"); const ta = $("#eingabe"); if (typeof vorgabe === "string" && vorgabe && !laufend) { ta.value = vorgabe; ta.dispatchEvent(new Event("input")); } ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); },
     oeffne: (kennung) => oeffne(kennung),
 
     dunkelUmschalten: () => { const an = !$("#dunkel").checked; $("#dunkel").checked = an; document.documentElement.dataset.theme = an ? "dark" : "light"; api().dunkel_setzen(an).then((r) => { nach(r); sag(an ? "Dunkles Fenster: ein." : "Dunkles Fenster: aus."); }); },
     autostartUmschalten: () => { const an = !$("#autostart").checked; api().autostart_setzen(an).then((r) => nach(r, (a) => { $("#autostart").checked = a; sag(a ? "Das Programm startet ab jetzt beim Anmelden." : "Das Programm startet nicht mehr von selbst."); })); },
-    token: (piece) => {
-      if (!live) return;
-      if (liveNeu) { liveNeu = false; liveRoh = ""; live.classList.remove("ueberarbeitet"); entwurfZeigen("Entwurf, wird geprüft"); }
-      entwurfZeigen(); liveRoh += piece; liveSpaeter();
-    },
+    token: (piece) => { if (live) liveRoh += piece; },
 
 
-    teil: (text) => { if (live && text) { entwurfZeigen(); liveRoh = String(text); live.classList.remove("denkt"); liveSpaeter(); } },
+    teil: (text) => { if (live && text) liveRoh = String(text); },
   };
 
 
@@ -2527,14 +2573,16 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
       if (!d.geraete.length) box.append(Object.assign(document.createElement("p"), { className: "muted", style: "margin:0", textContent: "Noch ist kein Handy und kein Laptop dabei." }));
       for (const g of d.geraete) {
         const z = document.createElement("div"); z.className = "geraet-zeile"; z.style.cssText = "display:flex;gap:10px;align-items:center;padding:6px 0;border-top:1px solid var(--border)";
-        const n = document.createElement("span"); n.style.flex = "1"; n.textContent = g.name + (g.seit ? " · gekoppelt am " + new Date(g.seit).toLocaleDateString(kiplatzSprache.datumSprache()) : "");
+
+        const n = document.createElement("span"); n.style.flex = "1"; n.textContent = g.seit ? kiplatzSprache.t("{0} · gekoppelt am {1}", [g.name, new Date(g.seit).toLocaleDateString(kiplatzSprache.datumSprache())]) : g.name;
         const b = document.createElement("button"); b.className = "btn klein"; b.textContent = "Entfernen";
         b.onclick = () => api().zuhause_entfernen(g.kid).then((x) => nach(x, zuhauseZeichnen));
         z.append(n, b); box.append(z);
         if (zuhauseUhr && $("#zuhause-code-box").style.display !== "none") { clearInterval(zuhauseUhr); zuhauseUhr = null; $("#zuhause-code-box").style.display = "none"; }
       }
-      $("#zuhause-hinweis").textContent = (d.hinweis || "") + (d.verlauf && d.verlauf.length ? (d.hinweis ? " " : "") + "Zuletzt geholt: " +
-        d.verlauf.slice(0, 5).map((v) => `${v.geraet} am ${new Date(v.zeit).toLocaleString(kiplatzSprache.datumSprache(), { dateStyle: "short", timeStyle: "short" })}: ${v.dateien.join(", ")}`).join("; ") : "");
+
+      $("#zuhause-hinweis").textContent = (d.hinweis || "") + (d.verlauf && d.verlauf.length ? (d.hinweis ? " " : "") + kiplatzSprache.t("Zuletzt geholt:") + " " +
+        d.verlauf.slice(0, 5).map((v) => `${v.geraet} · ${new Date(v.zeit).toLocaleString(kiplatzSprache.datumSprache(), { dateStyle: "short", timeStyle: "short" })} · ${v.dateien.join(", ")}`).join("; ") : "");
       $("#zuhause-daheim").textContent = d.daheim ? `Fragst du hier nach deinen Dateien, sucht „${d.daheim.pc_name}“ für dich.` : "Tipp den Code ein, den dein PC daheim zeigt.";
       $("#zuhause-eingabe").style.display = d.daheim ? "none" : "";
       $("#zuhause-vergessen-zeile").style.display = d.daheim ? "" : "none";
@@ -2678,7 +2726,7 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
     if (!confirm("Auf allen anderen Geräten abmelden? Dort musst du dich danach neu anmelden; PCs arbeiten weiter für die Community, aber nicht mehr für dein Konto.")) return;
     api().konto_ueberall_abmelden().then((r) => { const t2 = r && (r.ok ? r.daten.text : r.text); kontoGeraeteHolen(true); setTimeout(() => { $("#konto-geraete-meldung").textContent = t2 || ""; }, 400); });
   });
-  $("#konto-loeschen-wort").addEventListener("input", (e) => { $("#btn-konto-loeschen").disabled = e.target.value.trim().toLowerCase() !== "löschen"; });
+  $("#konto-loeschen-wort").addEventListener("input", (e) => { $("#btn-konto-loeschen").disabled = !["löschen", "delete"].includes(e.target.value.trim().toLowerCase()); });
   $("#btn-konto-loeschen").addEventListener("click", () => {
     if (!confirm("Dein KIplatz-Konto jetzt löschen? Das lässt sich nicht rückgängig machen.")) return;
     const b = $("#btn-konto-loeschen"); b.disabled = true; $("#konto-loeschen-meldung").textContent = "Einen Moment …";

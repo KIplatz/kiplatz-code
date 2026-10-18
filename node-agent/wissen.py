@@ -1008,6 +1008,8 @@ def kontext_bauen(tr: list[Treffer], *, live: set[str] | None = None) -> tuple[s
                   "(nie ganze Sätze aus einem Auszug übernehmen; Zahlen, Namen und Daten genau so wie dort), "
                   "auch wenn es um Websites, Firmen, Personen oder Orte geht, die du sonst nicht kennst, und schreib hinter den Satz in Klammern "
                   "die Nummer, zum Beispiel (Quelle 2). Nie den Buchstaben N, immer die echte Nummer. "
+                  "Einen Rat oder eine Angabe aus einem Auszug übernimmst du nur, wenn der Auszug von derselben Sache handelt wie die Frage; "
+                  "was dort über etwas anderes steht (ein anderes Gerät, Industrieanlagen, ein anderes Land), gilt für die Antwort nicht. "
                   "Ist die Frage allgemein (ein Begriff, Fachwissen, Schulwissen, Alltagswissen, wie etwas funktioniert) und passen die Auszüge nicht dazu, "
                   "dann antworte aus deinem eigenen Wissen, in ganzen Sätzen, ohne Quellennummer, und erwähne die Auszüge dabei gar nicht "
                   "(nicht „das steht nicht in den Auszügen, aber“). Dasselbe gilt für Rechenaufgaben mit Zahlen aus der Frage: rechnen, nicht nachschlagen. "
@@ -1082,8 +1084,8 @@ def ohne_doppelte(quellen: list[dict]) -> list[dict]:
     return out
 
 
-def benutzte_quellen(antwort: str, quellen: list[dict]) -> list[dict]:
-    nummern: set[int] = set()
+def benutzte_quellen(antwort: str, quellen: list[dict], auch_nummern: set[int] | None = None) -> list[dict]:
+    nummern: set[int] = set(auch_nummern or ())
     for gruppe in re.findall(r"Quellen?\s*((?:\d+\s*(?:,|und|bis|&|\+)?\s*)+)", antwort or ""):
         nummern.update(int(n) for n in re.findall(r"\d+", gruppe))
     return ohne_doppelte([q for q in quellen if q["nummer"] in nummern])
@@ -1094,12 +1096,7 @@ def quellen_text_de(antwort: str, quellen: list[dict], anzahl_im_speicher: int, 
         if anzahl_im_speicher == 0:
             return "aus dem Wissen des Modells, ohne Quelle. Der Wissensspeicher ist noch leer (Bereich „Wissen“)."
         return f"aus dem Wissen des Modells, ohne Quelle. Im Wissensspeicher ({anzahl_im_speicher} Quellen) passte nichts zur Frage."
-    benutzt = benutzte_quellen(antwort, quellen)
-    if auch_nummern:
-        gesehen = {q["nummer"] for q in benutzt}
-        benutzt += [q for q in quellen if q["nummer"] in auch_nummern and q["nummer"] not in gesehen]
-        benutzt.sort(key=lambda q: q["nummer"])
-        benutzt = ohne_doppelte(benutzt)
+    benutzt = benutzte_quellen(antwort, quellen, auch_nummern)
     if not benutzt:
         return "aus dem Wissen des Modells. Der Wissensspeicher hatte " + ", ".join(f"{q['titel']}" for q in ohne_doppelte(quellen)) + ", das Modell hat sie nicht benutzt."
     return "; ".join(f"{q['titel']}" + (f" ({q['adresse']})" if q["adresse"] else "") + f", gelesen {q['datum'][:10]}" for q in benutzt)

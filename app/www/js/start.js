@@ -570,8 +570,7 @@ async function fragen(text, { frisch = false, wiederholen = false, anhaenge = nu
       if (r.status === "genommen") {
 
 
-        if (r.teil && r.teil !== k.text) { k.text = r.teil; antwortZeichnen(k.b, r.teil); }
-        k.b.classList.toggle("entwurf", !!k.text); k.ent.hidden = !k.text;
+        k.ent.hidden = true;
         k.schritt.textContent = r.schritt || "ein PC aus der Community erarbeitet deine Antwort …";
       }
       else k.schritt.textContent = r.vor_dir ? `wartet auf einen freien PC (${r.vor_dir} vor dir) …` : "wartet auf einen freien PC …";
@@ -2261,7 +2260,8 @@ function verdrahten() {
 
   $("#btn-konto-loeschen-start").onclick = () => { einstellungenZu(); loeschenStart(); };
   $("#ld-weiter").onclick = () => { $("#ld-meldung").textContent = "Einen Moment …"; kontoAnmelden("loeschen", "", "", anmeldeFenster()); };
-  $("#ld-wort").oninput = (e) => { $("#ld-loeschen").disabled = e.target.value.trim().toLowerCase() !== "löschen"; };
+
+  $("#ld-wort").oninput = (e) => { $("#ld-loeschen").disabled = !["löschen", "delete"].includes(e.target.value.trim().toLowerCase()); };
   $("#ld-loeschen").onclick = () => { if (confirm("Dieses Konto jetzt löschen? Das lässt sich nicht rückgängig machen.")) loeschenAusfuehren(); };
   $("#af-ja").onclick = () => anmeldenAntworten(true);
   $("#af-nein").onclick = () => anmeldenAntworten(false);

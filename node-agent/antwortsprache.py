@@ -15,17 +15,38 @@ it its please tell explain much many any some not no yes if than then because in
 weather today tomorrow yesterday best good better thanks thank thx""".split())
 _DE = set("""der das ist sind wie warum wer wo wann welche welcher welches ich du er sie wir ihr mein dein sein unser euer mich dich
 mir dir uns euch ein eine einen einem einer und mit von für auf zu nicht kein keine bitte es gibt kann können soll sollte wird
-werden hat habe haben den dem des noch auch schon nur sehr heute morgen gestern gut besser als oder aber weil dass wenn""".split())
+werden hat habe haben den dem des noch auch schon nur sehr heute morgen gestern gut besser als oder aber weil dass wenn
+bin hab hob zum zur im beim vom ned kaputt""".split())
 _WORT = re.compile(r"[A-Za-zÄÖÜäöüß']+")
+_EN_ANFANG = {"what", "what's", "how", "why", "who", "who's", "whom", "whose", "where", "where's", "when", "which", "is", "are", "do", "does", "did",
+              "can", "could", "should", "would", "shall", "tell", "explain", "please", "give", "show", "the"}
 
 SYSTEM_FRAGE = (
     "You translate English into German. Each input line starts with a number and a vertical bar, like 1| … "
     "Translate every line on its own, keep its number and bar: one line in, one line out. Never answer a question, only translate it. "
-    "A line that is already German stays as it is. Keep names, numbers and units. Output only the lines.")
+    "A line that is already German stays as it is. Keep names, numbers and units. "
+    "German words or sentences in quotation marks are what the person asks about: copy them exactly, never translate them. Output only the lines.")
+BEISPIEL_FRAGE = [
+    {"role": "user", "content": "1| What is the minimum age for a moped licence in Italy?\n2| Give me a recipe for apple strudel.\n"
+                                "3| Explain how a fridge works.\n4| Do I need a permit for a pond in my garden?\n5| What does 'Bim' mean?"},
+    {"role": "assistant", "content": "1| Wie alt muss man in Italien für den Mopedführerschein mindestens sein?\n2| Gib mir ein Rezept für Apfelstrudel.\n"
+                                     "3| Erkläre, wie ein Kühlschrank funktioniert.\n4| Brauche ich eine Genehmigung für einen Teich in meinem Garten?\n"
+                                     "5| Was bedeutet 'Bim'?"},
+]
 SYSTEM_ANTWORT = (
     "You translate German into natural English. Each input line starts with a number and a vertical bar, like 3| … "
     "Translate every line on its own and keep its number and bar: one line in, one line out, never merge or split lines, add nothing. "
-    "Keep numbers, units, names, list dashes and marks like (Quelle 1) exactly as they are. Output only the translated lines.")
+    "Keep numbers, units, names, list dashes and marks like (Quelle 1) exactly as they are. "
+    "The name of a shop, pharmacy, restaurant, street, place or organisation is a name: keep it whole and in German, "
+    "also its words like Apotheke, Gasthaus or Straße. "
+    "Never write in the first person about the topic (no „I descale“, „I recommend“); speak to the reader as „you“ or write impersonally. "
+    "No Markdown, no asterisks. Output only the translated lines.")
+SYSTEM_ANTWORT_DEUTSCH_GEFRAGT = SYSTEM_ANTWORT.replace(
+    " Output only the translated lines.",
+    " The reader asked for German words: the German wording that answers the question stays German, exactly as it is, in quotation marks; "
+    "translate only the explanation around it. Output only the translated lines.")
+_DEUTSCH_GEFRAGT = re.compile(r"\b(?:in|into) (?:Austrian )?German\b|\bGerman (?:word|term|phrase|expression)s? for\b|\bGerman for\b", re.I)
+_BETONT = re.compile(r"(\*{1,2}|_{2})(?=\S)(.+?)(?<=\S)\1")
 _ZEILE = re.compile(r"^\s*(\d+)\s*\|\s?(.*)$")
 
 
@@ -33,13 +54,14 @@ def frage_sprache(text: str) -> str:
     gewuenscht = absicht.erkennen(text or "")
     if gewuenscht.art == "sprache":
         return gewuenscht.sprache
-    woerter = [w.lower() for w in _WORT.findall(text or "")]
-    if re.search(r"[äöüßÄÖÜ]", text or ""):
-        return "de"
+    ohne_zitat = re.sub(r"[„“\"'‚‘’][^„“\"'‚‘’]{1,60}[“\"'‘’]", " ", text or "")
+    woerter = [w.lower() for w in _WORT.findall(ohne_zitat) if not re.search(r"[äöüßÄÖÜ]", w)]
     if rechnen.englisch_rechnung(text or ""):
         return "en"
     en = sum(1 for w in woerter if w in _EN)
     de = sum(1 for w in woerter if w in _DE)
+    if woerter and woerter[0] in _EN_ANFANG and de == 0:
+        return "en"
     if en >= 2 and en > 2 * de:
         return "en"
     if en == 1 and de == 0 and len(woerter) <= 4:
@@ -71,7 +93,7 @@ def frage_auf_deutsch(frage_fn: FrageFn, nachrichten: list[dict]) -> list[dict]:
     for i in stellen:
         t = " ".join(str(neu[i].get("content") or "").split())
         zeilen.append(t if i == stellen[-1] else t[:VERLAUF_ZEICHEN])
-    fertig = zeilen_uebersetzen(frage_fn, zeilen, system=SYSTEM_FRAGE)
+    fertig = zeilen_uebersetzen(frage_fn, zeilen, system=SYSTEM_FRAGE, beispiel=BEISPIEL_FRAGE)
     letzte = fertig.get(len(zeilen) - 1, "").strip()
     if not letzte or len(letzte) > 3 * len(zeilen[-1]) + 40:
         return nachrichten
@@ -93,7 +115,7 @@ def _stellen(text: str, saetze: list[str]) -> list[tuple[int, int]] | None:
 
 
 def zeilen_uebersetzen(frage_fn: FrageFn, zeilen: list[str], bei_zeile: Callable[[dict[int, str]], None] | None = None,
-                       system: str = SYSTEM_ANTWORT) -> dict[int, str]:
+                       system: str = SYSTEM_ANTWORT, beispiel: list[dict] | None = None) -> dict[int, str]:
     if not zeilen:
         return {}
     eingabe = "\n".join(f"{i + 1}| {z}" for i, z in enumerate(zeilen))
@@ -105,7 +127,7 @@ def zeilen_uebersetzen(frage_fn: FrageFn, zeilen: list[str], bei_zeile: Callable
         if m and 1 <= int(m.group(1)) <= len(zeilen) and m.group(2).strip() and int(m.group(1)) - 1 not in fertig:
             z = m.group(2).strip()
             h = re.fullmatch(r"(\*{1,2}|_)([^*_]+)\1", z)
-            fertig[int(m.group(1)) - 1] = (h.group(2) if h else z).strip()
+            fertig[int(m.group(1)) - 1] = _BETONT.sub(r"\2", h.group(2) if h else z).strip()
 
     def token(stueck: str) -> None:
         puffer[0] += stueck
@@ -120,7 +142,7 @@ def zeilen_uebersetzen(frage_fn: FrageFn, zeilen: list[str], bei_zeile: Callable
                     pass
 
     laenge = sum(len(z) for z in zeilen)
-    a = frage_fn([{"role": "user", "content": eingabe}], system=system, max_tokens=min(1800, 60 + laenge // 2),
+    a = frage_fn(list(beispiel or []) + [{"role": "user", "content": eingabe}], system=system, max_tokens=min(1800, 60 + laenge // 2),
                  on_token=token)
     rest = puffer[0]
     if not fertig and getattr(a, "text", ""):
@@ -130,9 +152,14 @@ def zeilen_uebersetzen(frage_fn: FrageFn, zeilen: list[str], bei_zeile: Callable
     return fertig
 
 
+def deutsch_gefragt(frage: str) -> bool:
+    return bool(_DEUTSCH_GEFRAGT.search(frage or ""))
+
+
 def antwort_uebersetzen(frage_fn: FrageFn, text: str, lieferschein: dict, teil_melden: Callable[[str], None] | None = None,
-                        log: Callable[[str], None] | None = None) -> tuple[str, dict]:
+                        log: Callable[[str], None] | None = None, frage: str = "") -> tuple[str, dict]:
     t0 = time.time()
+    system = SYSTEM_ANTWORT_DEUTSCH_GEFRAGT if deutsch_gefragt(frage) else SYSTEM_ANTWORT
     saetze = pruefung.saetze(text)
     stellen = _stellen(text, saetze)
     if stellen is None:
@@ -159,11 +186,23 @@ def antwort_uebersetzen(frage_fn: FrageFn, text: str, lieferschein: dict, teil_m
                 teil_melden(stueck)
 
     try:
-        fertig = zeilen_uebersetzen(frage_fn, zeilen, weitergeben)
+        fertig = zeilen_uebersetzen(frage_fn, zeilen, weitergeben, system=system)
     except Exception as exc:
         if log:
             log(f"FEHLER uebersetzen: {type(exc).__name__}; die Antwort bleibt deutsch")
         return text, {**ls, "sprache": "de", "uebersetzt": "nicht möglich"}
+    fehlt = [i for i in range(len(saetze)) if i not in fertig and re.search(r"[A-Za-zÄÖÜäöüß]{3}", zeilen[i])]
+    if fehlt:
+        try:
+            nach = zeilen_uebersetzen(frage_fn, [zeilen[i] for i in fehlt], system=system)
+            for j, i in enumerate(fehlt):
+                if j in nach:
+                    fertig[i] = nach[j]
+            if log:
+                log(f"OK uebersetzen: {len(fehlt)} ausgelassene Zeilen nachübersetzt, {sum(1 for j in range(len(fehlt)) if j in nach)} davon gelungen")
+        except Exception as exc:
+            if log:
+                log(f"FEHLER uebersetzen nach: {type(exc).__name__}")
     neu = zusammensetzen(fertig, nur_bis_luecke=False)
     for j, k in enumerate(extra):
         if len(saetze) + j in fertig:

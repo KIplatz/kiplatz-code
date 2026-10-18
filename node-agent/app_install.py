@@ -521,7 +521,6 @@ def _record_oben(zeilen: list[str]) -> set[str]:
 
 
 def pakete_nachholen(adresse: str, root: Path, *, oeffner=None) -> list[str]:
-    import urllib.request
     import zipfile
     import pakete_tausch
     root = Path(root)

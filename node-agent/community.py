@@ -33,7 +33,6 @@ GERAET_DATEI = "geraet.json"
 TIMEOUT_S = 8.0
 WEBSUCHE_TIMEOUT_S = 20.0
 SEITE_TIMEOUT_S = 40.0
-SPORT_TIMEOUT_S = 15.0
 ERGEBNIS_TIMEOUT_S = 60.0
 PRUEFSTAND_ERGEBNIS_TIMEOUT_S = 180.0
 MAX_ANTWORT = 4 * 1024 * 1024
@@ -406,6 +405,18 @@ class Community:
         except app_core.AppError as exc:
             return Stand(False, 0, "Community", exc.detail)
 
+    def pruefen_pausiert(self) -> bool:
+        jetzt = time.monotonic()
+        merk = getattr(self, "_pausiert_merk", None)
+        if merk is not None and jetzt - merk[0] < 600:
+            return merk[1]
+        try:
+            wert = bool(self._anfrage("/hallo").get("pruefen_pausiert"))
+        except app_core.AppError:
+            wert = merk[1] if merk is not None else False
+        self._pausiert_merk = (jetzt, wert)
+        return wert
+
     def fenster_frei(self) -> bool:
         try:
             return bool(self._anfrage("/hallo").get("fenster"))
@@ -741,6 +752,13 @@ class Community:
         return self._anfrage("/wiki-vektoren-geholt", body, als_geraet=True)
 
 
+    def feiertage(self, land: str, jahr: int) -> list[dict] | None:
+        d = self._anfrage("/feiertage", {"land": str(land)[:2].upper(), "jahr": int(jahr)}, als_geraet=True, timeout=8)
+        tage = d.get("tage") if isinstance(d, dict) else None
+        if not isinstance(tage, list) or not d.get("erreicht", True):
+            return None
+        return [t for t in tage if isinstance(t, dict)]
+
     def zuhause_anbieten(self, kid: str) -> dict:
         return self._anfrage("/zuhause-anbieten", {"kid": str(kid)[:32]}, als_geraet=True)
 
@@ -885,7 +903,8 @@ class Community:
     def mein_konto_loeschen(self, bestaetigung: str) -> dict:
         return self._anfrage("/mein-konto-loeschen", {"bestaetigung": str(bestaetigung)[:20]}, als_geraet=True, timeout=90)
 
-    def websuche(self, frage: str, n: int = 5, *, sprache: str = "", zeit: str = "") -> list[dict]:
+    def websuche(self, frage: str, n: int = 5, *, sprache: str = "", zeit: str = "", pruef: bool = False,
+                 nur_gemerkt: bool = False) -> list[dict] | None:
         if self.geraet() is None and not self.ist_admin():
             raise CommunityError("COMMUNITY_GERAET", "dieses Gerät ist nicht angemeldet")
         body = {"frage": str(frage)[:300], "n": int(n)}
@@ -893,15 +912,14 @@ class Community:
             body["sprache"] = str(sprache)[:8]
         if zeit:
             body["zeit"] = str(zeit)[:8]
+        if pruef:
+            body["pruef"] = True
+            if nur_gemerkt:
+                body["nur_gemerkt"] = True
         a = self._anfrage("/websuche", body, mit_schluessel=self.ist_admin(), als_geraet=self.geraet() is not None, timeout=WEBSUCHE_TIMEOUT_S)
+        if nur_gemerkt and a.get("gemerkt") is False:
+            return None
         return [t for t in (a.get("treffer") or []) if isinstance(t, dict) and str(t.get("adresse", "")).startswith("https://")]
-
-    def sport(self, felder: dict) -> dict:
-        if self.geraet() is None and not self.ist_admin():
-            raise CommunityError("COMMUNITY_GERAET", "dieses Gerät ist nicht angemeldet")
-        body = {k: str(v)[:60] for k, v in (felder or {}).items() if k in ("was", "sache", "sport", "land") and v}
-        a = self._anfrage("/sport", body, mit_schluessel=self.ist_admin(), als_geraet=self.geraet() is not None, timeout=SPORT_TIMEOUT_S)
-        return a if isinstance(a, dict) else {}
 
     def frage_stellen(self, nachrichten: list[dict], *, auszuege: list | None = None, frisch: bool = False, vorige: str = "", zuhause: dict | None = None,
                       skill: dict | None = None, fachgebiete=None) -> str:

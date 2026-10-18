@@ -247,3 +247,12 @@ def test_the_start_of_the_prompt_stays_the_same_over_the_minute():
     a, b = datetime(2026, 10, 3, 14, 57, tzinfo=timezone.utc), datetime(2026, 10, 3, 14, 58, tzinfo=timezone.utc)
     assert w.datum_zeile(a) == w.datum_zeile(b) and "Uhr" not in w.datum_zeile(a)
     assert w.uhrzeit_zeile(a) != w.uhrzeit_zeile(b) and "Uhr" in w.uhrzeit_zeile(a)
+
+
+def test_quellen_liste_kennt_auch_die_saetze_aus_der_pruefung():
+    quellen = [{"nummer": 1, "titel": "Großglockner", "adresse": "https://de.wikipedia.org/wiki/Gro%C3%9Fglockner", "datum": "2026-10-01T00:00:00Z"},
+               {"nummer": 2, "titel": "Glocknergruppe", "adresse": "https://de.wikipedia.org/wiki/Glocknergruppe", "datum": "2026-10-01T00:00:00Z"}]
+    assert w.benutzte_quellen("Der Großglockner ist 3.798 Meter hoch.", quellen) == []
+    assert [q["nummer"] for q in w.benutzte_quellen("Der Großglockner ist 3.798 Meter hoch.", quellen, {1})] == [1]
+    assert [q["nummer"] for q in w.benutzte_quellen("A (Quelle 2).", quellen, {1})] == [1, 2]
+    assert w.quellen_text_de("Der Großglockner ist 3.798 Meter hoch.", quellen, 2, auch_nummern={1}).startswith("Großglockner (https://de.wikipedia.org")

@@ -19,8 +19,9 @@ _ARTEN: list[tuple[str, re.Pattern[str]]] = [
                                 r"|welche regeln gelten (bei|in|für) " + _KIPLATZ + r")\b", re.I)),
     ("koennen", re.compile(r"\b(was kannst du|was kann " + _KIPLATZ + r"|was kannst du alles|womit kannst du (mir )?helfen|"
                            r"was (machst|tust) du( für mich)?\??$|wobei hilfst du|deine (fähigkeiten|funktionen)|was bietet " + _KIPLATZ + r")", re.I)),
-    ("funktion", re.compile(r"\b(wie funktioniert(st)? (das|du|" + _KIPLATZ + r")|wie (arbeitest|arbeitet) (du|" + _KIPLATZ + r")|"
-                            r"wie (geht|läuft) (das|" + _KIPLATZ + r")|woher (kommen|kommt) (deine |die )?antwort\w*|wo (läufst|rechnest) du|"
+    ("funktion", re.compile(r"\b(wie funktionierst du|wie funktioniert (das|das hier|du)$|wie funktioniert " + _KIPLATZ +
+                            r"|wie (arbeitest|arbeitet) (du|" + _KIPLATZ + r")|"
+                            r"wie (geht|läuft) (das( hier)?$|" + _KIPLATZ + r")|woher (kommen|kommt) (deine |die )?antwort\w*|wo (läufst|rechnest) du|"
                             r"wer antwortet (mir|hier)|was passiert mit meiner frage)", re.I)),
     ("wer", re.compile(r"\b(wer bist du|was bist du|wer (ist|steckt hinter|hat) (dich|dir|" + _KIPLATZ + r")|stell dich (kurz )?vor|"
                        r"wie hei(ß|ss)t du|woher kommst du|bist du (chatgpt|eine ki|ein bot|ein mensch)|wer hat dich (gebaut|gemacht|programmiert|entwickelt))", re.I)),

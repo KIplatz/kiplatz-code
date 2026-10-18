@@ -12,7 +12,6 @@ import shutil
 import webbrowser
 import subprocess
 import sys
-import tempfile
 import contextlib
 import dataclasses
 import threading
@@ -57,6 +56,7 @@ import hotkey
 import konto_basis
 
 import kalender_dach
+import kalender_welt
 import region
 import belege
 import stellen
@@ -84,6 +84,8 @@ import wortindex
 KONTO_ISSUER = "https://werkstatt.kiplatz.at"
 import pruefung
 import selbstauskunft
+import woerterbuch_at
+import bezug
 import schriftstueck
 import osm_orte
 import schnittstelle
@@ -100,6 +102,9 @@ GROUND = "#f4f6f5"
 KI_WARTEN_S = 180
 WARTEN_TAKT_S = 0.7
 ABHOLEN_WARTEN_S = 10.0
+UPDATE_NACHT_HOECHSTENS_S = 12 * 3600
+UPDATE_ANTWORT_HOECHSTENS_S = 600
+ABHOLEN_FEHLVERSUCHE = 2
 KNAPP_TREFFER = 2
 KNAPP_ZEICHEN = 500
 WIKI_KANDIDATEN = 8
@@ -111,7 +116,10 @@ TRAINING_NACHHOLEN_NAECHTE = 2
 TRAINING_NACHHOLEN_BIS = 12
 PRUEFSTAND_VERSUCHE = 3
 PRUEFSTAND_ABSTAND_S = 12.0
-MESS_SUCHE_ABSTAND_S = 20.0
+PRUEFSTAND_HOCHLADEN_VERSUCHE = 3
+PRUEFSTAND_HOCHLADEN_WARTE_S = 60.0
+PRUEFSTAND_NOCHMAL_S = 30 * 60
+MESS_SUCHE_ABSTAND_S = 40.0
 MESS_SUCHEN_NACHT_MAX = 400
 PRUEFSTAND_AB_B = 8.0
 WARTEN_UNGENOMMEN_S = 25
@@ -302,6 +310,65 @@ def tagesbilanz_satz(heute: dict, tag=None) -> str:
     if (datetime.now().date() - tag).days == 1:
         return f"Dein Rechner hat gestern {liste} und {verdient}."
     return _SATZ_AM_TAG[tag.weekday()].format(tag.strftime("%d.%m."), liste, verdient)
+
+
+ZWISCHENSTAND_GUELTIG_S = 26 * 3600
+
+
+class _Zwischenstand:
+
+    def __init__(self, pfad: Path, art: str):
+        self.pfad, self.art = Path(pfad), art
+
+    def laden(self) -> tuple[dict, dict, bool]:
+        eintraege: dict = {}
+        memo: dict = {}
+        gemeldet = False
+        try:
+            zeilen = self.pfad.read_text(encoding="utf-8").splitlines()
+            kopf = json.loads(zeilen[0]) if zeilen else {}
+        except (OSError, ValueError, UnicodeDecodeError):
+            return {}, {}, False
+        if kopf.get("art") != self.art or time.time() - float(kopf.get("begonnen", 0) or 0) > ZWISCHENSTAND_GUELTIG_S:
+            return {}, {}, False
+        for z in zeilen[1:]:
+            try:
+                d = json.loads(z)
+            except ValueError:
+                continue
+            if d.get("gemeldet"):
+                gemeldet = True
+            elif isinstance(d.get("eintrag"), dict) and d.get("kennung"):
+                eintraege[str(d["kennung"])] = (str(d.get("frage", "")), d["eintrag"])
+                if isinstance(d.get("memo"), list):
+                    memo[str(d["kennung"])] = {tuple(s): t for s, t in d["memo"] if isinstance(s, list)}
+        return eintraege, memo, gemeldet
+
+    def beginnen(self) -> None:
+        self._schreiben(json.dumps({"art": self.art, "begonnen": time.time()}) + "\n", "w")
+
+    def anhaengen(self, kennung: str, frage: str, eintrag: dict, memo: dict | None) -> None:
+        z = {"kennung": kennung, "frage": frage, "eintrag": eintrag}
+        if memo:
+            z["memo"] = [[list(s), t] for s, t in memo.items()]
+        self._schreiben(json.dumps(z, ensure_ascii=False) + "\n", "a")
+
+    def gemeldet(self) -> None:
+        self._schreiben(json.dumps({"gemeldet": True}) + "\n", "a")
+
+    def loeschen(self) -> None:
+        try:
+            self.pfad.unlink()
+        except OSError:
+            pass
+
+    def _schreiben(self, text: str, modus: str) -> None:
+        try:
+            self.pfad.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.pfad, modus, encoding="utf-8", newline="\n") as f:
+                f.write(text)
+        except OSError:
+            pass
 
 
 def _log(core: app_core.AppCore, line: str) -> None:
@@ -649,12 +716,14 @@ class Api:
         self._nacht_memo: dict | None = None
         self._memo_frage, self._memo_nutzen = "", False
         self._mess_suche_zuletzt, self._mess_suchen, self._mess_suche_gemeldet = 0.0, 0, False
+        self._mess_bremse = False
+        self._suche_ausgefallen = False
         self._mess_uhr, self._mess_schlafen = time.monotonic, time.sleep
-        self._nachschauer = nachschauer or nachschauen.Nachschauer(suche_fn=lambda frage, **kw: self._websuche(frage, **kw),
-                                                                   sport_fn=lambda felder: self._community.sport(felder))
+        self._nachschauer = nachschauer or nachschauen.Nachschauer(suche_fn=lambda frage, **kw: self._websuche(frage, **kw))
         self._schnittstelle = schnittstelle.Schnittstelle(self._schnittstelle_antwort, self._schnittstelle_schluessel, log=lambda line: _log(core, line),
                                                           docker=lambda: bool(self._ki.einstellung().get("schnittstelle_docker")))
         self._zwischenablage = auswahl.in_zwischenablage
+        self._strg_v = auswahl._strg_v
         if geraet_name != "dieses Gerät":
             self._ki.verbindung.eigen = geraet_name
         self._sprechen = sprechen.Steuerung(sprechen.SprachOrdner(self._ki.ordner), threads=sprechen.threads_wahl(self._kerne()), log=lambda line: _log(core, line))
@@ -677,7 +746,7 @@ class Api:
             _log(self._core, f"ABGELEHNT {name}: {exc.code}: {exc.detail}")
             return {"ok": False, "text": menschlich(exc.code, exc.detail), "code": exc.code, "daten": None}
         except Exception as exc:
-            path = _write_error_report(self._core, exc)
+            _write_error_report(self._core, exc)
             _log(self._core, f"FEHLER {name}: {type(exc).__name__}: {exc}")
             return {"ok": False, "text": "Da ist etwas schiefgegangen. Das Programm hat es notiert; unter Hilfe → „Fehler melden“ geht es mit einem Klick an uns.", "code": "UNERWARTET", "daten": None}
 
@@ -768,6 +837,10 @@ class Api:
         if selbst:
             live = selbstauskunft.treffer() + live
             hinweis = "Selbstauskunft von KIplatz als erste Quelle. " + hinweis
+        at_woerter = [] if selbst else woerterbuch_at.treffer(frage)
+        if at_woerter:
+            live = at_woerter + live
+            hinweis = "Österreichisches Wörterbuch von KIplatz als erste Quelle. " + hinweis
         anbieter = not selbst and selbstauskunft.anbieter(frage)
         if anbieter:
             live = selbstauskunft.steckbrief_treffer() + live
@@ -785,7 +858,7 @@ class Api:
                 hinweis = f"{vorher_n - len(server) - len(lokal)} gemerkte Stellen mit einem älteren Stand übergangen. " + hinweis
         richtung = nachschauen.richtung(frage)
         erkannt = nachschauen.erkennen(frage)
-        if richtung and not (erkannt is not None and erkannt.art in ("wetter", "schlagzeilen", "sport")):
+        if richtung and not (erkannt is not None and erkannt.art in ("wetter", "schlagzeilen")):
             grenze = (datetime.now(timezone.utc) - timedelta(hours=12)).strftime("%Y-%m-%dT%H:%M:%SZ")
             heute_ = date.today()
 
@@ -807,6 +880,23 @@ class Api:
             else:
                 kalender_teil = [wissen.Treffer(kq, kal[1], 9.5)]
             hinweis = "Feiertage vom Programm aus dem Kalender berechnet. " + hinweis
+        elif kalender_welt.betrifft(frage):
+            abgefragt = []
+            for land in kalender_welt.laender_fuer(frage):
+                je_jahr: dict[int, list[dict]] = {}
+                for j in kalender_welt.jahre(frage)[:3]:
+                    try:
+                        tage = self._community.feiertage(land, j)
+                    except (app_core.AppError, OSError, ValueError):
+                        tage = None
+                    if tage:
+                        je_jahr[j] = tage
+                if je_jahr:
+                    kq = wissen.Quelle("kalender-" + land.lower(), "abgefragt", f"Feiertage {land} (Nager.Date, vom Server abgefragt)", "", wissen._jetzt(), 0)
+                    abgefragt.append(wissen.Treffer(kq, kalender_welt.text(land, je_jahr, frage), 9.5))
+            if abgefragt:
+                live = abgefragt + live
+                hinweis = "Feiertage vom Server bei Nager.Date abgefragt (nur Land und Jahr, ohne Gerät und Person). " + hinweis
         if self.nachschauen_an() and not selbst:
             vorher = next((str(n.get("content", "")) for n in reversed([n for n in (nachrichten or []) if n.get("role") == "user"][:-1])), "")
             if stellen.passend(frage, vorher):
@@ -850,7 +940,7 @@ class Api:
         bewerten = self._bewertung.bereit()
         if ohne_wiki and vorab is not None:
             hinweis = "Die Wikipedia wurde übersprungen: so etwas steht in keinem Lexikon, darum gleich im Internet gesucht. " + hinweis
-        if not live and not selbst and not (ohne_wiki and vorab is not None) and self._wiki.bereit() and not (art is not None and art.art in ("wetter", "schlagzeilen", "sport")):
+        if not live and not selbst and not (ohne_wiki and vorab is not None) and self._wiki.bereit() and not (art is not None and art.art in ("wetter", "schlagzeilen")):
             self._schritt("schlägt in der Wikipedia nach …")
             t_wiki = time.time()
             try:
@@ -931,6 +1021,18 @@ class Api:
             rest = [wissen.Treffer(t.quelle, t.text[:KNAPP_ZEICHEN], t.punkte) for t in rest]
         if fachgebiete and any(t.quelle.fachgebiet in fachgebiete for t in rest):
             hinweis = "Fundstellen aus den Quellen deiner Fachgebiete stehen vorn. " + hinweis
+        land_weg = land_weg_live = 0
+        if belege.regelfrage(frage) or belege.preisfrage(frage):
+            rest, land_weg = belege.fremdes_land_weg(frage, rest)
+            live, land_weg_live = belege.fremdes_land_weg(frage, live)
+        if land_weg + land_weg_live:
+            hinweis = "Fundstellen über ein anderes Land als das gefragte wurden weggelassen. " + hinweis
+        if belege.preisfrage(frage) and ziel[1] is not None:
+            vorher_live = len(live)
+            live = [t for t in live if t.quelle.art not in ("nachgeschaut", "live")
+                    or not nachschauen.veraltet_text(t.quelle.titel + " " + t.quelle.adresse + " " + t.text, *ziel)]
+            if len(live) < vorher_live:
+                hinweis = f"{vorher_live - len(live)} gelesene Stellen mit Preisen aus einem früheren Jahr wurden weggelassen. " + hinweis
         schon = {(t.quelle.kennung, t.text[:80]) for t in live}
         zusatz, quellen = wissen.kontext_bauen(live + [t for t in rest if (t.quelle.kennung, t.text[:80]) not in schon], live=schon_live)
         if selbst and zusatz:
@@ -1089,7 +1191,7 @@ class Api:
                 a = nachschauen.Auftrag("suche", " ".join(frage.split()))
         if a is None or a.rueckfrage:
             return [], ""
-        if a.art == "suche" and not frisch and alle is None and deckt_ab():
+        if a.art == "suche" and not frisch and not suchen and alle is None and deckt_ab():
             return [], ""
         weitere: list[str] = []
         neben = lauf.get("nebenher") if lauf and not lauf["gesucht"] and a.art == "suche" and alle is None else None
@@ -1105,9 +1207,13 @@ class Api:
         if a.art == "suche":
             if alle is None and not spaeter and not _frueher_gefragt(nachrichten):
                 alle = self._suchwoerter(nachrichten, frage, ohne_modell=True)
+                if lauf is not None and alle:
+                    lauf["nur_regel"] = True
             if alle is None:
                 self._schritt("überlegt, wonach es suchen soll …" if not spaeter else "sucht noch einmal mit anderen Wörtern …")
                 alle = self._suchwoerter(nachrichten, frage, bisher=lauf["gesucht"] if spaeter else None)
+                if lauf is not None:
+                    lauf["nur_regel"] = False
             if not alle:
                 return [], "Eine weitere Suche mit anderen Wörtern war nicht möglich."
             alle = nachschauen.anfragen_aufteilen(alle, frage)
@@ -1122,8 +1228,7 @@ class Api:
             self._letzter_stand = {"art": a.art, "titel": g.titel, "nachgeschaut": g.datum, "gilt_bis": g.gueltig_bis, "aus_gedaechtnis": True}
             return gemerkt[:4], f"Schon vorhin nachgeschaut (privat auf diesem PC): „{g.titel}“, am {g.datum[:10]} um {g.datum[11:16]} UTC, gilt bis {g.gueltig_bis[:10]} {g.gueltig_bis[11:16]} UTC."
         self._schritt(f"schaut das Wetter für {a.ort} nach …" if a.art == "wetter" and a.ort else ("holt die neuesten Schlagzeilen …" if a.art == "schlagzeilen"
-                      else "holt die Spielstände …" if a.art == "sport" and a.was == "live" else "holt den Spielplan …" if a.art == "sport" and a.was == "naechste"
-                      else "holt die Ergebnisse …" if a.art == "sport" else f"sucht im Internet nach „{a.frage}“ und liest die besten Seiten …"))
+                      else f"sucht im Internet nach „{a.frage}“ und liest die besten Seiten …"))
         try:
             ergebnisse = self._nachschauer.ausfuehren(a)
         except app_core.AppError as exc:
@@ -1261,7 +1366,13 @@ class Api:
         e = self._ki.einstellung()
         if not erzwingen and not pruefstand.faellig(str(e.get("pruefstand_zuletzt", "")), datetime.now(), bis=pruefstand.ADMIN_NACHHOLEN_BIS):
             return None
-        admin = self._community.ist_admin()
+        if self._pruefen_pausiert():
+            if erzwingen:
+                raise app_core.AppError("PRUEFEN_PAUSIERT", "Prüfen und Training sind am Server pausiert, bis die Community genug freie Rechner hat.")
+            return None
+        if not erzwingen and time.time() < float(e.get("pruefstand_nochmal_ab", 0) or 0):
+            return None
+        admin =self._community.ist_admin()
         if not erzwingen and not admin and not pruefstand.faellig(str(e.get("pruefstand_zuletzt", "")), datetime.now()):
             return None
         if admin:
@@ -1271,6 +1382,8 @@ class Api:
             return None
         self._ki.einstellung_setzen(pruefstand_zuletzt=datetime.now().strftime("%Y-%m-%d"))
         nacht = admin and not erzwingen
+        probe_wartet = admin and ki_laufzeit.probemodell(self._ki.ordner, datetime.now().strftime("%Y-%m-%d")) is not None
+        probe_jetzt = erzwingen and probe_wartet
         try:
             fragen = self._community.pruefstand_holen()
         except Exception as exc:
@@ -1283,25 +1396,37 @@ class Api:
             return None
         if erzwingen and not self._rechen.anhalten(hoechstens_s=120.0):
             raise app_core.AppError("PRUEFSTAND_BESCHAEFTIGT", "Die Rechenarbeit ist gerade mitten in einem Auftrag; bitte in einer Minute noch einmal.")
-        self._nacht_memo = {} if nacht else None
+        self._nacht_memo = {} if (nacht or probe_jetzt) else None
         self._mess_suche_zuletzt, self._mess_suchen, self._mess_suche_gemeldet = 0.0, 0, False
+        self._mess_bremse = True
+        self._pruefung_seit = time.monotonic()
         b = None
         try:
             try:
-                b = self._pruefstand_fragen(fragen, erzwingen=erzwingen)
+                b = self._pruefstand_fragen(fragen, erzwingen=erzwingen, probe_wartet=probe_wartet)
             finally:
-                if erzwingen:
+                if erzwingen and not probe_jetzt:
                     self._rechen.weiter()
         finally:
-            if nacht:
+            if nacht or probe_jetzt:
                 try:
-                    self._probe_nacht(fragen)
+                    self._probe_nacht(fragen, jetzt=probe_jetzt)
                 except Exception as exc:
                     _log(self._core, f"FEHLER probemodell: {type(exc).__name__}: {str(exc)[:120]}")
+                finally:
+                    if probe_jetzt:
+                        self._rechen.weiter()
             self._nacht_memo, self._memo_frage, self._memo_nutzen = None, "", False
+            self._mess_bremse = False
+            self._pruefung_seit = 0.0
             if nacht and self._core.run_state() is not node_local_state.RunState.ACTIVE:
                 self._ki.einstellung_setzen(pruefstand_zuletzt="")
                 _log(self._core, "INFO pruefstand: unterbrochen (Pause oder Programmende), die Nacht wird heute nachgeholt")
+            elif nacht and b is None and not _Zwischenstand(Path(self._ki.ordner.ki_dir) / "pruefstand-zwischenstand.ndjson",
+                                                            f"standard:{app_core.APP_BUILD}").laden()[2]:
+                self._ki.einstellung_setzen(pruefstand_zuletzt="", pruefstand_nochmal_ab=time.time() + PRUEFSTAND_NOCHMAL_S)
+                _log(self._core, f"INFO pruefstand: die Nacht endete ohne Bericht; neuer Versuch in {PRUEFSTAND_NOCHMAL_S // 60} Minuten "
+                                 f"(bis {pruefstand.ADMIN_NACHHOLEN_BIS} Uhr), er setzt beim Zwischenstand fort")
         return b
 
     def _probe_ausgefallen(self, warum: str) -> None:
@@ -1319,18 +1444,34 @@ class Api:
     def _websuche(self, frage: str, **kw) -> list[dict]:
         memo, k = self._nacht_memo, self._memo_frage
         vorrang = getattr(self._rechen, "vorrang", None)
+        bremse = getattr(self, "_mess_bremse", False)
         if (getattr(self._rechen, "phase", "") not in ("prueft_selbst", "prueft_probe")
                 or (isinstance(vorrang, threading.Event) and vorrang.is_set())):
-            memo = None
+            memo, bremse = None, False
         schl = (" ".join(str(frage).lower().split()), str(kw.get("sprache", "")), str(kw.get("zeit", "")))
         if memo is not None and k and self._memo_nutzen:
             je = memo.get(k) or {}
             alt = je[schl] if schl in je else (next((v for v in je.values() if v), []) if je else None)
             if alt is not None:
                 return [dict(t) for t in alt]
-        if memo is not None and not self._memo_nutzen:
-            self._mess_suche_budget(vorrang)
-        treffer = self._community.websuche(frage, 8, **kw)
+        pruef = (memo is not None or bremse) and not self._memo_nutzen
+        if pruef:
+            try:
+                gemerkt = self._community.websuche(frage, 8, **{**kw, "pruef": True, "nur_gemerkt": True})
+            except Exception:
+                gemerkt = None
+            if gemerkt is not None:
+                if memo is not None and k and not self._memo_nutzen:
+                    memo.setdefault(k, {})[schl] = [dict(t) for t in gemerkt]
+                return gemerkt
+        try:
+            if pruef:
+                self._mess_suche_budget(vorrang)
+            treffer = self._community.websuche(frage, 8, **({**kw, "pruef": True} if pruef else kw))
+        except Exception:
+            if pruef:
+                self._suche_ausgefallen = True
+            raise
         if memo is not None and k and not self._memo_nutzen:
             memo.setdefault(k, {})[schl] = [dict(t) for t in treffer]
         return treffer
@@ -1350,8 +1491,8 @@ class Api:
             jetzt = self._mess_uhr()
         self._mess_suche_zuletzt, self._mess_suchen = jetzt, self._mess_suchen + 1
 
-    def _pruefstand_takt(self, letzt: float, *, mitglied: bool = True) -> float:
-        ziel = letzt + PRUEFSTAND_ABSTAND_S
+    def _pruefstand_takt(self, letzt: float, *, mitglied: bool = True, abstand: float = PRUEFSTAND_ABSTAND_S) -> float:
+        ziel = letzt + abstand
         while self._core.run_state() is node_local_state.RunState.ACTIVE and (time.time() < ziel or self._jemand_am_pc()):
             if mitglied and getattr(self._rechen, "mitglied_jetzt", lambda: False)():
                 continue
@@ -1367,10 +1508,12 @@ class Api:
             leer = None
         return leer is None or leer < rechenarbeit.LEERLAUF_S
 
-    def _probe_nacht(self, fragen: list) -> dict | None:
+    def _probe_nacht(self, fragen: list, *, jetzt: bool = False) -> dict | None:
         mess = [f for f in fragen if str(f.get("kennung", "")).startswith("m-")]
         nacht = datetime.now().strftime("%Y-%m-%d")
         probe = ki_laufzeit.probemodell(self._ki.ordner, nacht)
+        if probe is not None and not mess:
+            _log(self._core, f"INFO probemodell {probe[1]['datei']} wartet: in diesem Lauf kam keine Messreihe, nur Zufallsfragen")
         if not mess or probe is None:
             return None
         if self._core.run_state() is not node_local_state.RunState.ACTIVE:
@@ -1382,6 +1525,7 @@ class Api:
             _log(self._core, f"ABGELEHNT probemodell {info['datei']}: {warum}")
             try:
                 self._community.messreihe_ergebnis([], modell=info["datei"], fehler=warum)
+                ki_laufzeit.probemodell_gemeldet(self._ki.ordner, nacht)
             except Exception as exc:
                 _log(self._core, f"FEHLER probemodell melden: {type(exc).__name__}")
 
@@ -1408,21 +1552,49 @@ class Api:
                 return None
             _log(self._core, f"OK probemodell {info['datei']} geladen, {len(mess)} Fragen der Messreihe")
             takt = 0.0
+            zs = _Zwischenstand(Path(self._ki.ordner.ki_dir) / "probe-zwischenstand.ndjson", f"probe:{info['datei']}:{app_core.APP_BUILD}")
+            fertig, _m, _g = zs.laden()
+            if fertig:
+                _log(self._core, f"OK probemodell {info['datei']}: Zwischenstand gefunden, {len(fertig)} Fragen schon beantwortet; es geht dort weiter")
+            else:
+                zs.beginnen()
             self._memo_nutzen = self._nacht_memo is not None
             for f in mess:
                 if self._core.run_state() is not node_local_state.RunState.ACTIVE:
                     break
-                takt = self._pruefstand_takt(takt, mitglied=False)
+                alt = fertig.get(str(f.get("kennung", "")))
+                if alt is not None and alt[0] == str(f.get("frage", "")):
+                    antworten.append(alt[1])
+                    continue
+                takt = time.time() if jetzt else self._pruefstand_takt(takt, mitglied=False, abstand=0.0)
                 abgeben(grund)
                 t0 = time.time()
                 self._memo_frage = str(f.get("kennung", ""))
+                ki_aus = False
                 try:
-                    text, _schein = self._antwort_fuer_mitglied([{"role": "user", "content": str(f.get("frage", ""))}], [], "Prüfstand")
-                except app_core.AppError as exc:
-                    text = f"(keine Antwort: {exc.detail})"
+                    for mal in range(2):
+                        try:
+                            text, _schein = self._antwort_fuer_mitglied([{"role": "user", "content": str(f.get("frage", ""))}], [], "Prüfstand")
+                            ki_aus = False
+                            break
+                        except app_core.AppError as exc:
+                            text, ki_aus = f"(keine Antwort: {exc.detail})", exc.code == "KI_AUS"
+                            if not ki_aus or mal:
+                                break
+                            _log(self._core, f"INFO probemodell {info['datei']}: die KI war aus{self._ki_ende_grund()}, sie wird neu geladen")
+                            try:
+                                self._ki_starten_blockierend()
+                            except app_core.AppError:
+                                break
+                            if not self._ki.probe_geladen:
+                                break
                 finally:
                     self._memo_frage = ""
+                if ki_aus:
+                    _log(self._core, f"ABGELEHNT probemodell {info['datei']}: die KI blieb aus; die Messung gilt als unterbrochen")
+                    break
                 antworten.append({"kennung": str(f.get("kennung", "")), "antwort": text, "dauer_s": round(time.time() - t0, 1)})
+                zs.anhaengen(str(f.get("kennung", "")), str(f.get("frage", "")), antworten[-1], None)
         finally:
             self._memo_nutzen = False
             self._ki.probe = None
@@ -1445,6 +1617,9 @@ class Api:
         for versuch in range(2):
             try:
                 b = self._community.messreihe_ergebnis(antworten, modell=info["datei"])
+                ki_laufzeit.probemodell_gemeldet(self._ki.ordner, nacht)
+                _Zwischenstand(Path(self._ki.ordner.ki_dir) / "probe-zwischenstand.ndjson", "").loeschen()
+                _Zwischenstand(Path(self._ki.ordner.ki_dir) / "pruefstand-zwischenstand.ndjson", "").loeschen()
                 break
             except app_core.AppError as exc:
                 if versuch:
@@ -1459,6 +1634,18 @@ class Api:
                 gescheitert("die weitere Nacht ließ sich am PC nicht eintragen (ki/probemodell.json)")
         return b
 
+
+    def _pruefen_pausiert(self) -> bool:
+        try:
+            pausiert = bool(getattr(self._community, "pruefen_pausiert", lambda: False)())
+        except Exception:
+            return False
+        if pausiert:
+            heute = datetime.now().strftime("%Y-%m-%d")
+            if getattr(self, "_pausiert_gemeldet", "") != heute:
+                self._pausiert_gemeldet = heute
+                _log(self._core, "INFO pruefstand: Prüfen und Training sind am Server pausiert (bis die Community genug freie Rechner hat)")
+        return pausiert
 
     def _training_einstellung(self) -> dict | None:
         t = self._ki.einstellung().get("training")
@@ -1475,6 +1662,8 @@ class Api:
         return {"ordner": ordner, "python": python, "skript": skript, "wochentag": tag, "stunde": stunde}
 
     def _training_lauf(self) -> dict | None:
+        if self._pruefen_pausiert():
+            return None
         t = self._training_einstellung()
         jetzt = datetime.now()
         heute = jetzt.strftime("%Y-%m-%d")
@@ -1608,17 +1797,47 @@ class Api:
             _log(self._core, f"FEHLER training melden: {exc.code}")
         return {"urteil": urteil}
 
-    def _pruefstand_fragen(self, fragen: list, *, erzwingen: bool) -> dict:
+    def _pruefstand_fragen(self, fragen: list, *, erzwingen: bool, probe_wartet: bool = False) -> dict | None:
         if erzwingen:
             self._rechen.phase, self._rechen.meldung = "prueft_selbst", ""
+        zs = _Zwischenstand(Path(self._ki.ordner.ki_dir) / "pruefstand-zwischenstand.ndjson", f"standard:{app_core.APP_BUILD}")
+        fertig, fertig_memo, schon = zs.laden()
+        mess_k = {str(f.get("kennung", "")) for f in fragen if str(f.get("kennung", "")).startswith("m-")}
+        if schon and probe_wartet and mess_k and mess_k <= set(fertig):
+            if self._nacht_memo is not None:
+                self._nacht_memo.update(fertig_memo)
+            _log(self._core, "OK pruefstand: die Messreihe ging heute schon an den Server; es geht gleich mit der Probe weiter")
+            return None
+        if schon or not fertig:
+            zs.beginnen()
+            fertig, fertig_memo = {}, {}
+        else:
+            _log(self._core, f"OK pruefstand: Zwischenstand gefunden, {len(fertig)} Prüffragen schon beantwortet; es geht dort weiter")
+        unterbrochen = False
         self._ki_starten_blockierend()
         antworten = []
         takt = 0.0
-        for f in fragen:
+        spaeter: list[tuple[dict, int]] = []
+        reihe: list[tuple[dict, int | None]] = [(f, None) for f in fragen]
+        i = ersetzt = 0
+        while i < len(reihe):
+            f, platz = reihe[i]
+            i += 1
+            if i == len(fragen) + 1 and spaeter:
+                _log(self._core, f"OK pruefstand: {len(spaeter)} Prüffragen ohne Suche kommen jetzt noch einmal")
             if self._core.run_state() is not node_local_state.RunState.ACTIVE:
+                unterbrochen = True
                 break
+            k0 = str(f.get("kennung", ""))
+            alt = fertig.get(k0) if platz is None else None
+            if alt is not None and alt[0] == str(f.get("frage", "")) and not pruefstand.suche_aus(alt[1].get("antwort")):
+                antworten.append(alt[1])
+                if self._nacht_memo is not None and k0 in fertig_memo:
+                    self._nacht_memo[k0] = fertig_memo[k0]
+                continue
             if not erzwingen:
                 takt = self._pruefstand_takt(takt)
+            self._suche_ausgefallen = False
             for versuch in range(PRUEFSTAND_VERSUCHE):
                 getattr(self._rechen, "mitglied_jetzt", lambda: False)()
                 bis = time.time() + rechenarbeit.VORRANG_WARTEN_MAX_S
@@ -1631,20 +1850,54 @@ class Api:
                 vorrang = getattr(self._rechen, "vorrang", None)
                 kennung = str(f.get("kennung", ""))
                 self._memo_frage = kennung if self._nacht_memo is not None and kennung.startswith("m-") else ""
+                _VERMISCHT.liste = []
+                _GESTRICHEN.liste = []
+                ki_aus = False
                 try:
                     with ki_laufzeit.abbruch_bei(vorrang) if isinstance(vorrang, threading.Event) else contextlib.nullcontext():
                         text, schein = self._antwort_fuer_mitglied([{"role": "user", "content": str(f.get("frage", ""))}], [], "Prüfstand")
                 except app_core.AppError as exc:
                     text = f"(keine Antwort: {exc.detail})"
+                    ki_aus = exc.code == "KI_AUS"
                 finally:
                     self._memo_frage = ""
+                    vermischt_liste, _VERMISCHT.liste = list(getattr(_VERMISCHT, "liste", None) or []), None
+                    gestrichen_liste, _GESTRICHEN.liste = list(getattr(_GESTRICHEN, "liste", None) or []), None
+                if ki_aus:
+                    _log(self._core, f"INFO pruefstand: die KI war bei Prüffrage {len(antworten) + 1} aus{self._ki_ende_grund()}; sie wird neu gestartet")
+                    if versuch == PRUEFSTAND_VERSUCHE - 1:
+                        break
+                    try:
+                        self._ki_starten_blockierend()
+                        continue
+                    except app_core.AppError as exc:
+                        _log(self._core, f"ABGELEHNT pruefstand: die KI startet nicht ({exc.code}); der Lauf gilt als unterbrochen")
+                        break
                 if not (isinstance(vorrang, threading.Event) and vorrang.is_set()) or versuch == PRUEFSTAND_VERSUCHE - 1:
                     break
                 _log(self._core, "OK pruefstand: Prüffrage für eine echte Frage abgebrochen, sie wird wiederholt")
+            if ki_aus:
+                unterbrochen = True
+                break
             pr = schein.get("pruefung") if isinstance(schein.get("pruefung"), dict) else {}
-            antworten.append({"kennung": str(f.get("kennung", "")), "antwort": text, "dauer_s": round(time.time() - t0, 1),
-                              "pruefung": {k: pr.get(k, 0) for k in ("gruen", "gelb", "rot")}, "belege": list(schein.get("belege") or [])[:5],
-                              "quellen": str(schein.get("quellen", ""))[:600]})
+            eintrag = {"kennung": str(f.get("kennung", "")), "antwort": text, "dauer_s": round(time.time() - t0, 1),
+                       "pruefung": {k: pr.get(k, 0) for k in ("gruen", "gelb", "rot")}, "belege": list(schein.get("belege") or [])[:5],
+                       "quellen": str(schein.get("quellen", ""))[:600], "notiz": vermischt_notiz(vermischt_liste) + gestrichen_notiz(gestrichen_liste) + pruefstand.notiz_aus(schein.get("quellen", ""))}
+            zs.anhaengen(kennung, str(f.get("frage", "")), eintrag, self._nacht_memo.get(kennung) if self._nacht_memo is not None else None)
+            if platz is None:
+                antworten.append(eintrag)
+                if self._suche_ausgefallen:
+                    spaeter.append((f, len(antworten) - 1))
+                    reihe.append((f, len(antworten) - 1))
+            elif not self._suche_ausgefallen:
+                antworten[platz] = eintrag
+                ersetzt += 1
+        if unterbrochen:
+            _log(self._core, f"INFO pruefstand: unterbrochen nach {len(antworten)} von {len(fragen)} Prüffragen; der Zwischenstand bleibt, "
+                             "der nächste Lauf setzt dort fort")
+            return None
+        if spaeter:
+            _log(self._core, f"OK pruefstand: {len(spaeter)} Prüffragen zuerst ohne Suche, {ersetzt} davon am Ende mit Suche beantwortet")
         wege = {}
         for name in self.PRUEFSTAND_WEGE:
             try:
@@ -1652,7 +1905,16 @@ class Api:
                 wege[name] = bool(isinstance(r, dict) and r.get("ok", True))
             except Exception:
                 wege[name] = False
-        b = self._community.pruefstand_ergebnis(antworten, wege)
+        for versuch in range(PRUEFSTAND_HOCHLADEN_VERSUCHE):
+            try:
+                b = self._community.pruefstand_ergebnis(antworten, wege)
+                break
+            except app_core.AppError as exc:
+                _log(self._core, f"FEHLER pruefstand hochladen (Versuch {versuch + 1}): {exc.code}")
+                if versuch == PRUEFSTAND_HOCHLADEN_VERSUCHE - 1:
+                    raise
+                self._mess_schlafen(PRUEFSTAND_HOCHLADEN_WARTE_S)
+        zs.gemeldet()
         _log(self._core, f"OK pruefstand {b.get('richtig')} von {b.get('gesamt')} richtig, Wege {b.get('wege_ok')} von {b.get('wege_gesamt')}")
         try:
             self._ki.einstellung_setzen(pruefstand_nacht={"tag": str(b.get("tag", ""))[:10], "richtig": int(b.get("richtig", 0) or 0),
@@ -1830,6 +2092,11 @@ class Api:
                 if kw is not None:
                     return (kw.en if en_frage else kw.de), {**self._schein_ohne_modell("gerechnet"), "geraet": f"{self._geraet_name} (Community) für {fuer}",
                                                               "quellen": "Referenzkurs der Europäischen Zentralbank (EZB), vom Programm selbst gerechnet."}
+            if not ab0.antwort and not skill and not zuhause and not fenster and not auszuege:
+                bz = bezug.rueckfrage(nachrichten)
+                if bz:
+                    return (bezug.ANTWORT_EN if en_frage else bz), {**self._schein_ohne_modell("nachgefragt"), "geraet": f"{self._geraet_name} (Community) für {fuer}",
+                                                                   "quellen": "keine Quelle nötig, das Programm fragt nach."}
             if en_frage and not ab0.antwort and self._ki.server.laeuft():
                 self._schritt("liest die Frage …")
                 try:
@@ -1842,7 +2109,8 @@ class Api:
                 text = ab0.antwort_en or text
             elif englisch:
                 self._schritt("schreibt die Antwort auf Englisch …")
-                text, schein = antwortsprache.antwort_uebersetzen(self._ki.server.frage, text, schein, teil_melden, log=lambda z: _log(self._core, z))
+                text, schein = antwortsprache.antwort_uebersetzen(self._ki.server.frage, text, schein, teil_melden, log=lambda z: _log(self._core, z),
+                                                                  frage=antwortsprache.letzte_frage(nachrichten))
             if daheim:
                 schein = {**schein, "zuhause": daheim}
                 if daheim == "mit_unterlagen":
@@ -1865,6 +2133,9 @@ class Api:
             _log(self._core, f"FEHLER antwort aus der Kopie: {type(exc).__name__}")
             return None
         if e is None or not hausordnung.pruefen(e["text"]).ok:
+            return None
+        import antwortspeicher_basis
+        if not antwortspeicher_basis.ausliefern_ok(e.get("lieferschein")):
             return None
         ls = dict(e["lieferschein"])
         ls["aus_speicher"] = {"erarbeitet": time.strftime("%Y-%m-%d", time.localtime(e["angelegt"])) if e["angelegt"] else "", "von": e["von"]}
@@ -1999,9 +2270,10 @@ class Api:
         def fertig_machen(a, zusatz, quellen, im_speicher, hinweis, quellen_stand, nachgeholt, pr):
             lieferschein = {
                 "modell": wahl.modell.name if wahl else "KIplatz", "geraet": f"{self._geraet_name} (Community) für {fuer}",
+                "bau": app_core.APP_BUILD,
                 "dauer_s": a.dauer_s, "wortstuecke": a.completion_tokens, "gelesen": a.prompt_tokens,
                 "quellen": wissen.quellen_text_de(a.text or "", quellen, im_speicher, auch_nummern={s.quelle for s in pr.saetze if s.farbe == "gruen" and s.quelle}) + (f" {hinweis}" if hinweis else ""),
-                "quellen_liste": wissen.benutzte_quellen(a.text or "", quellen),
+                "quellen_liste": wissen.benutzte_quellen(a.text or "", quellen, {s.quelle for s in pr.saetze if s.farbe == "gruen" and s.quelle}),
                 "gemacht": "live nachgeprüft" if frisch else ("nachgeschaut und geantwortet" if nachgeholt else "geantwortet"), "erfunden": pr.text, "pruefung": pr.kurz(),
             }
             if verworfen:
@@ -2019,7 +2291,7 @@ class Api:
 
         antwort_text, vorher_text, lieferschein = fertig_machen(a, zusatz, quellen, im_speicher, hinweis, quellen_stand, nachgeholt, pr)
         if (schrift is None and not frisch and self.nachschauen_an() and lauf and lauf["runde"] < SUCHRUNDEN_MITGLIED - 1
-                and _WEISS_NICHT.search(antwort_text) and not im_netz_gesucht(nachgeholt, quellen, lauf)):
+                and _WEISS_NICHT.search(antwort_text) and (not im_netz_gesucht(nachgeholt, quellen, lauf) or lauf.get("nur_regel"))):
             lauf["runde"] += 1
             self._schritt("Das weiß ich noch nicht sicher, ich suche danach …")
             zusatz2, quellen2, im_speicher2, hinweis2 = self._mit_wissen(nachrichten, privat_erlaubt=privat, frisch=True)
@@ -2074,14 +2346,15 @@ class Api:
         if self._ki.quelle() != "lokal" or not self._ki.bereit() or wahl is None or wahl.modell.kennung not in PRUEFER_MODELLE:
             return None
 
-        def pruefen(zusatz: str, saetze: list[str]) -> set[int]:
+        def pruefen(zusatz: str, woerter: list[str]) -> set[int]:
             self._schritt("prüft Zahlen, Daten und Namen gegen die Quellen …")
-            a = self._ki.server.frage([{"role": "user", "content": belege.pruefer_auftrag(saetze)}], system=belege.PRUEFER_SYSTEM, zusatz=zusatz,
-                                      max_tokens=8 * len(saetze) + 16, temperature=0.0)
-            return belege.urteil_lesen(a.text, len(saetze))
+            a = self._ki.server.frage([{"role": "user", "content": belege.PRUEFER_SYSTEM + "\n\n" + belege.pruefer_auftrag(woerter)}], zusatz=zusatz,
+                                      max_tokens=8 * len(woerter) + 16, temperature=0.0, art="pruefer")
+            return belege.urteil_lesen(a.text, len(woerter))
         return pruefen
 
-    def _belege_nachher(self, text: str, frage: str, zusatz: str, quellen: list[dict], lieferschein: dict, nochmal, *, schreiben: bool = False) -> str:
+    def _belege_nachher(self, text: str, frage: str, zusatz: str, quellen: list[dict], lieferschein: dict, nochmal, *, schreiben: bool = False,
+                        ampel: bool = True) -> str:
         def neu(extra: str) -> str:
             self._schritt("prüft Zahlen, Daten und Namen nach und antwortet genauer …")
             return ohne_auszuege(ohne_markdown(nochmal(extra)))
@@ -2090,13 +2363,14 @@ class Api:
         def pruefer_mit_schritt(z, saetze):
             self._schritt("lässt das Modell zweifelhafte Sätze noch einmal prüfen …")
             return pruefer(z, saetze)
+        bekannt = getattr(self._wiki, "namen_bekannt", None)
         neu_text, notizen = belege_anwenden(text, frage, zusatz, quellen, nochmal=neu if nochmal is not None else None,
-                                            pruefer=pruefer_mit_schritt if pruefer is not None else None, schreiben=schreiben)
+                                            pruefer=pruefer_mit_schritt if pruefer is not None else None, schreiben=schreiben, bekannt=bekannt)
         if notizen:
             _log(self._core, "INFO belege: " + " ".join(notizen))
             lieferschein["belege"] = notizen
             lieferschein["quellen"] = (lieferschein.get("quellen", "") + " " + " ".join(notizen)).strip()
-        if neu_text != text:
+        if ampel or neu_text != text:
             pr = pruefung.pruefen(neu_text, [(int(q["nummer"]), str(q.get("text", ""))) for q in quellen if q.get("text")])
             lieferschein["pruefung"], lieferschein["erfunden"] = pr.kurz(), pr.text
         return neu_text
@@ -2104,11 +2378,15 @@ class Api:
     def _unbekannte_namen(self, frage: str) -> list[str]:
         if not frage or _dateifrage(frage) or not suche_denkbar(frage):
             return []
+        t = time.time()
         try:
             return list(getattr(self._wiki, "unbekannte_namen", lambda t: [])(frage) or [])
         except Exception as exc:
             _log(self._core, f"FEHLER unbekannte namen: {type(exc).__name__}")
             return []
+        finally:
+            if time.time() - t > 2.0:
+                _log(self._core, f"LANGSAM unbekannte namen: {time.time() - t:.1f} s")
 
     def _kann_fuer_andere_antworten(self) -> bool:
         return self._ki.quelle() == "lokal" and not self._schwach()
@@ -2126,6 +2404,17 @@ class Api:
             raise app_core.AppError("KI_QUELLE", "dieses Gerät fragt selbst ein anderes Gerät; es kann nicht für andere antworten")
         self._ki_bereit_machen(einschalten=True)
 
+    def _ki_ende_grund(self) -> str:
+        try:
+            proc = getattr(self._ki.server, "proc", None)
+            code = proc.poll() if proc is not None else None
+            zeilen = [z.strip() for z in str(self._ki.server.log_ende() or "").splitlines() if z.strip()]
+        except Exception:
+            return ""
+        wichtig = [z for z in zeilen if re.search(r"(?i)error|fail|abort|out of memory|device lost|exception|vk_|terminat", z)] or zeilen
+        teile = ([f"Endcode {code}"] if code is not None else []) + ([" | ".join(z[:160] for z in wichtig[-3:])] if wichtig else [])
+        return f" ({'; '.join(teile)})" if teile else ""
+
     def _ki_entladen(self) -> None:
         self._ki.ausschalten()
         self._bedeutung.ausschalten()
@@ -2138,6 +2427,8 @@ class Api:
     def fragt_community(self) -> bool:
         if self._ki.quelle() != "lokal" or self._community.geraet() is None:
             return False
+        if getattr(self._ki, "probe_geladen", False) or getattr(self._ki, "gesperrt", ""):
+            return True
         e = self._ki.einstellung().get("fragt_community")
         if e in (True, False):
             return bool(e)
@@ -2199,7 +2490,6 @@ class Api:
             online = None
         if online == 0:
             raise app_core.AppError("COMMUNITY_KEINER", "gerade beantwortet kein Gerät der Community Fragen")
-        z = None
         extra = {**({"vorige": vorige} if vorige else {}), **({"skill": skill} if skill else {}), **({"fachgebiete": list(fachgebiete)} if fachgebiete else {})}
         k = self._community.frage_stellen(nachrichten, **extra)
         t0 = time.time()
@@ -2219,12 +2509,22 @@ class Api:
     def _community_warten(self, k: str, t0: float, warten_ungenommen: float, fuer_seite, *, daheim: bool = False,
                           warten_genommen: float = WARTEN_ANTWORT_S) -> dict:
         stand = ""
+        fehlversuche = 0
         while True:
             if self.abbruch_gewuenscht:
                 self._community.frage_aufgeben(k)
                 raise app_core.AppError("ABGEBROCHEN", "auf deinen Wunsch abgebrochen")
             frist = WARTEN_ANTWORT_S if stand.startswith("genommen:") else warten_ungenommen
-            r = self._community.antwort_abholen(k, seit=stand.partition(":")[2], warten_s=max(1.0, min(ABHOLEN_WARTEN_S, frist - (time.time() - t0))))
+            try:
+                r = self._community.antwort_abholen(k, seit=stand.partition(":")[2], warten_s=max(1.0, min(ABHOLEN_WARTEN_S, frist - (time.time() - t0))))
+            except app_core.AppError as exc:
+                if exc.code != "COMMUNITY_UNERREICHBAR" or fehlversuche >= ABHOLEN_FEHLVERSUCHE or time.time() - t0 > frist:
+                    raise
+                fehlversuche += 1
+                _log(self._core, f"HINWEIS antwort abholen: {exc.detail}; Versuch {fehlversuche + 1}")
+                time.sleep(WARTEN_TAKT_S)
+                continue
+            fehlversuche = 0
             if self.abbruch_gewuenscht:
                 self._community.frage_aufgeben(k)
                 raise app_core.AppError("ABGEBROCHEN", "auf deinen Wunsch abgebrochen")
@@ -2541,6 +2841,14 @@ class Api:
                 raise app_core.AppError("KOPIEREN", "Kopieren ging nicht; bitte markieren und mit Strg + C kopieren.")
             return {"zeichen": len(t)}
         return self._guarded("kopieren", go)
+
+    def einfuegen_druecken(self) -> dict:
+        def go():
+            if not self._window_vorne():
+                raise app_core.AppError("NICHT_VORNE", "Bitte zuerst ins Fenster von KIplatz klicken, dann noch einmal.")
+            self._strg_v()
+            return {}
+        return self._guarded("einfuegen_druecken", go)
 
     def schnittstelle_schluessel_kopieren(self) -> dict:
         def go():
@@ -3675,7 +3983,7 @@ class Api:
                 ls.setdefault("modell", "KIplatz")
                 ls["geraet"] = (str(gemeinschaft.get("von") or "aus dem Antwort-Speicher der Community") if fertig
                                 else f"{gemeinschaft.get('von', 'ein PC der Community')} hat deine Antwort erarbeitet (Community)")
-                ls["dauer_s"] = float(gemeinschaft.get("dauer_s", 0) or 0)
+                ls["dauer_s"] = round(float(gemeinschaft.get("dauer_s", 0) or 0), 1)
                 ls["credits"] = (f"nichts verrechnet: die Antwort kam fertig aus dem Antwort-Speicher, Stand {stand.guthaben}" if fertig and not admin
                                  else ("Admin, unbegrenzt" if admin else f"1 Credit für diese Frage, Stand {stand.guthaben}") + ("" if fertig else f"; {gemeinschaft.get('von', 'der Rechner')} hat 1 verdient"))
                 ls.setdefault("quellen", "")
@@ -3741,6 +4049,10 @@ class Api:
                 kw = self._waehrung_antwort(str(text))
                 if kw is not None:
                     return ohne_modell(kw.de, "gerechnet", "Referenzkurs der Europäischen Zentralbank (EZB), vom Programm selbst gerechnet.", fertig_en=kw.en)
+            if not ab.antwort and not fern and not g.anhaenge and not getattr(g, "ordner", None):
+                bz = bezug.rueckfrage(g.fuer_modell())
+                if bz:
+                    return ohne_modell(bz, "nachgefragt", "keine Quelle nötig, das Programm fragt nach.", fertig_en=bezug.ANTWORT_EN)
             vorige = next((str(n.get("content") or "") for n in reversed(g.fuer_modell()[:-1]) if n.get("role") == "assistant"), "")
             if ab.art == "sprache" and ab.sprache == "en" and englisch_gefragt and vorige.strip() and not fern:
                 return ohne_modell(ohne_auszuege(ohne_markdown(vorige)), "übersetzt", "die vorige Antwort, ins Englische übertragen.")
@@ -3914,11 +4226,12 @@ class Api:
                     _log(self._core, f"ABGELEHNT nachgeholt nach verworfener Fassung: {exc.code}: {exc.detail}")
             lieferschein = {
                 "modell": ("KIplatz" if fern else (wahl.modell.name if wahl else "?")), "geraet": self._ki.geraet_de(),
+                "bau": app_core.APP_BUILD,
                 "dauer_s": a.dauer_s, "wortstuecke": a.completion_tokens, "gelesen": a.prompt_tokens,
                 "credits": ("Admin, unbegrenzt" if admin else f"1 Credit für diese Frage, Stand {stand.guthaben}") + (f"; {self._ki.fern_name()} hat 1 verdient" if fern else ""),
                 "quellen": wissen.quellen_text_de(a.text or "", quellen, im_speicher, auch_nummern={s.quelle for s in pr.saetze if s.farbe == "gruen" and s.quelle})
                            + (f" {hinweis}" if hinweis else ""),
-                "quellen_liste": wissen.benutzte_quellen(a.text or "", quellen),
+                "quellen_liste": wissen.benutzte_quellen(a.text or "", quellen, {s.quelle for s in pr.saetze if s.farbe == "gruen" and s.quelle}),
                 "gemacht": "live nachgeprüft" if frisch else ("nachgeschaut und geantwortet" if nachgeholt else "geantwortet"), "erfunden": pr.text, "pruefung": pr.kurz(),
                 "guthaben_vorher": stand_vorher.guthaben,
             }
@@ -3930,7 +4243,7 @@ class Api:
             vorher_text = antwort_text
             antwort_text = self._belege_nachher(antwort_text, suchfrage(fm()), "" if fern else zusatz, [] if fern else quellen, lieferschein,
                                                 None if fern else (lambda extra: self._ki.frage(nachrichten_modell, on_token=None, zusatz=zusatz + "\n\n" + extra, max_tokens=240).text),
-                                                schreiben=schrift is not None)
+                                                schreiben=schrift is not None, ampel=not fern)
             if antwort_text != vorher_text and on_token is not None:
                 self._js("app.tokenNeu()")
             if (schrift is None and not frisch and not fern and not g.anhaenge and not getattr(g, "ordner", None) and self.nachschauen_an()
@@ -3955,7 +4268,7 @@ class Api:
                             "dauer_s": a.dauer_s, "wortstuecke": a.completion_tokens, "gelesen": a.prompt_tokens,
                             "quellen": wissen.quellen_text_de(a.text or "", quellen, im_speicher, auch_nummern={s.quelle for s in pr.saetze if s.farbe == "gruen" and s.quelle})
                                        + (f" {hinweis}" if hinweis else ""),
-                            "quellen_liste": wissen.benutzte_quellen(a.text or "", quellen),
+                            "quellen_liste": wissen.benutzte_quellen(a.text or "", quellen, {s.quelle for s in pr.saetze if s.farbe == "gruen" and s.quelle}),
                             "gemacht": "nachgeschaut und geantwortet", "erfunden": pr.text, "pruefung": pr.kurz(),
                         })
                         if verworfen:
@@ -3981,7 +4294,7 @@ class Api:
             if englisch_gefragt:
                 hinweis_seite("Die Antwort wird ins Englische übertragen …")
                 antwort_text, lieferschein = antwortsprache.antwort_uebersetzen(self._ki.server.frage, antwort_text, lieferschein,
-                                                                               log=lambda z: _log(self._core, z))
+                                                                               log=lambda z: _log(self._core, z), frage=str(text))
                 hinweis_seite("")
             self._ablage.anhaengen(g, "assistant", antwort_text, lieferschein=lieferschein)
             if not stueckweise:
@@ -4135,10 +4448,12 @@ class Api:
 
     def _dateien_antwort(self, frage: str) -> tuple[str, dict]:
         self._schritt("sucht in deinen Dateien …")
-        text, dateien = self._dateiliste.suchen(frage, self._geraet_name)
+        englisch = antwortsprache.frage_sprache(frage) == "en"
+        text, dateien = self._dateiliste.suchen(frage, self._geraet_name, englisch=englisch)
         schein = {**self._schein_ohne_modell("in deinen Dateien gesucht"), "zuhause": "mit_unterlagen", "dateien": dateien,
                   "geraet": f"{self._geraet_name}, dein PC daheim",
-                  "quellen": "Namen der Dateien in Dokumente, Bilder, Desktop, Downloads, Musik, Videos und OneDrive auf deinem PC; nicht im Internet gesucht."}
+                  "quellen": "Names of the files in Documents, Pictures, Desktop, Downloads, Music, Videos and OneDrive on your PC; not searched on the internet."
+                  if englisch else "Namen der Dateien in Dokumente, Bilder, Desktop, Downloads, Musik, Videos und OneDrive auf deinem PC; nicht im Internet gesucht."}
         _log(self._core, f"OK dateien: {len(dateien)} Treffer")
         return text, schein
 
@@ -5028,8 +5343,23 @@ class Api:
 
     def _update_warten(self) -> bool:
         r = self._rechen
+        frage = getattr(r, "phase", "") in ("antwortet", "laden") or getattr(r, "_mitglied_frage", None) is not None
+        seit_antwort = float(getattr(r, "antwort_seit", 0.0) or 0.0)
+        if seit_antwort and time.monotonic() - seit_antwort >= UPDATE_ANTWORT_HOECHSTENS_S:
+            _log(self._core, f"HINWEIS update: dieses Gerät antwortet seit über {UPDATE_ANTWORT_HOECHSTENS_S // 60} Minuten, das hängt; das Update geht vor")
+            return False
+        seit = getattr(self, "_pruefung_seit", 0.0)
+        if seit and time.monotonic() - seit < UPDATE_NACHT_HOECHSTENS_S:
+            return True
         vorrang = bool(getattr(getattr(r, "vorrang", None), "is_set", lambda: False)()) and set(getattr(r, "_vorrang_wer", set()) or ()) != {"karte"}
-        return getattr(r, "phase", "") in ("antwortet", "laden") or getattr(r, "_mitglied_frage", None) is not None or vorrang
+        if getattr(r, "phase", "") in ("prueft_selbst", "prueft_probe"):
+            if not getattr(self, "_update_nacht_seit", 0.0):
+                self._update_nacht_seit = time.monotonic()
+            if time.monotonic() - self._update_nacht_seit < UPDATE_NACHT_HOECHSTENS_S:
+                return True
+        else:
+            self._update_nacht_seit = 0.0
+        return frage or vorrang
 
     def update_pruefen(self) -> dict:
         def go():
@@ -5179,6 +5509,21 @@ def ohne_auftragswoerter(query: str, frage: str) -> str:
 
 
 _ABSICHT = threading.local()
+_VERMISCHT = threading.local()
+
+
+_GESTRICHEN = threading.local()
+
+
+def gestrichen_notiz(liste) -> str:
+    teile = [f"„{' '.join(str(s).split())[:50].replace('.', ',')}…“ [{', '.join(str(w).replace('.', ',') for w in list(woerter)[:3])[:40]}]"
+             for s, woerter in list(liste or [])[:2]]
+    return f"Gestrichen: {'; '.join(teile)}. " if teile else ""
+
+
+def vermischt_notiz(liste) -> str:
+    teile = [f"„{str(n).replace('.', '')[:40]}“ ← „{str(w).replace('.', '')[:30]}“" for n, w in list(liste or [])[:3]]
+    return f"Vermischt: {'; '.join(teile)}. " if teile else ""
 
 
 def _absicht_von(nachrichten: list[dict]) -> "absicht.Absicht":
@@ -5289,11 +5634,24 @@ SUCHWORT_ANDERS = ("Diese Suchen wurden schon gemacht und haben die Antwort nich
 SUCHRUNDEN = 3
 SUCHRUNDEN_MITGLIED = 2
 FRAGE_FOKUS = ("Gefragt ist genau: „{frage}“. Beantworte genau das. Steht die gefragte Angabe (zum Beispiel eine Dauer, eine Anzahl, ein Ort) "
-               "in keiner Quelle, sag das in einem Satz, statt eine andere Zahl oder Angabe zu nennen.")
+               "in keiner Quelle, sag das in einem Satz, statt eine andere Zahl oder Angabe zu nennen. Schreib in eigenen Worten, nie mehr als 6 "
+               "Wörter am Stück aus einer Quelle.")
+
+
+REGEL_FOKUS = ("Es geht um eine Regel: beginne mit dem, was gilt, so wie es in den Quellen steht: für wen, ab wann und bis wann, was genau "
+               "verlangt ist, Ausnahmen und was bei einem Verstoß droht. Was davon in keiner Quelle steht, lässt du einfach weg.")
+PREIS_FOKUS = ("Es geht um einen Preis: nenne jede Variante, die in den Quellen steht (zum Beispiel nach Dauer oder Fahrzeugklasse), jede mit "
+               "ihrem Betrag aus den Quellen.")
 
 
 def frage_fokus(frage: str) -> str:
-    return FRAGE_FOKUS.format(frage=" ".join(str(frage or "").split())[:300])
+    f = " ".join(str(frage or "").split())[:300]
+    teile = [FRAGE_FOKUS.format(frage=f)]
+    if belege.preisfrage(f):
+        teile.append(PREIS_FOKUS)
+    elif belege.regelfrage(f):
+        teile.append(REGEL_FOKUS)
+    return " ".join(teile)
 
 
 _MASSFRAGE = re.compile(r"\b(?:wie\s+(?:lange?|viele?|viel|hoch|weit|oft|alt|gro(?:ß|ss)|schwer|tief|breit|schnell|teuer|sp[äa]t|fr[üu]h|warm|kalt)"
@@ -5304,8 +5662,15 @@ def massfrage(frage: str) -> bool:
     return bool(_MASSFRAGE.search(str(frage or "")))
 
 
+ERSTE_FASSUNG_STRENG = False
+ZAHLEN_NUR_AUS_QUELLEN = ("Nenne nur Zahlen, Daten, Uhrzeiten, Beträge und Namen, die genau so in den Auszügen oben stehen. Eine Zahl oder einen Namen, "
+                          "der dort nicht steht, lässt du weg, auch wenn du ihn zu wissen glaubst.")
+
+
 def mit_fokus(zusatz: str, frage: str) -> str:
-    if not massfrage(frage):
+    if ERSTE_FASSUNG_STRENG and zusatz.strip():
+        zusatz = zusatz + "\n\n" + ZAHLEN_NUR_AUS_QUELLEN
+    if not (massfrage(frage) or belege.preisfrage(frage) or belege.regelfrage(frage)):
         return zusatz
     return (zusatz + "\n\n" if zusatz else "") + frage_fokus(frage)
 
@@ -5433,6 +5798,8 @@ def zeitziel(frage: str, heute=None) -> tuple[int | None, int | None]:
         return int(saison_jetzt(h)[:4]), None
     if _ZEITGEBUNDEN_JAHR.search(frage or ""):
         return None, h.year
+    if belege.preisfrage(frage):
+        return None, h.year
     return None, None
 
 
@@ -5540,7 +5907,7 @@ class _Teilgeber:
 
 
 DATEI_NUR_DAHEIM = ("In deinen Dateien sucht nur dein eigener PC. Ist dein Handy mit ihm verbunden, tipp auf das Plus neben dem Eingabefeld, "
-                    "wähl „In meinen Dateien suchen“ und frag noch einmal. Noch nicht verbunden? Das geht einmal in der App unter „Mein Zuhause“.")
+                    "wähl „In meinen Dateien suchen“ und frag noch einmal. Noch nicht verbunden? Das geht einmal in der App unter „PC daheim“.")
 HOLEN_BUDGET_S = 200.0
 HOLEN_RUNDEN = 10
 
@@ -5578,7 +5945,7 @@ DATEI_HAKEN = ("Das klingt nach einer Datei auf deinem PC daheim. Schalte „In 
                "Eingabefeld) und frag noch einmal, dann suche ich sie für dich.")
 DATEI_HAKEN_PC = ("Das klingt nach einer Datei auf deinem PC. Setz unten den Haken „In meinen Dateien suchen“ und frag noch einmal, dann suche ich "
                   "sie für dich.")
-DATEI_NICHT_GEKOPPELT = ("Dein PC daheim kennt dieses Gerät gerade nicht, oder das Suchen ist dort ausgeschaltet. Verbinde es unter „Mein Zuhause“ "
+DATEI_NICHT_GEKOPPELT = ("Dein PC daheim kennt dieses Gerät gerade nicht, oder das Suchen ist dort ausgeschaltet. Verbinde es unter „PC daheim“ "
                          "einfach noch einmal, dann sucht er wieder für dich.")
 DATEI_NICHTS_DAHEIM = ("Auf deinem PC daheim habe ich dazu keine passende Datei gefunden. Schalte „In meinen Dateien suchen“ ein (in der App über das "
                        "Plus neben dem Eingabefeld), dann schaue ich "
@@ -5593,12 +5960,15 @@ _NACHPRUEFEN_ANGEBOT = "Soll ich live nachprüfen?"
 _GESUCHT_NICHTS_SATZ = "Das weiß ich noch nicht, und im Internet habe ich dazu gerade nichts Verlässliches gefunden."
 _NICHT_ERREICHT_SATZ = "Das weiß ich noch nicht, und die Suche im Internet ist gerade nicht durchgekommen. Soll ich es gleich noch einmal versuchen?"
 _AUSZUG = re.compile(r"Auszüg|Auszug\b|Wissensspeicher|\b(?:die|den|in den|laut|nur|keine|alle|beide|meine|deine)\s+Quellen\b|"
-                     r"\bQuellen\s+(?:nennen|zeigen|sagen|enthalten|erwähnen|geben|liegen|belegen|bestätigen)", re.I)
+                     r"\bQuellen\s+(?:nennen|zeigen|sagen|enthalten|erwähnen|geben|liegen|belegen|bestätigen)|"
+                     r"\bsteht (?:hier|dazu|darüber)(?: (?:auch|leider))? nichts\b|\bdazu steht (?:hier )?nichts\b|\bhier steht nichts\b", re.I)
+_QUELLEN_ZEILE = re.compile(r"^[ \t]*(?:\*\*|__)?(?:Quellen?|Quellenangaben?|Sources?)(?:\*\*|__)?[ \t]*:(?:\*\*|__)?[^\n]*$", re.I | re.M)
 _AUSZUG_KLAMMER = re.compile(r"\s*\([^()]*(?:Auszüg|Auszug\b|Wissensspeicher|\bQuellen?\b)[^()]*\)\s*", re.I)
 
 
 def ohne_auszuege(text: str | None) -> str:
-    t = _AUSZUG_KLAMMER.sub(" ", text or "")
+    t = re.sub(r"\n{3,}", "\n\n", _QUELLEN_ZEILE.sub("", text or "")).strip()
+    t = _AUSZUG_KLAMMER.sub(" ", t)
     t = re.sub(r"([.!?])\s*\.", r"\1", re.sub(r"\s+([.,;:!?])", r"\1", re.sub(r"[ \t]{2,}", " ", t))).strip()
     if not _AUSZUG.search(t):
         return t
@@ -5613,31 +5983,85 @@ def ohne_auszuege(text: str | None) -> str:
 
 BELEGE_ZUSATZ = ("Prüfung: Eine erste Fassung dieser Antwort nannte eine Zahl, ein Datum oder einen Namen, der in keiner Quelle steht: „{saetze}“. "
                  "Schreib die Antwort ganz neu, als wäre es die erste. Nenne nur Zahlen, Daten, Uhrzeiten, Beträge und Namen, die genau so in den Quellen stehen, "
-                 "und übernimm sie genau; die Sätze schreibst du in eigenen Worten. Steht die Antwort in keiner Quelle, schreib nur „Das weiß ich noch nicht.“ Erwähne nie eine erste Fassung, einen "
+                 "und übernimm sie genau; die Sätze schreibst du in eigenen Worten, nie mehr als 6 Wörter am Stück aus einer Quelle. Steht die Antwort in keiner Quelle, schreib nur „Das weiß ich noch nicht.“ Erwähne nie eine erste Fassung, einen "
                  "Fehler oder eine Korrektur. Schreib nie „Quellen“ oder „Auszüge“.")
 
 
-def _streng(t: str, belegtext: str, zusatz: str, rechnen: bool, pruefer, auszuege: list[tuple[int, str]]) -> tuple[str, list[str], int]:
+REGEL_OHNE_QUELLE = "Eine Regel ohne Quelle wurde nicht ausgegeben: Regeln, Pflichten und Fristen sind je Land anders und ändern sich, ohne Quelle nennt KIplatz keine."
+REGEL_ZUSATZ = ("Eine Regel (was man braucht, muss, darf oder nicht darf) schreibst du nur so, wie sie in einer Quelle steht, mit derselben Aussage; "
+                "sagt keine Quelle etwas dazu, lass sie weg.")
+ANDERE_PERSON = "Die gefundenen Seiten handeln von jemand anderem; über die gefragte Person schreibt KIplatz darum nichts."
+
+
+def nur_rest(vorher: str, nachher: str, raus: list[str]) -> bool:
+    if not raus:
+        return False
+    saetze = [s for absatz in (vorher or "").split("\n") for s in belege._saetze(absatz) if re.search(r"\w\w", s) and not s.rstrip().endswith(":")]
+    if not saetze:
+        return False
+    if saetze[0].strip()[:25] not in (nachher or ""):
+        return True
+    ganz_weg = [s for s in raus if s.strip()[:25] not in (nachher or "")]
+    return len(ganz_weg) * 2 > len(saetze)
+
+
+def _ohne_vermittler(zusatz: str, quellen: list[dict], adressen: set[str]) -> str:
+    if not adressen:
+        return zusatz
+    for q in quellen:
+        text = str(q.get("text") or "")
+        if text and str(q.get("adresse") or "") in adressen:
+            zusatz = re.sub(rf"\nQuelle {int(q.get('nummer') or 0)}: [^\n]*\n" + re.escape(text), "\n", zusatz).replace(text, " ")
+    return "\n".join(z for z in zusatz.split("\n") if nachschauen.VERMITTLER_ZEILE not in z)
+
+
+def _streng(t: str, belegtext: str, zusatz: str, rechnen: bool, pruefer, auszuege: list[tuple[int, str]], *, regel: bool = False,
+            beispiele: bool = False, bekannt=None, regelfrage: str = "") -> tuple[str, list[str], int]:
     aus_quellen = any(s.farbe == "gruen" for s in pruefung.pruefen(t, auszuege).saetze)
-    befunde = belege.streng_pruefen(t, belegtext, zahlen_pruefen=not rechnen, namen_pruefen=None if aus_quellen else (lambda s: False))
+    quelltexte = [x for _n, x in auszuege]
+    befunde = belege.streng_pruefen(t, belegtext, zahlen_pruefen=not rechnen, namen_pruefen=None if (aus_quellen or regel) else (lambda s: False),
+                                    regel_frage=regelfrage, regel_quellen=quelltexte)
+    if (not aus_quellen and not regel) or beispiele:
+        befunde = [dataclasses.replace(b, zahlen=()) if b.zahlen and belege.alltag_ohne_widerspruch(b.satz, belegtext) else b
+                   for b in befunde]
+        befunde = [b for b in befunde if b.zahlen or b.namen or b.verdacht or b.regel]
+    if beispiele:
+        befunde = [dataclasses.replace(b, zahlen=()) if belege.beispiel(b.satz) else b for b in befunde]
+        kandidaten = sorted({w for b in befunde if belege.beispiel(b.satz) for w in (*b.namen, *b.verdacht)})
+        try:
+            echt = set(bekannt(kandidaten)) if bekannt is not None and kandidaten else set()
+        except Exception:
+            echt = set()
+        if echt:
+            befunde = [dataclasses.replace(b, namen=tuple(n for n in b.namen if n not in echt), verdacht=tuple(v for v in b.verdacht if v not in echt))
+                       if belege.beispiel(b.satz) else b for b in befunde]
+        befunde = [b for b in befunde if b.zahlen or b.namen or b.verdacht or b.regel]
     weg = {b.satz for b in befunde if b.sicher_falsch}
-    fraglich = [b.satz for b in befunde if not b.sicher_falsch and b.verdacht]
+    fraglich_b = [b for b in befunde if not b.sicher_falsch and b.verdacht]
+    fraglich = [b.satz for b in fraglich_b]
     vom_pruefer = 0
     if fraglich and pruefer is not None:
         try:
-            nein = pruefer(zusatz, fraglich) or set()
+            woerter = list(dict.fromkeys(w for b in fraglich_b for w in b.verdacht))
+            als_name = {woerter[i] for i in (pruefer(zusatz, woerter) or set()) if 0 <= i < len(woerter)}
         except app_core.AppError:
-            nein = set()
-        vom_pruefer = len(nein)
-        weg |= {fraglich[i] for i in nein}
+            als_name = set()
+        vom_pruefer_weg = {b.satz for b in fraglich_b if als_name & set(b.verdacht)}
+        vom_pruefer = len(vom_pruefer_weg)
+        weg |= vom_pruefer_weg
     if not weg:
         return t, [], 0
+    if isinstance(getattr(_GESTRICHEN, "liste", None), list):
+        _GESTRICHEN.liste.extend((b.satz, tuple(b.zahlen) + tuple(b.namen) + tuple(b.verdacht)) for b in befunde if b.satz in weg)
     teilweise: dict[str, str] = {}
     for s in [s for s in weg if s not in fraglich]:
-        teile = [x.strip(" ,;") for x in re.split(r"\s*;\s*|,?\s+(?:und|sowie|während|aber)\s+|,\s+(?=[A-ZÄÖÜ])", s.rstrip(" .!")) if x.strip(" ,;")]
+        teile = [x.strip(" ,;") for x in re.split(r"\s*;\s*|,?\s+(?:und|sowie)\s+|,\s+(?=[A-ZÄÖÜ])", s.rstrip(" .!")) if x.strip(" ,;")]
+        if re.search(r"\b(?:aber|während|jedoch|doch|sondern)\b", s):
+            continue
         if len(teile) < 2:
             continue
-        gut = [x for x in teile if not any(b.sicher_falsch for b in belege.streng_pruefen(x + ".", belegtext, zahlen_pruefen=not rechnen, namen_pruefen=lambda _s: False))]
+        gut = [x for x in teile if not any(b.sicher_falsch for b in belege.streng_pruefen(
+            x + ".", belegtext, zahlen_pruefen=not rechnen, namen_pruefen=lambda _s: False, regel_frage=regelfrage, regel_quellen=quelltexte))]
         if gut and len(gut) < len(teile) and any(re.search(r"\d", x) for x in gut):
             teilweise[s] = " und ".join(gut) + "."
     for s, neu in teilweise.items():
@@ -5645,12 +6069,12 @@ def _streng(t: str, belegtext: str, zusatz: str, rechnen: bool, pruefer, auszueg
         weg.discard(s)
     if not weg:
         return t, list(teilweise), vom_pruefer
-    rest, raus = belege.saetze_streichen(t, lambda s: s in weg)
+    rest, raus = belege.saetze_streichen(t, lambda s: s in weg, mitnehmen=True)
     return rest, raus + list(teilweise), vom_pruefer
 
 
 def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, heute: date | None = None, nochmal=None, pruefer=None,
-                    schreiben: bool = False) -> tuple[str, list[str]]:
+                    schreiben: bool = False, bekannt=None) -> tuple[str, list[str]]:
     heute = heute or date.today()
     notizen: list[str] = []
     t, n = belege.ohne_platzhalter(text)
@@ -5673,39 +6097,85 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
             notizen.append("1 Satz über eine frühere Saison oder ein früheres Jahr vom Programm gestrichen." if len(raus_alt) == 1
                            else f"{len(raus_alt)} Sätze über eine frühere Saison oder ein früheres Jahr vom Programm gestrichen.")
     if schreiben or not any(str(q.get("text") or "").strip() for q in (quellen or [])):
+        if not schreiben and belege.preisfrage(frage) and any(belege.betraege(t)):
+            notizen.append("Ein Preis ohne Quelle wurde nicht ausgegeben: Preise ändern sich, ohne aktuelle Quelle nennt KIplatz keinen.")
+            return "Das weiß ich noch nicht.", notizen
+        if not schreiben and belege.regelfrage(frage) and not belege.preisfrage(frage) and not _WEISS_NICHT.search(t):
+            notizen.append(REGEL_OHNE_QUELLE)
+            return "Das weiß ich noch nicht.", notizen
         t, n_eigen = _eigene_worte(t, frage, quellen, nochmal, heute)
         return t, notizen + n_eigen
-    belegtext = (zusatz or "") + "\n" + (frage or "") + "\n" + wissen.zeit_zeile(None if heute == date.today() else datetime(heute.year, heute.month, heute.day, 12).astimezone())
+    if not _WEISS_NICHT.search(t) and belege.gefragter_name_fehlt(frage, t, [str(q.get("text") or "") for q in quellen]):
+        notizen.append(ANDERE_PERSON)
+        return "Das weiß ich noch nicht.", notizen
+    vermittler = nachschauen.vermittler_adressen(quellen)
+    beleg_quellen = [q for q in quellen if str(q.get("adresse") or "") not in vermittler]
+    belegtext = (_ohne_vermittler(zusatz or "", quellen, vermittler) + "\n" + (frage or "") + "\n"
+                 + wissen.zeit_zeile(None if heute == date.today() else datetime(heute.year, heute.month, heute.day, 12).astimezone()))
     rechnen = belege.rechnet(frage)
-    auszuege = [(int(q.get("nummer") or 0), str(q.get("text") or "")) for q in quellen if q.get("text")]
-    geprueft, raus, vom_pruefer = _streng(t, belegtext, zusatz, rechnen, pruefer, auszuege)
+    regel = not schreiben and belege.regelfrage(frage) and not belege.preisfrage(frage)
+    regelfrage = frage if (not schreiben and belege.regelfrage(frage)) else ""
+    auszuege = [(int(q.get("nummer") or 0), str(q.get("text") or "")) for q in beleg_quellen if q.get("text")]
+    beispiele = not (rechnen or regel or belege.zahlenfrage(frage) or belege.preisfrage(frage))
+    geprueft, raus, vom_pruefer = _streng(t, belegtext, zusatz, rechnen, pruefer, auszuege, regel=regel, beispiele=beispiele, bekannt=bekannt,
+                                          regelfrage=regelfrage)
+    regel_saetze = {s for s, _g in belege.regel_ungestuetzt(t, regelfrage, [x for _n, x in auszuege])} if regelfrage else set()
+    basis = t
+    ausloeser = belege.vermischt_ausloeser(geprueft, [(str(q.get("titel") or ""), str(q.get("text") or "")) for q in quellen if q.get("text")])
+    misch = [s for s, _n, _w in ausloeser]
+    if misch:
+        if isinstance(getattr(_VERMISCHT, "liste", None), list):
+            _VERMISCHT.liste.extend((n, w) for _s, n, w in ausloeser)
+        geprueft, raus_misch = belege.saetze_streichen(geprueft, lambda s: s in misch, mitnehmen=True)
+        raus = raus + raus_misch
+        notizen.append("1 Satz, der einer Quelle etwas aus einer anderen Quelle zuschreibt, vom Programm gestrichen." if len(raus_misch) == 1
+                       else f"{len(raus_misch)} Sätze, die einer Quelle etwas aus einer anderen Quelle zuschreiben, vom Programm gestrichen.")
     if raus and geprueft != "Das weiß ich noch nicht." and not belege.brauchbar(geprueft):
         notizen.append("Nach dem Streichen blieb kein ganzer Satz; der Rest wurde nicht ausgegeben.")
         geprueft = "Das weiß ich noch nicht."
-    if raus and nochmal is not None and (geprueft == "Das weiß ich noch nicht." or belege.zahlenfrage(frage)):
+    if raus and nochmal is not None:
         try:
-            neu = nochmal(BELEGE_ZUSATZ.format(saetze=" ".join(raus)[:400]) + " " + frage_fokus(frage))
+            regel_vorher = bool(regel_saetze & set(raus))
+            neu = nochmal(BELEGE_ZUSATZ.format(saetze=" ".join(raus)[:400]) + (" " + REGEL_ZUSATZ if regel_vorher else "") + " " + frage_fokus(frage))
             neu, _ = belege.ohne_platzhalter(neu or "")
             neu, _ = belege.ohne_selbstbezug(neu)
             neu, _ = belege.wochentage_berichtigen(neu, heute)
-            geprueft2, raus2, vom2 = _streng(neu, belegtext, zusatz, rechnen, pruefer, auszuege)
+            neu = ohne_auszuege(ohne_markdown(neu))
+            geprueft2, raus2, vom2 = _streng(neu, belegtext, zusatz, rechnen, pruefer, auszuege, regel=regel, beispiele=beispiele, bekannt=bekannt,
+                                             regelfrage=regelfrage)
             quell_z = belege.zahlenwerte(belegtext + "\n" + "\n".join(x for _n, x in auszuege))
-            if geprueft2.strip() and belege.brauchbar(geprueft2) and len(belege.zahlenwerte(geprueft2) & quell_z) >= len(belege.zahlenwerte(geprueft) & quell_z):
-                geprueft, raus, vom_pruefer = geprueft2, raus2, vom2
-                notizen.append("Die erste Fassung nannte Zahlen, Daten oder Namen, die in keiner Quelle stehen; KIplatz hat neu geantwortet.")
+            erste_rest = geprueft == "Das weiß ich noch nicht." or nur_rest(basis, geprueft, raus)
+            if (geprueft2.strip() and belege.brauchbar(geprueft2) and not _WEISS_NICHT.search(geprueft2) and not nur_rest(neu, geprueft2, raus2)
+                    and (erste_rest or len(belege.zahlenwerte(geprueft2) & quell_z) >= len(belege.zahlenwerte(geprueft) & quell_z))):
+                geprueft, raus, vom_pruefer, basis = geprueft2, raus2, vom2, neu
+                regel_saetze = {s for s, _g in belege.regel_ungestuetzt(neu, regelfrage, [x for _n, x in auszuege])} if regelfrage else set()
+                notizen.append("Die erste Fassung nannte eine Regel, die keine Quelle so sagt; KIplatz hat neu geantwortet." if regel_vorher
+                               else "Die erste Fassung nannte Zahlen, Daten oder Namen, die in keiner Quelle stehen; KIplatz hat neu geantwortet.")
         except app_core.AppError:
             pass
-    if raus:
-        if len(raus) == 1:
+    if raus and geprueft != "Das weiß ich noch nicht." and nur_rest(basis, geprueft, raus):
+        notizen.append("Nach dem Streichen fehlte der Anfang der Antwort; ein Rest wird nicht ausgegeben.")
+        geprueft = "Das weiß ich noch nicht."
+    n_regel = sum(1 for s in raus if s in regel_saetze)
+    if n_regel:
+        notizen.append("1 Satz mit einer Regel, die keine Quelle so sagt, vom Programm gestrichen." if n_regel == 1
+                       else f"{n_regel} Sätze mit einer Regel, die keine Quelle so sagt, vom Programm gestrichen.")
+    n_rest = len(raus) - n_regel
+    if n_rest:
+        if n_rest == 1:
             notizen.append("1 Satz mit einer Zahl, einem Datum oder einem Namen, die in keiner Quelle stehen, vom Programm gestrichen, nach einem zweiten Blick des Modells."
                            if vom_pruefer else "1 Satz mit einer Zahl, einem Datum oder einem Namen, die in keiner Quelle stehen, vom Programm gestrichen.")
         elif vom_pruefer:
-            notizen.append(f"{len(raus)} Sätze mit einer Zahl, einem Datum oder einem Namen, die in keiner Quelle stehen, vom Programm gestrichen ({vom_pruefer} davon nach einem zweiten Blick des Modells).")
+            notizen.append(f"{n_rest} Sätze mit einer Zahl, einem Datum oder einem Namen, die in keiner Quelle stehen, vom Programm gestrichen ({vom_pruefer} davon nach einem zweiten Blick des Modells).")
         else:
-            notizen.append(f"{len(raus)} Sätze mit einer Zahl, einem Datum oder einem Namen, die in keiner Quelle stehen, vom Programm gestrichen.")
+            notizen.append(f"{n_rest} Sätze mit einer Zahl, einem Datum oder einem Namen, die in keiner Quelle stehen, vom Programm gestrichen.")
     geprueft, n_eigen = _eigene_worte(geprueft, frage, quellen, nochmal, heute, belegtext=belegtext, zusatz=zusatz, rechnen=rechnen, auszuege=auszuege,
-                                      pruefer=pruefer)
+                                      pruefer=pruefer, regelfrage=regelfrage)
     notizen += n_eigen
+    if (regel and geprueft != "Das weiß ich noch nicht." and not any(s.farbe == "gruen" for s in pruefung.pruefen(geprueft, auszuege).saetze)
+            and not belege.regel_gestuetzt(geprueft, frage, [x for _n, x in auszuege])):
+        notizen.append(REGEL_OHNE_QUELLE)
+        geprueft = "Das weiß ich noch nicht."
     if not schreiben and geprueft != "Das weiß ich noch nicht." and belege.zahlenfrage(frage):
         fehlend = namen_fehlen(frage, geprueft)
         if fehlend and nochmal is not None:
@@ -5714,7 +6184,7 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
                 neu, _ = belege.ohne_platzhalter(neu or "")
                 neu, _ = belege.ohne_selbstbezug(neu)
                 neu, _ = belege.wochentage_berichtigen(neu, heute)
-                geprueft3, raus3, vom3 = _streng(neu, belegtext, zusatz, rechnen, pruefer, auszuege)
+                geprueft3, raus3, vom3 = _streng(neu, belegtext, zusatz, rechnen, pruefer, auszuege, regelfrage=regelfrage)
                 quell_z = belege.zahlenwerte(belegtext + "\n" + "\n".join(x for _n, x in auszuege))
                 if geprueft3.strip() and geprueft3 != "Das weiß ich noch nicht." and belege.brauchbar(geprueft3) \
                         and len(namen_fehlen(frage, geprueft3)) < len(fehlend) \
@@ -5732,12 +6202,12 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
 
 EIGENE_WORTE_ZUSATZ = ("Prüfung: Diese Sätze einer ersten Fassung stehen Wort für Wort so in einer Quelle: „{saetze}“. Schreib die ganze Antwort "
                        "neu, als wäre es die erste: dieselbe Aussage, aber in eigenen Worten und mit eigenem Satzbau, ohne eine Wortfolge aus den "
-                       "Quellen zu übernehmen. Zahlen, Daten, Beträge und Namen genau so wie in den Quellen. Erwähne nie eine erste Fassung, einen "
+                       "Quellen zu übernehmen, nie mehr als 6 Wörter am Stück. Zahlen, Daten, Beträge und Namen genau so wie in den Quellen. Erwähne nie eine erste Fassung, einen "
                        "Fehler oder eine Prüfung. Schreib nie „Quellen“ oder „Auszüge“.")
 
 
 def _eigene_worte(t: str, frage: str, quellen: list[dict], nochmal, heute: date, *, belegtext: str | None = None, zusatz: str = "",
-                  rechnen: bool = False, auszuege: list[tuple[int, str]] | None = None, pruefer=None) -> tuple[str, list[str]]:
+                  rechnen: bool = False, auszuege: list[tuple[int, str]] | None = None, pruefer=None, regelfrage: str = "") -> tuple[str, list[str]]:
     fremd = belege.fremde_texte(quellen)
     woertlich = belege.woertliche_saetze(t, fremd) if fremd else []
     if not woertlich:
@@ -5749,7 +6219,7 @@ def _eigene_worte(t: str, frage: str, quellen: list[dict], nochmal, heute: date,
             neu, _ = belege.ohne_selbstbezug(neu)
             neu, _ = belege.wochentage_berichtigen(neu, heute)
             if belegtext is not None:
-                neu, _raus, _vom = _streng(neu, belegtext, zusatz, rechnen, pruefer, auszuege or [])
+                neu, _raus, _vom = _streng(neu, belegtext, zusatz, rechnen, pruefer, auszuege or [], regelfrage=regelfrage)
             quell_z = belege.zahlenwerte((belegtext or "") + "\n" + "\n".join(str(q.get("text") or "") for q in quellen or []))
             ganz = bool(re.search(r"[.!?…“\")]\s*$", neu.strip())) and len(neu.strip()) >= 0.6 * len(t.strip())
             if (neu.strip() and ganz and belege.brauchbar(neu) and not belege.woertliche_saetze(neu, fremd)

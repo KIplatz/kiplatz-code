@@ -6,6 +6,12 @@ English · [Deutsch](README.de.md)
 
 [kiplatz.com](https://kiplatz.com/) · [Get the program](https://kiplatz.com/share-computing/) · [The app](https://kiplatz.at/app/) · [Forum (Platzl)](https://forum.kiplatz.at/?tl=en) · [Workshop](https://werkstatt.kiplatz.at/KIplatz/mitbauen?lang=en-US) · [What never happens](https://kiplatz.com/what-never-happens/)
 
+**Try it without installing anything:** ask a question on [kiplatz.com](https://kiplatz.com/).
+
+## Windows 11, or the app in the browser
+
+The program runs on Windows 11. On a Mac, on Linux or on a phone you use the app in the browser at [kiplatz.at/app](https://kiplatz.at/app/). The program picks the model that fits your PC: Ministral 3 with 14B, 8B or 3B parameters, the biggest one that fits into the free memory of your graphics card. Without a suitable graphics card the processor does the work (the 8B model from 16 GB of memory, otherwise the 3B), and if your PC is too weak for that, a free PC of the community answers.
+
 ## What is in here
 
 - The Windows program (`node-agent/`): the window, the local AI runtime, the knowledge store, the home network, the connection to kiplatz.at.

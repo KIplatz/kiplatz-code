@@ -5,7 +5,7 @@ import math
 import re
 from fractions import Fraction
 
-from rechnen import Ergebnis, _Nein, geld_text, glatt, zahl_lesen, zahl_text
+from rechnen import Ergebnis, _Nein, geld_text, glatt, zahl_lesen
 
 GUELTIG_JAHR = 2026
 WERTE = {

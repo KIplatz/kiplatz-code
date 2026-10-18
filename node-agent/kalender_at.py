@@ -36,12 +36,16 @@ def _tag(d: date) -> str:
     return f"{WOCHENTAGE[d.weekday()]}, {d.day}.{d.month}.{d.year}"
 
 
-def text(heute: date | None = None) -> str:
+def text(heute: date | None = None, jahre: list[int] | None = None) -> str:
     h = heute or date.today()
-    kommend = [(d, n) for j in (h.year, h.year + 1) for d, n in feiertage(j) if d >= h][:14]
-    zeilen = [f"Gesetzliche Feiertage in Österreich, vom Programm aus dem Kalender berechnet (heute ist {_tag(h)}). Die nächsten:"]
+    if jahre:
+        kommend = [(d, n) for j in jahre for d, n in feiertage(j)]
+        zeilen = [f"Gesetzliche Feiertage in Österreich {', '.join(str(j) for j in jahre)}, vom Programm aus dem Kalender berechnet (heute ist {_tag(h)}):"]
+    else:
+        kommend = [(d, n) for j in (h.year, h.year + 1) for d, n in feiertage(j) if d >= h][:14]
+        zeilen = [f"Gesetzliche Feiertage in Österreich, vom Programm aus dem Kalender berechnet (heute ist {_tag(h)}). Die nächsten:"]
     zeilen += [f"– {n}: {_tag(d)}" for d, n in kommend]
-    hj = h.year if h <= date(h.year, 10, 31) else h.year + 1
+    hj = (jahre[0] if jahre else (h.year if h <= date(h.year, 10, 31) else h.year + 1))
     zeilen.append(f"Herbstferien an allen Schulen in Österreich (alle Bundesländer, seit dem Schuljahr 2020/21): "
                   f"{_tag(date(hj, 10, 27))} bis {_tag(date(hj, 10, 31))}.")
     return "\n".join(zeilen)

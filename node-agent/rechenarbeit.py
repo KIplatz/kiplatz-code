@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 from __future__ import annotations
 
-import inspect
 import random
 import re
 import sys
@@ -165,6 +164,7 @@ class Rechenarbeit:
         self._modell_name = ""
         self._modell_fn = modell_name
         self.geprueft_n = 0
+        self.antwort_seit = 0.0
         self._kontobuch = kontobuch
         self._geraet_name = geraet_name
         self.ordner = ki_laufzeit.KiOrdner(core.base_dir)
@@ -888,6 +888,8 @@ class Rechenarbeit:
     def _antwort_geben(self, auftrag: dict) -> None:
         self._karte.beginnen()
         self._frage_erledigt = False
+        vorher = self.phase
+        self.antwort_seit = time.monotonic()
         try:
             self._antwort_geben_innen(auftrag)
         except BaseException as exc:
@@ -896,6 +898,9 @@ class Rechenarbeit:
                 self._frage_zurueck(auftrag, f"auf diesem Gerät ging es nicht weiter ({getattr(exc, 'code', '') or type(exc).__name__})")
             raise
         finally:
+            self.antwort_seit = 0.0
+            if self.phase in ("antwortet", "laden"):
+                self.phase = vorher
             self._karte.ende()
 
     def _antwort_geben_innen(self, auftrag: dict) -> None:
@@ -962,6 +967,8 @@ class Rechenarbeit:
         except Exception:
             messung = {}
         zeiten = {"laden_s": round(laden_s, 2), "ende_s": round(ende_s, 2), "schritte": [[round(z, 2), schritt_kurz(w)] for z, w in melder.ablauf][:30], "aufrufe": aufrufe}
+        if isinstance(lieferschein, dict) and (zs := zeit_je_schritt(melder.ablauf, dauer)):
+            lieferschein["quellen"] = (str(lieferschein.get("quellen") or "") + " " + zs).strip()
         try:
             mit_ablauf = "ablauf" in inspect.signature(self._community.antwort_senden).parameters
         except (TypeError, ValueError):
@@ -1101,6 +1108,29 @@ _ZITAT = re.compile(r"[„\"“”‚‘'][^„\"“”‚‘']*[“”\"‘']?"
 
 def schritt_kurz(text: str) -> str:
     return " ".join(_ZITAT.sub(" ", str(text or "")).replace("…", " ").split()[:4])
+
+
+ZEIT_SATZ = "Zeit je Schritt: {0}."
+_SCHRITT_ENDE = {"nach", "und", "gegen", "die", "der", "für", "mit", "von"}
+
+
+def zeit_je_schritt(ablauf: list[tuple[float, str]], gesamt_s: float, *, ab_s: float = 1.0) -> str:
+    teile: list[list] = []
+    for i, (t, text) in enumerate(ablauf):
+        ende = ablauf[i + 1][0] if i + 1 < len(ablauf) else gesamt_s
+        vorn = re.split(r"[„\"“‚']", str(text or ""), maxsplit=1)[0]
+        worte = vorn.replace("…", " ").replace("...", " ").split()[:7]
+        while worte and worte[-1].strip(",").lower() in _SCHRITT_ENDE:
+            worte.pop()
+        name = " ".join(worte).strip(" ,")
+        if not name:
+            continue
+        if teile and teile[-1][0] == name:
+            teile[-1][1] += max(0.0, ende - t)
+        else:
+            teile.append([name, max(0.0, ende - t)])
+    gezeigt = [f"{n} {round(s):.0f} s" for n, s in teile if s >= ab_s]
+    return ZEIT_SATZ.format(", ".join(gezeigt)) if gezeigt else ""
 
 
 def aufrufe_zeile(aufrufe: list[dict]) -> str:

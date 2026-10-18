@@ -84,6 +84,16 @@ def _strg_c() -> None:
     win32api.keybd_event(win32con.VK_CONTROL, 0, win32con.KEYEVENTF_KEYUP, 0)
 
 
+def _strg_v() -> None:
+    import win32api
+    import win32con
+    VK_V = 0x56
+    win32api.keybd_event(win32con.VK_CONTROL, 0, 0, 0)
+    win32api.keybd_event(VK_V, 0, 0, 0)
+    win32api.keybd_event(VK_V, 0, win32con.KEYEVENTF_KEYUP, 0)
+    win32api.keybd_event(win32con.VK_CONTROL, 0, win32con.KEYEVENTF_KEYUP, 0)
+
+
 def eigenes_fenster_vorne(titel_anfang: str) -> bool:
     try:
         import win32gui

@@ -11,6 +11,145 @@ def dank(satz: str, wer: str, art: str = "Meldung") -> str:
 
 
 NEUERUNGEN: dict[str, list[str]] = {
+    "2026-10-18m": [],
+    "2026-10-18l": [],
+    "2026-10-18k": [
+        "„Frag dein Zuhause“ versteht jetzt auch englische Fragen wie „Where is my CV?“: Antwort, Dateiart und Ordner kommen auf Englisch, und die Karte am PC ist ganz auf Englisch.",
+    ],
+    "2026-10-18j": [],
+    "2026-10-18i": [],
+    "2026-10-18h": [
+        "Fragen zu Einreise, Visum, Regeln und Ämtern beantwortet KIplatz jetzt in jedem Land der Welt mit dem, was die Behörden dort aktuell sagen, und Feiertage erkennt es auch beim Namen, etwa Memorial Day.",
+        "Englische Datumsangaben auf Webseiten zählen jetzt als Beleg, eine Jahreszahl muss zur Sache passen, und auf der Startseite passen die Farben je Satz zum gezeigten Text.",
+    ],
+    "2026-10-18g": [
+        "Englische Fragen kommen jetzt sauber übersetzt bei KIplatz an: Fragst du nach dem Tempolimit oder nach einem Rezept, bekommst du die Antwort statt „I don't know yet“.",
+        "Rezepte behalten ihre Mengen, auch wenn KIplatz zum Gericht nur nebenbei etwas gefunden hat, und Listen bleiben ordentlich, wenn ein unsicherer Satz wegfällt.",
+        "Was nach seiner Stadt heißt, findet KIplatz jetzt beim Namen: „Wer hat das Riesenrad in Wien gebaut?“ führt zum Wiener Riesenrad.",
+        "Die Feiertage eines deutschen Bundeslands nennt KIplatz jetzt vollständig und nur mit den Hinweisen, die für dieses Land gelten.",
+        "Auf Englisch bleiben Namen von Apotheken, Lokalen und Straßen, wie sie sind, damit du sie vor Ort findest.",
+    ],
+    "2026-10-18f": [
+        "Wer KIplatz auf Englisch nutzt, kann sein Konto jetzt löschen: zur Bestätigung gilt „delete“ genauso wie „löschen“.",
+    ],
+    "2026-10-18e": [
+        "Auf Geräten ohne passende Grafikkarte steht oben jetzt „Community antwortet“ statt „KI aus“, und die Einstellungen sagen, warum die eigene KI dort am besten aus bleibt.",
+    ],
+    "2026-10-18d": [
+        "Feiertage anderer Länder nennt KIplatz jetzt vollständig und mit ihrem deutschen Namen.",
+        "Eine Antwort, an der KIplatz Sätze weglassen musste, gibt es nicht mehr fertig für alle: die nächste Frage bekommt eine frisch erarbeitete.",
+        "Beispiele wie „zum Beispiel GMX oder Gmail“ bleiben in der Antwort, wenn es die Namen wirklich gibt.",
+        "Bei gleichnamigen Orten meint KIplatz die bekannte Stadt, außer du nennst das Land: „Apotheken in Passau“ findet jetzt die Stadt Passau.",
+    ],
+    "2026-10-18c": [
+        "Termine wie den ersten Advent, Ostern oder die Zeitumstellung rechnet KIplatz jetzt selbst aus, für das Jahr, nach dem du fragst.",
+        "Feiertage kennt KIplatz jetzt weltweit: Fragst du nach Frankreich oder den USA, bekommst du die Feiertage dieses Landes, nicht die österreichischen.",
+        "Erklärungen behalten ihre Beispiele, und lässt KIplatz einen unsicheren Satz weg, bleibt keine Lücke mehr in der Antwort.",
+        "Orte in Deutschland: Dein PC liest die Karte jetzt auch dann fertig ein, wenn du zwischendurch an ihm arbeitest.",
+    ],
+    "2026-10-18b": [
+        "Antworten auf Alltagsfragen verlieren seltener Sätze: Gewöhnliche Wörter wie „Eimer“ oder „Passwort“ hält KIplatz nicht mehr für erfundene Namen.",
+    ],
+    "2026-10-18a": [],
+    "2026-10-17n": [],
+    "2026-10-17m": [],
+    "2026-10-17l": [
+        "Kurze Fragen in Kleinschreibung wie „erklär mir die inflation“ bekommen gleich eine Antwort statt der Rückfrage, worauf du dich beziehst.",
+        "Fragen wie „Wer war der erste Mensch im Weltall?“ beantwortet KIplatz wieder, auch wenn die Quelle ein anderes Wort wie „Weltraum“ verwendet.",
+        "Alltagsfragen wie „Wie lange muss ich ein weiches Ei kochen?“ oder „Wie kann ich langfristig abnehmen?“ bekommen wieder eine Antwort mit dem Wissen aus der Wikipedia.",
+        "Der Liveticker ist wieder draußen. Fragen nach Spielständen sucht KIplatz im Internet, und Alltagsfragen gelten nicht mehr als Sportfragen.",
+        "Hängt eine Antwort, holt sich KIplatz ein Update trotzdem nach spätestens zehn Minuten.",
+    ],
+    "2026-10-17k": [
+        "Eine Frage bleibt nicht mehr minutenlang hängen, während dein PC Wikipedia-Daten von anderen PCs der Community übernimmt.",
+    ],
+    "2026-10-17j": [],
+    "2026-10-17i": [],
+    "2026-10-17h": [],
+    "2026-10-17g": [],
+    "2026-10-17f": [
+        "Fragt jemand nach einer Person, über die keine gefundene Seite etwas sagt, schreibt KIplatz nicht über jemand anderen, sondern sagt ehrlich, dass es nichts Verlässliches weiß.",
+    ],
+    "2026-10-17e": [
+        "Antworten auf Alltagsfragen kommen oft schneller: KIplatz streicht keinen richtigen Satz mehr, nur weil darin ein gewöhnliches Wort wie „Einstellung“ oder „Familie“ steht.",
+    ],
+    "2026-10-17d": [],
+    "2026-10-17c": [],
+    "2026-10-17b": [
+        "Fragen wie „Was soll ich tun, wenn die Sicherung immer wieder rausfliegt?“ bekommen jetzt gleich eine Antwort statt Rückfragen.",
+        "Englische Fragen nach österreichischen Wörtern wie „What does 'Feber' mean?“ kommen jetzt richtig an und bekommen die richtige Bedeutung.",
+    ],
+    "2026-10-17a": [],
+    "2026-10-16l": [],
+    "2026-10-16k": [],
+    "2026-10-16j": [
+        "Fängt ein Gespräch mit „Mach es kürzer“ oder „Ist das gesund?“ an, fragt KIplatz sofort nach, worum es geht, statt etwas zu erraten.",
+    ],
+    "2026-10-16i": [
+        "Englische Fragen mit einem deutschen Wort, etwa „What are Erdäpfel?“ oder „Up to what age do children travel free with ÖBB?“, bekommen jetzt eine englische Antwort.",
+    ],
+    "2026-10-16h": [
+        "KIplatz kennt österreichische Wörter: Wer fragt, was Paradeiser, Feber, ein Kasten oder ein Haberer ist, bekommt die richtige Bedeutung und das schneller als bisher.",
+    ],
+    "2026-10-16g": [
+        "Fragen wie „Wer spielt die Hauptrolle in Titanic?“, „Warum gibt es Gewitter?“, „Wie erstelle ich eine E-Mail-Adresse?“ oder „Wie viele Tage sind es vom 1. März bis zum 1. Juni?“ bekommen jetzt eine richtige Antwort statt einer falschen Rückfrage.",
+    ],
+    "2026-10-16f": [],
+    "2026-10-16e": [
+        "Fragen wie „Wie funktioniert das Lotto in Österreich?“ bekommen wieder eine echte Antwort statt einer Erklärung, wie KIplatz arbeitet.",
+    ],
+    "2026-10-16c": [],
+    "2026-10-16b": [],
+    "2026-10-16a": [
+        "Neue Fassungen unserer KI werden jetzt verlässlich nachts geprüft, bevor sie zu euch kommen; fällt eine Nacht aus, wird die Prüfung nachgeholt.",
+    ],
+    "2026-10-15j": [
+        "Erfundene Fachbegriffe wie „Mertens-Lindauer-Theorem“ erkennt KIplatz jetzt auch, wenn jeder Teil echt klingt; es sucht dann im Internet und sagt ehrlich, wenn es nichts findet.",
+    ],
+    "2026-10-15i": [
+        "Geprüfte Antworten sind schneller: der zweite Blick auf Zahlen und Namen liest die Quellen nicht mehr jedes Mal neu ein.",
+    ],
+    "2026-10-15h": [
+        "Muss KIplatz eine Antwort neu schreiben, schreibt es sie gleich in eigenen Worten; das spart einen Durchgang und es fallen keine Sätze mehr weg.",
+        "In den Details zur Antwort steht jetzt, wie lange jeder Schritt gedauert hat, etwa die Suche im Internet und das Prüfen.",
+    ],
+    "2026-10-15g": [
+        "Fragen nach Preisen und Regeln erarbeitet immer ein PC neu, statt eine gespeicherte Antwort zu nehmen; Preise und Regeln ändern sich.",
+        "Auch Fragen wie „Tempolimit auf deutschen Autobahnen“ sucht KIplatz jetzt gleich im Internet, mit den amtlichen Stellen vorn.",
+    ],
+    "2026-10-15f": [
+        "Bei Fragen nach Regeln liest KIplatz zuerst amtliche Stellen und Automobilclubs, etwa oesterreich.gv.at oder den ÖAMTC.",
+        "Fragst du nach einem Land, fallen Seiten aus einem anderen Land weg, auch wenn sie das Land nicht beim Namen nennen; so kommt keine deutsche Regel mehr in eine Antwort über Österreich.",
+    ],
+    "2026-10-15e": [
+        "Einfügen über die rechte Maustaste funktioniert jetzt zuverlässig; KIplatz drückt dafür Strg+V für dich und liest die Zwischenablage nicht selbst.",
+        "Bei Fragen nach einer Regel nennt KIplatz zuerst, was gilt, und bei Preisen jede Variante, etwa 7 Tage, Monat und Jahr.",
+    ],
+    "2026-10-15d": [
+        "Fragen nach Regeln, Pflichten und Fristen sucht KIplatz jetzt immer im Internet, auch wenn im eigenen Wissen schon etwas Ähnliches steht; ohne Quelle nennt es keine Regel aus dem Gedächtnis.",
+        "Muss KIplatz einen Satz einer Antwort streichen, schreibt es die Antwort einmal ganz neu; ein Rest ohne Anfang wird nie ausgegeben.",
+        "Preise nennt KIplatz nur aus Seiten des laufenden Jahres.",
+        "Im Programmfenster öffnet die rechte Maustaste jetzt ein Menü mit Rückgängig, Ausschneiden, Kopieren, Einfügen und Alles auswählen.",
+    ],
+    "2026-10-15c": [
+        "Eine Antwort erscheint jetzt einmal und fertig geprüft; ein Entwurf, der sich danach noch ändert, steht nicht mehr im Fenster, Schritt und Sekunden zeigen, woran KIplatz arbeitet.",
+        "Fragen nach Regeln, Pflichten und Fristen, etwa ab wann Winterreifen nötig sind, sucht KIplatz gleich im Internet, für jedes Land.",
+        "Findet die erste Suche nichts Verlässliches, sucht KIplatz von selbst ein zweites Mal mit eigenen Suchwörtern, ohne dass du „Ja, live nachprüfen“ drücken musst.",
+    ],
+    "2026-10-15b": [
+        "Rechen- und Alltagsfragen wie Umrechnungen, Prozent oder Backzeiten bekommen wieder eine Antwort, wo vorher manchmal „Das weiß ich noch nicht“ stand.",
+        "Nennt ein Satz eine Quelle beim Namen, schreibt KIplatz ihr nichts mehr zu, was nur in einer anderen Quelle steht.",
+        "Fragst du nach einem bestimmten Land, zählen Fundstellen über ein anderes Land nicht mehr als Quelle, für Österreich genauso wie für Deutschland, die Schweiz, Großbritannien oder die USA.",
+        "Einen Preis nennt KIplatz nur noch mit einer aktuellen Quelle, nie aus dem Gedächtnis.",
+    ],
+    "2026-10-15a": [
+        "Allgemeine Optimierungen wurden durchgeführt.",
+    ],
+    "2026-10-14c": [
+        "Unter einer belegten Antwort stehen jetzt alle Quellen, aus denen sie stammt, auch wenn im Text keine Quellennummer dabeisteht.",
+        "Klappt das Abholen einer Antwort aus der Community einmal nicht, versucht es dein PC gleich noch einmal. Vorher hat er die fertige Antwort verworfen und selbst geantwortet, und das konnte Minuten dauern.",
+        "Fragen nach Orten in deiner Nähe nutzen wieder deinen Wohnort aus den drei Fragen beim ersten Start.",
+    ],
     "2026-10-14b": [
         "Die ersten 100 PCs, die für andere mithelfen, sind Gründungsmitglieder: Die Nummer steht in der Bestenliste, in deiner Geräteliste und als Abzeichen im Platzl, und sie bleibt.",
     ],
@@ -922,9 +1061,30 @@ ZURUECKGEHALTEN: dict[str, list[str]] = {
 }
 
 KURZ_JE_TAG: dict[str, list[str]] = {
+    "2026-10-18": [
+        "KIplatz kennt Feiertage weltweit beim Namen und rechnet Termine wie den ersten Advent selbst aus",
+        "Bei Einreise, Visum und Ämtern in jedem Land schaut KIplatz jetzt aktuell bei den Behörden nach",
+        "Antworten bleiben öfter ganz, und englische Fragen kommen sauber übersetzt an",
+    ],
+    "2026-10-17": [
+        "Fragen wie „Was soll ich tun, wenn …“ bekommen jetzt gleich eine Antwort statt Rückfragen",
+        "Auch auf Englisch weiß KIplatz jetzt, was Feber bedeutet",
+        "Antworten auf Alltagsfragen kommen jetzt oft schneller, weil weniger neu geschrieben wird",
+    ],
+    "2026-10-16": [
+        "KIplatz weiß jetzt, was Paradeiser, Feber und ein Haberer sind",
+        "Fragen zu Filmen, Gewittern und Datumsspannen bekommen jetzt eine richtige Antwort",
+        "Fragen wie „Wie funktioniert das Pfand?“ bekommen wieder eine echte Antwort",
+    ],
+    "2026-10-15": [
+        "Umrechnungen, Prozent und Backzeiten bekommen wieder eine richtige Antwort",
+        "Fragen nach Regeln und Pflichten sucht KIplatz immer im Internet und nennt keine aus dem Gedächtnis",
+        "Mit der rechten Maustaste kannst du im Programm jetzt kopieren und einfügen",
+    ],
     "2026-10-14": [
         "Die ersten 100 PCs, die mithelfen, sind Gründungsmitglieder, mit einer Nummer, die bleibt",
         "Die Nummer steht in der Bestenliste, in deiner Geräteliste und als Abzeichen im Platzl",
+        "Unter einer belegten Antwort stehen jetzt alle Quellen, aus denen sie stammt",
     ],
     "2026-10-13": [
         "KIplatz hat jetzt einen Liveticker: Spielstände und Livescores aus Fußball, Eishockey, NFL und NBA auf Frage",

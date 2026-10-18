@@ -265,7 +265,17 @@ def _zwei(t: str, h: date, muster: str) -> tuple[date, date] | None:
     if not m:
         return None
     a, b = datum_lesen(m.group("a"), h, vorwaerts=False), datum_lesen(m.group("b"), h)
-    return (a, b) if a and b else None
+    if not (a and b):
+        return None
+    beide = m.group("a") + " " + m.group("b")
+    if not re.search(r"\d{4}|heute|morgen|gestern|today|tomorrow|yesterday", beide, re.I):
+        try:
+            b = date(a.year, b.month, b.day)
+            if b < a:
+                b = date(a.year + 1, b.month, b.day)
+        except ValueError:
+            return None
+    return a, b
 
 
 def _tage(t: str, h: date) -> Ergebnis | None:

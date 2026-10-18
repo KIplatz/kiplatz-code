@@ -5,7 +5,7 @@ import math
 import re
 from fractions import Fraction
 
-from rechnen import (MAX_STELLEN, Ergebnis, glatt, _dezimal, _Nein, _Null, bruch_text, geld_text, zahl_lesen, zahl_mit_rund, zahl_text)
+from rechnen import MAX_STELLEN, Ergebnis, glatt, _dezimal, _Nein, _Null, geld_text, zahl_lesen, zahl_mit_rund, zahl_text
 
 NUM = r"\d+(?:[.,]\d+)*"
 EUR = r"(?:€|euro|eur)"

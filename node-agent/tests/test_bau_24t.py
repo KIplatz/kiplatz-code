@@ -35,10 +35,10 @@ def test_only_abbreviations_and_odd_spellings_are_sure_names_every_other_capital
     assert belege.name_belegt("Kompanys", {"kompany"}) and belege.name_belegt("Goethes", {"goethe"}) and not belege.name_belegt("Tuchel", {"kompany"})
 
 
-def test_the_second_look_is_read_strictly_and_a_missing_line_counts_as_ja():
-    assert belege.urteil_lesen("1 ja\n2 nein\n3: nein\n4 vielleicht", 3) == {1, 2}
-    assert belege.urteil_lesen("", 2) == set() and belege.urteil_lesen("7 nein", 2) == set()
-    assert belege.pruefer_auftrag(["Satz  eins.", "Satz zwei."]) == "Sätze:\n1. Satz eins.\n2. Satz zwei."
+def test_the_second_look_is_read_strictly_and_a_missing_line_counts_as_wort():
+    assert belege.urteil_lesen("1 Wort\n2 Name\n3: Eigenname\n4 vielleicht", 3) == {1, 2}
+    assert belege.urteil_lesen("", 2) == set() and belege.urteil_lesen("7 Name", 2) == set() and belege.urteil_lesen("1 nein", 1) == set()
+    assert belege.pruefer_auftrag(["Thomas  Tuchel", "Vorgänger"]) == "Wörter:\n1. Thomas Tuchel\n2. Vorgänger"
 
 
 def test_an_answer_from_sources_loses_the_invented_sentences_and_says_so():
@@ -52,12 +52,12 @@ def test_a_suspicious_name_goes_only_when_the_second_look_agrees():
     antwort = "Vincent Kompany ist seit 2024 Trainer des FC Bayern München. Sein Vorgänger dort war Thomas Tuchel."
     gefragt = []
 
-    def pruefer_nein(zusatz, saetze):
-        gefragt.append((zusatz, list(saetze)))
-        return {i for i, s in enumerate(saetze) if "Tuchel" in s}
+    def pruefer_nein(zusatz, woerter):
+        gefragt.append((zusatz, list(woerter)))
+        return {i for i, w in enumerate(woerter) if "Tuchel" in w}
     t, notizen = app_web.belege_anwenden(antwort, FRAGE, QUELLE, _quellen(), heute=HEUTE, pruefer=pruefer_nein)
     assert t == "Vincent Kompany ist seit 2024 Trainer des FC Bayern München." and "nach einem zweiten Blick des Modells" in notizen[0]
-    assert gefragt[0][0] == QUELLE and gefragt[0][1] == ["Sein Vorgänger dort war Thomas Tuchel."]
+    assert gefragt[0][0] == QUELLE and gefragt[0][1] == ["Vorgänger", "Thomas Tuchel"]
     t, notizen = app_web.belege_anwenden(antwort, FRAGE, QUELLE, _quellen(), heute=HEUTE, pruefer=lambda z, s: set())
     assert t == antwort and notizen == []
     t, _ = app_web.belege_anwenden(antwort, FRAGE, QUELLE, _quellen(), heute=HEUTE, pruefer=None)

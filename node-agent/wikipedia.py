@@ -36,6 +36,7 @@ ABSCHNITT = 900
 BEGRIFFSKLAERUNG_VORLAGEN = frozenset({"Vorlage:Begriffsklärung", "Template:Begriffsklärung"})
 EINLESE_STAND = 2
 MAX_ABSCHNITTE = 60
+NAMEN_WARTEN_S = 2.0
 VEKTOR_ZUERST_JE_ARTIKEL = 3
 VEKTOR_BATCH = 8
 VEKTOR_FENSTER = 20_000
@@ -74,6 +75,15 @@ def _jetzt() -> str:
 
 def _titel_norm(t: str) -> str:
     return " ".join(str(t or "").replace("_", " ").lower().split())
+
+
+def _ortsadjektive(ort: str) -> list[str]:
+    out = [ort + "er"]
+    if ort.endswith("en") and len(ort) >= 6:
+        out += [ort[:-2] + "er", ort[:-2] + "ner"]
+    if ort.endswith("e"):
+        out.append(ort[:-1] + "er")
+    return out
 
 
 _SACHBEGRIFFE = frozenset(_titel_norm(t) for t in ("Einwohner", "Bevölkerung", "Länge", "Höhe", "Tiefe", "Fläche", "Größe", "Gewicht", "Preis",
@@ -304,9 +314,21 @@ class Datenbank:
                                     [(sid, _hash(t, zlib.decompress(b).decode("utf-8"))) for sid, t, b in rows])
                 self._c.execute("COMMIT")
                 n += len(rows)
-            if self.hashes_vollstaendig():
-                self._c.execute("CREATE INDEX IF NOT EXISTS abschnitt_hash_h ON abschnitt_hash(h)")
+            fertig = self.hashes_vollstaendig()
+        if fertig:
+            self.hash_index_anlegen()
         return n
+
+    def hash_index_da(self) -> bool:
+        with self._lock:
+            return self._c.execute("SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'abschnitt_hash_h'").fetchone() is not None
+
+    def hash_index_anlegen(self) -> None:
+        c = sqlite3.connect(str(self.pfad), timeout=30, isolation_level=None)
+        try:
+            c.execute("CREATE INDEX IF NOT EXISTS abschnitt_hash_h ON abschnitt_hash(h)")
+        finally:
+            c.close()
 
     def vektoren_uebernehmen(self, alt_pfad: Path) -> int:
         with self._lock:
@@ -436,6 +458,17 @@ class Datenbank:
             self._df_merk[wort] = d
         return d
 
+    def namen_bekannt(self, namen: list[str]) -> set[str]:
+        if not namen or not self.hat_wortzahl():
+            return set()
+        out: set[str] = set()
+        for n in namen:
+            worte = [w for w in re.split(r"[\s\-]+", str(n)) if w]
+            stamm = wissen.woerter(str(n))
+            if worte and stamm and all(self._df(s) > 0 for s in stamm) and not any(self._erfundene_zusammensetzung(w) for w in worte):
+                out.add(n)
+        return out
+
     def unbekannte_namen(self, text: str, hoechstens: int = 2) -> list[str]:
         if not text or not self.hat_wortzahl():
             return []
@@ -449,7 +482,7 @@ class Datenbank:
             if (not vorne or vorne[-1] in ".!?:;\n") and not any(c.isupper() or c.isdigit() for c in w[1:]):
                 continue
             stamm = wissen.woerter(w)
-            if not stamm or any(self._df(s) > 0 for s in stamm):
+            if not stamm or (any(self._df(s) > 0 for s in stamm) and not self._erfundene_zusammensetzung(w)):
                 continue
             von = i
             while von > 0 and i - von < 2 and _name_kandidat(worte[von - 1], nachbar=True):
@@ -465,6 +498,17 @@ class Datenbank:
             if len(namen) >= hoechstens:
                 break
         return namen
+
+    def _erfundene_zusammensetzung(self, wort: str) -> bool:
+        teile = [t for t in str(wort or "").split("-") if t]
+        if len(teile) < 2 or not teile[0][:1].isupper():
+            return False
+        for t in teile:
+            if len(t) >= 4 and t[:1].isupper():
+                stamm = wissen.woerter(t)
+                if stamm and all(self._df(s) == 0 for s in stamm):
+                    return True
+        return teile[-1].lower() in _FACHBEGRIFF_ENDE and self.artikel_zu(wort) is None
 
     def einleitung(self, aid: int) -> tuple[str, str] | None:
         with self._lock:
@@ -498,6 +542,17 @@ class Datenbank:
                     r = self._c.execute("SELECT artikel FROM titel WHERE norm = ?", (norm,)).fetchone()
                     if r and r[0] not in [t for t, _ in treffer]:
                         treffer.append((r[0], laenge))
+            gross = [(i, w.strip(".-")) for i, w in enumerate(worte) if w[:1].isupper() and len(w.strip(".-")) >= 3 and w.lower() not in wissen._STOPP]
+            for i, sache in gross:
+                for j, ort in gross:
+                    if j <= i:
+                        continue
+                    for adj in _ortsadjektive(ort):
+                        r = self._c.execute("SELECT artikel FROM titel WHERE norm = ?", (_titel_norm(f"{adj} {sache}"),)).fetchone()
+                        if r and r[0] not in [t for t, _ in treffer]:
+                            allgemein = self._c.execute("SELECT artikel FROM titel WHERE norm = ?", (_titel_norm(sache),)).fetchone()
+                            treffer = [(r[0], 9)] + [(t, n) for t, n in treffer if not (allgemein and t == allgemein[0])]
+                            break
         return [t for t, _ in treffer][:3]
 
     def _subjekt(self, frage: str, titel_ids: list[int]) -> tuple[int | None, str]:
@@ -697,6 +752,8 @@ _SACHWORT_TITEL = re.compile(r"(?i)(?:einwohner\w*|bevölkerung\w*|fläche|höhe
 
 
 _NAME_TEIL = re.compile(r"[\wäöüÄÖÜß]+(?:[-'][\wäöüÄÖÜß]+)*")
+_FACHBEGRIFF_ENDE = frozenset("""theorem satz lemma gesetz prinzip effekt paradoxon skala index modell methode verfahren syndrom krankheit formel
+gleichung konstante regel algorithmus hypothese kriterium kurve zahl test diagramm schema zyklus reaktion verordnung theorie""".split())
 _EIGENE_NAMEN = {"kiplatz", "platzl"}
 
 
@@ -1014,6 +1071,10 @@ class WikiKopie:
                     self.phase = "merkt"
                     db.hashes_sicherstellen(hoechstens=HASH_STAPEL)
                     return 0
+                if not db.hash_index_da():
+                    self.phase = "merkt"
+                    db.hash_index_anlegen()
+                    return 0
                 alt = self.ordner / DB
                 if alt.exists() and st.get("bau_uebernommen") != ausgabe:
                     self.phase = "uebernimmt"
@@ -1135,6 +1196,12 @@ class WikiKopie:
             if self._db.hashes_vollstaendig():
                 self._log(f"OK wikipedia: Hashes aller Abschnitte stehen (zuletzt {n}); die nächste Ausgabe übernimmt die Vektoren")
             return 0
+        if not self._db.hash_index_da():
+            self.phase = "merkt"
+            s = time.monotonic()
+            self._db.hash_index_anlegen()
+            self._log(f"OK wikipedia: Index über die Hashes nachgetragen ({time.monotonic() - s:.0f} s); Scheiben der Community gehen jetzt schnell")
+            return 0
         pos = int(st.get("vektor_pos", 0))
         if pos >= z["vorrat"]:
             w = self._gemeinschaft_schritt(st, anbieten=True)
@@ -1165,6 +1232,9 @@ class WikiKopie:
         modell, ausgabe = str(self._modell() or ""), str(st.get("fertig_ausgabe") or "")
         if gem is None or not modell or len(ausgabe) != 8 or self._jetzt() < self._gem_naechst or not self._karte_frei():
             return None
+        if self._db is None or not self._db.hash_index_da():
+            return None
+
         try:
             stand = gem.wiki_vektoren_stand(ausgabe=ausgabe, modell=modell, brauche=not anbieten, biete=anbieten)
         except Exception as exc:
@@ -1320,11 +1390,30 @@ class WikiKopie:
         db = self._db
         if db is None or not self.bereit():
             return []
+        if not db._lock.acquire(timeout=NAMEN_WARTEN_S):
+            self._log("HINWEIS wikipedia unbekannte namen ausgelassen: die Kopie ist gerade belegt")
+            return []
         try:
             return db.unbekannte_namen(text)
         except (sqlite3.Error, sqlite3.ProgrammingError) as exc:
             self._log(f"ABGELEHNT wikipedia unbekannte namen: {type(exc).__name__}")
             return []
+        finally:
+            db._lock.release()
+
+    def namen_bekannt(self, namen: list[str]) -> set[str]:
+        db = self._db
+        if db is None or not self.bereit() or not namen:
+            return set()
+        if not db._lock.acquire(timeout=NAMEN_WARTEN_S):
+            return set()
+        try:
+            return db.namen_bekannt(list(namen))
+        except (sqlite3.Error, sqlite3.ProgrammingError) as exc:
+            self._log(f"ABGELEHNT wikipedia namen bekannt: {type(exc).__name__}")
+            return set()
+        finally:
+            db._lock.release()
 
     def einleitung(self, frage: str, hoechstens: int = 3) -> list[wissen.Treffer]:
         db = self._db
@@ -1333,6 +1422,9 @@ class WikiKopie:
         ausgabe = self.ausgabe()
         datum = f"{ausgabe[:4]}-{ausgabe[4:6]}-{ausgabe[6:8]}T00:00:00Z" if len(ausgabe) == 8 else _jetzt()
         out: list[wissen.Treffer] = []
+        if not db._lock.acquire(timeout=NAMEN_WARTEN_S):
+            self._log("HINWEIS wikipedia einleitung ausgelassen: die Kopie ist gerade belegt")
+            return []
         try:
             ortsfrage = bool(_ORTSFRAGE.search(frage or ""))
             gewaehlt: list[int] = []
@@ -1367,6 +1459,8 @@ class WikiKopie:
         except (sqlite3.Error, sqlite3.ProgrammingError) as exc:
             self._log(f"ABGELEHNT wikipedia einleitung: {type(exc).__name__}")
             return []
+        finally:
+            db._lock.release()
         return out
 
     def zustand(self) -> dict:

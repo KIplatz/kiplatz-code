@@ -6,7 +6,6 @@ import hashlib
 import json
 import os
 import re
-import shutil
 import struct
 import threading
 import time
@@ -839,8 +838,8 @@ class Scheiben:
         k["scheiben"].pop(str(kennung), None)
         try:
             _weg(self.pfad(kennung))
-        except OSError:
-            pass
+        except OSError as exc:
+            self._log(f"FEHLER scheibe {kennung} nach Ablehnen nicht gelöscht: {type(exc).__name__}")
         jetzt = _jetzt_iso(self._jetzt())
         if not isinstance(k.get("wiki_abgelehnt"), dict):
             k["wiki_abgelehnt"] = {}

@@ -32,9 +32,12 @@ ARTEN = {
 }
 _ART_VON = {e: a for a, es in ARTEN.items() for e in es}
 _ART_WORTE = [(re.compile(r"\b(?:pdfs?|pdf-\w+)\b"), "PDF"), (re.compile(r"\b(?:word\w*|docx?)\b"), "Word-Datei"),
-              (re.compile(r"\b(?:excel\w*|tabellen?|xlsx?)\b"), "Excel-Tabelle"), (re.compile(r"\b(?:fotos?|bilder?|photos?)\b"), "Bild"),
-              (re.compile(r"\b(?:videos?|filme?)\b"), "Video"), (re.compile(r"\b(?:powerpoint\w*|praesentation\w*)\b"), "Präsentation")]
-
+              (re.compile(r"\b(?:excel\w*|tabellen?|xlsx?|spreadsheets?)\b"), "Excel-Tabelle"),
+              (re.compile(r"\b(?:fotos?|bilder?|photos?|pictures?|images?)\b"), "Bild"),
+              (re.compile(r"\b(?:videos?|filme?|movies?)\b"), "Video"), (re.compile(r"\b(?:powerpoint\w*|praesentation\w*|presentations?|slides)\b"), "Präsentation")]
+ART_EN = {"Word-Datei": "Word file", "PDF": "PDF", "Excel-Tabelle": "Excel sheet", "Präsentation": "Presentation", "Bild": "Image", "Video": "Video",
+          "Musik": "Music", "Textdatei": "Text file", "ZIP-Archiv": "ZIP archive", "E-Mail": "Email", "Datei": "File"}
+WURZEL_EN = {name: englisch for name, _guid, englisch in _BEKANNT}
 _ENDUNG_NIE = {".kdbx", ".kdb", ".key", ".pem", ".ppk", ".pfx", ".p12", ".jks", ".keystore", ".ovpn", ".gpg", ".pgp", ".asc", ".wallet", ".crt", ".cer",
                ".lnk", ".url", ".ini", ".tmp", ".crdownload", ".part", ".partial", ".dll", ".exe", ".sys", ".msi", ".bat", ".cmd", ".ps1"}
 _NAME_NIE = re.compile(r"(?:passw|kennw|kennwort|zugangsdat|zugangscode|credential|secret|geheim|schluessel|schlussel|id_rsa|id_ed25519|id_ecdsa|"
@@ -48,6 +51,11 @@ sind liegt liegen hab habe hast hat ich du mir mich mein meine meinen meinem mei
 einem einer zeig zeige zeigen hol hole holen schick schicke gib bitte von vom im in auf mit und oder aus fuer ueber zu zum zur an am es da dort noch mal
 kannst koenntest brauch brauche braeuchte bräuchte welche welcher alle alles pc handy computer rechner laptop daheim zuhause heim gerade irgendwo
 irgendwie nochmal mehr pdf pdfs word excel tabelle tabellen foto fotos bild bilder video videos ja nein was wie wann denn doch""".split())
+_FUELL |= set("""where wheres whats what which who when is are was were be been you my mine our your yours the a an this that these those there here it its
+find finding found show showing get getting fetch send give bring open look looking search searching saved save put kept keep stored located
+file files folder folders document documents doc docs paper papers from into onto out off for with and or of at by to me please can could would will
+need want got have has had do does did any some all every pc phone computer laptop home house spreadsheet spreadsheets photo photos picture pictures
+image images movie movies presentation presentations slides just again more yes now""".split())
 
 
 def _norm(text: str) -> str:
@@ -55,7 +63,7 @@ def _norm(text: str) -> str:
 
 
 _NEUESTE = {"letzte", "letzten", "letzter", "letztes", "letztem", "neueste", "neuesten", "neuester", "neuestes", "aktuellste", "aktuellsten",
-            "aktuellster", "aktuellstes", "juengste", "juengsten", "juengster", "zuletzt"}
+            "aktuellster", "aktuellstes", "juengste", "juengsten", "juengster", "zuletzt", "last", "latest", "newest", "recent", "lately"}
 NEUESTE_HOECHSTENS = 5
 
 
@@ -65,8 +73,9 @@ def nach_neuester(frage: str) -> bool:
 
 def kernwoerter(frage: str) -> list[str]:
     out: list[str] = []
+    kurz = {w.lower() for w in re.findall(r"\b[A-ZÄÖÜ]{2}\b", str(frage or ""))}
     for w in _WORT.findall(_norm(frage)):
-        if w in _FUELL or w in _NEUESTE or (len(w) < 3 and not w.isdigit()) or w in out:
+        if w in _FUELL or w in _NEUESTE or (len(w) < 3 and not w.isdigit() and w not in kurz) or w in out:
             continue
         out.append(w)
     return out
@@ -229,6 +238,38 @@ def _art_satz(e: Eintrag) -> str:
             "Musik": "ein Musikstück"}.get(a, "eine " + a)
 
 
+def _ort_en(e: Eintrag) -> str:
+    wurzel = WURZEL_EN.get(e.wurzel, e.wurzel)
+    return f"in the folder “{e.ordner.split(chr(92))[-1]}” ({wurzel})" if e.ordner else f"directly in “{wurzel}”"
+
+
+def _art_satz_en(e: Eintrag) -> str:
+    return {"Word-Datei": "a Word file", "PDF": "a PDF", "Excel-Tabelle": "an Excel sheet", "Präsentation": "a presentation", "Bild": "an image",
+            "Video": "a video", "Musik": "a piece of music", "Textdatei": "a text file", "ZIP-Archiv": "a ZIP archive", "E-Mail": "an email"}.get(
+        art_der_datei(e.name), "a file")
+
+
+def antwort_en(frage: str, runde: str, treffer: list[Eintrag], pc_name: str = "") -> str:
+    kern = kernwoerter(frage)
+    gesucht = " ".join(w.capitalize() for w in kern) or ART_EN.get(art_der_frage(frage), "") or "your question"
+    wo = f"on “{pc_name}”" if pc_name else "on your PC at home"
+    datum = lambda t: datetime.fromtimestamp(t).strftime("%d/%m/%Y")
+    if not treffer:
+        return (f"I couldn't find a file {wo} whose name matches “{gesucht}”. I looked in Documents, Pictures, Desktop, Downloads, Music, "
+                "Videos and OneDrive. Maybe it's named a little differently; try another word from the name.")
+    if runde == "neueste":
+        e = treffer[0]
+        satz = f"The newest is “{e.name}”, {_art_satz_en(e)} {_ort_en(e)}, from {datum(e.geaendert)}."
+        return satz + (" Below you can see the ones before it." if len(treffer) > 1 else "")
+    if len(treffer) == 1 and runde == "genau":
+        e = treffer[0]
+        return f"I found {_art_satz_en(e)} {_ort_en(e)}: “{e.name}”, last changed on {datum(e.geaendert)}."
+    if runde == "genau":
+        return f"I found {len(treffer)} matching files {wo}. You can see them below, best first."
+    return (f"I couldn't find a file with “{gesucht}” in its name {wo}. Below you can see {len(treffer)} similar files "
+            "that have part of it in their name.")
+
+
 def antwort(frage: str, runde: str, treffer: list[Eintrag], pc_name: str = "") -> str:
     kern = kernwoerter(frage)
     gesucht = " ".join(w.capitalize() for w in kern) or art_der_frage(frage) or "deiner Frage"
@@ -297,7 +338,7 @@ class Dateiliste:
         with self._lock:
             return list(self._eintraege or [])
 
-    def suchen(self, frage: str, pc_name: str = "") -> tuple[str, list[dict]]:
+    def suchen(self, frage: str, pc_name: str = "", *, englisch: bool = False) -> tuple[str, list[dict]]:
         runde, treffer = suchen(self.eintraege(), frage)
         out = []
         with self._lock:
@@ -308,9 +349,11 @@ class Dateiliste:
             for e in treffer:
                 k = secrets.token_hex(8)
                 self._kennungen[k] = (e, t)
-                out.append({"id": k, "name": e.name, "ordner": e.ordner, "wurzel": e.wurzel, "art": art_der_datei(e.name), "groesse": e.groesse,
+                art = art_der_datei(e.name)
+                out.append({"id": k, "name": e.name, "ordner": e.ordner, "wurzel": WURZEL_EN.get(e.wurzel, e.wurzel) if englisch else e.wurzel,
+                            "art": ART_EN.get(art, art) if englisch else art, "groesse": e.groesse,
                             "geaendert": datetime.fromtimestamp(e.geaendert).strftime("%Y-%m-%dT%H:%M:%S"), "runde": runde, **({"pc": pc_name} if pc_name else {})})
-        return antwort(frage, runde, treffer, pc_name), out
+        return (antwort_en if englisch else antwort)(frage, runde, treffer, pc_name), out
 
     def datei(self, kennung: str) -> Eintrag | None:
         with self._lock:

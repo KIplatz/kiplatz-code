@@ -38,7 +38,7 @@ _RECHENZEILE = re.compile(r"(?P<menge>\d+(?:[.,]\d+)?)\s*(?:stk\.?|stück|tuben?
 _SUMME_ZEILE = re.compile(r"^(?P<vor>\s*(?:summe|gesamt(?:summe|betrag)?|netto(?:summe|betrag)?|zwischensumme)\s*(?:\(netto\))?\s*:?\s*)(?P<betrag>" + _BETRAG + r")\s*(?:€|eur|euro)?\s*$", re.I | re.M)
 
 
-_VORHABEN = re.compile(r"\b(plan\w*|empfiehl\w*|empfehl\w*|vergleich\w*|organisier\w*|hilf mir|bereite\w* (mir |uns )?(\w+ )?vor|entscheid\w*|was soll ich|welche[rsn]? (soll|passt|ist besser)|vorschl[aä]g\w*|tipps?)\b", re.I)
+_VORHABEN = re.compile(r"\b((?:(?:ich )?plane (?:mir|uns|ihm|ihr|ein\w*|die|den|das|meine\w*|unsere\w*|ich)\b|plan(?!et|ts?\b|e\b)\w*)|empfiehl\w*|empfehl\w*|vergleich\w*|organisier\w*|hilf mir|bereite\w* (mir |uns )?(\w+ )?vor|entscheid\w*|was soll ich|welche[rsn]? (soll|passt|ist besser)|vorschl[aä]g\w*|tipps?)\b", re.I)
 VORHABEN_PFLICHT = ("Für wen es ist (nur ich, Familie, Kinder, Kunden)", "Wofür genau und was dabei herauskommen soll",
                     "Bis wann, wie lang oder in welchem Rahmen (Zeit, Geld, Ort)", "Was schon feststeht und was auf keinen Fall sein soll")
 
@@ -70,7 +70,7 @@ _WISSENSWORT = re.compile(r"\b(einwohner\w*|bevölkerung\w*|fläche\w*|höhe|lä
                           r"gründung\w*|gegründet|geburt\w*|geboren|gestorben|hauptstadt|bip|bruttoinlands\w*|umsatz|gehalt|lohn|löhne|anzahl|zahl der|"
                           r"größe|gewicht|geschwindigkeit|einkommen|arbeitslos\w*|inflation\w*|währung|zeitzone|postleitzahl|vorwahl|alter von|wie alt)\b", re.I)
 _PERSOENLICH = re.compile(r"\b(mir|mich|mein\w*|uns|unser\w*|ich|für (?:mich|uns|meine\w*|unsere\w*)|soll(?:te)? ich|sollen wir|welche[rsn]? (?:soll|passt|ist besser)|"
-                          r"empfiehl\w*|empfehl\w*|plan\w*|organisier\w*|hilf|tipps?|vorschl[aä]g\w*|entscheid\w*|bereite)\b", re.I)
+                          r"empfiehl\w*|empfehl\w*|(?:(?:ich )?plane (?:mir|uns|ihm|ihr|ein\w*|die|den|das|meine\w*|unsere\w*|ich)\b|plan(?!et|ts?\b|e\b)\w*)|organisier\w*|hilf|tipps?|vorschl[aä]g\w*|entscheid\w*|bereite)\b", re.I)
 
 
 def _wissensfrage(f: str) -> bool:
@@ -81,10 +81,18 @@ def _wissensfrage(f: str) -> bool:
     return bool(re.search(r"\bvergleich\w*", f, re.I)) and not _PERSOENLICH.search(f)
 
 
+_ANLEITUNG = re.compile(r"^\s*(wie (schreibe|formuliere|verfasse|erstelle|gestalte|beginne|beende) ich\b.*\?\s*$|wie schreibt man\b|schreibt man\b|wie wird .{1,40} geschrieben\b)|\bschreibweise\b|\brichtig geschrieben\b|\be-?mail-?(adresse|konto|account|postfach)\b", re.I)
+_AUFTRAG_VORN = re.compile(r"^\s*(?:bitte\s+)?(?:schreib\w*|verfass\w*|formulier\w*|entwirf|entwerfe)\s+(?:mir\s+|uns\s+)?(?:bitte\s+)?(?:eine?n?|die|den|das)\s+"
+                           r"(?:e-?mail|mail|brief|nachricht|antwort|absage|zusage|kündigung|kuendigung|bewerbung|einladung|beschwerde|entschuldigung)\b", re.I)
+_WAS_TUN_WENN = re.compile(r"\bwas soll(?:te)? (?:ich|man|wir) (?:tun|machen)\b,? *(?:wenn|falls|bei)\b", re.I)
+
+
 def erkennen(frage: str) -> Aufgabe | None:
     worte, mit_anhang = eigene_worte(frage)
     f = " ".join(worte.split())
     if not f:
+        return None
+    if _ANLEITUNG.search(f) and not _AUFTRAG_VORN.match(f):
         return None
     if _ERZEUGEN.search(f):
         if re.match(r"^\s*(was|wer|wie|wann|wo|warum|welche\w*)\b", f, re.I) and "?" in f and not re.search(r"\b(schreib|erstell|formulier|entwirf|verfass)", f, re.I):
@@ -96,7 +104,7 @@ def erkennen(frage: str) -> Aufgabe | None:
         for art, muster, pflicht in _ARTEN:
             if muster.search(f):
                 return Aufgabe(art, tuple(pflicht))
-    if _VORHABEN.search(f) and not re.match(r"^\s*(was ist|was sind|was kostet|wer ist|wer hat|wie ?viel\w*|wie hoch|wie groß|wie lang\w*|wie weit|wie alt|wann|wo|woher|warum|wieso)\b", f, re.I) and len(f) < 600 and not _wissensfrage(f):
+    if _VORHABEN.search(f) and not _WAS_TUN_WENN.search(f) and not re.match(r"^\s*(was ist|was sind|was kostet|wer ist|wer hat|wie ?viel\w*|wie hoch|wie groß|wie lang\w*|wie weit|wie alt|wann|wo|woher|warum|wieso)\b", f, re.I) and len(f) < 600 and not _wissensfrage(f):
         return Aufgabe("Vorhaben", VORHABEN_PFLICHT, offen=True)
     return None
 

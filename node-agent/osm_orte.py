@@ -10,9 +10,10 @@ import sqlite3
 import struct
 import threading
 import time
+import urllib.error
 import urllib.request
 import zlib
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import app_core
@@ -28,10 +29,13 @@ MIN_FREIGABE_MB = 100_000
 FREI_RESERVE_MB = 10_000
 NEU_NACH_TAGE = 30
 TIMEOUT_S = 60.0
+AUSGABE_TAGE_ZURUECK = 7
+FEHLER_PAUSE_S = 3600
 LIZENZ = "ODbL"
 NENNUNG = "© OpenStreetMap-Mitwirkende, ODbL"
 MAX_BLOCK = 64 * 1024 * 1024
 BLOCKS_JE_SCHRITT = 40
+PAUSE_S = 30
 _UA = "KIplatz-Orte/1 (eine Kopie je Monat und Land für die eigene Suche; https://kiplatz.at)"
 
 
@@ -345,9 +349,9 @@ def entfernung_km(a: tuple[float, float], b: tuple[float, float]) -> float:
     return 12742 * math.asin(min(1.0, math.sqrt(h)))
 
 
-def land_einlesen(pbf: Path, ziel: Path, *, darf=lambda: True, fortschritt=None) -> dict:
+def land_einlesen(pbf: Path, ziel: Path, *, darf=lambda: True, fortschritt=None, warten=None) -> dict:
     try:
-        return _land_einlesen(pbf, ziel, darf=darf, fortschritt=fortschritt)
+        return _land_einlesen(pbf, ziel, darf=darf, fortschritt=fortschritt, warten=warten)
     except (IndexError, struct.error, zlib.error, UnicodeError, KeyError, ValueError) as exc:
         ziel.unlink(missing_ok=True)
         raise OrteError("OSM_FORMAT", f"die Datei ist nicht lesbar ({type(exc).__name__})") from None
@@ -356,7 +360,16 @@ def land_einlesen(pbf: Path, ziel: Path, *, darf=lambda: True, fortschritt=None)
         raise
 
 
-def _land_einlesen(pbf: Path, ziel: Path, *, darf=lambda: True, fortschritt=None) -> dict:
+def _land_einlesen(pbf: Path, ziel: Path, *, darf=lambda: True, fortschritt=None, warten=None) -> dict:
+
+    def _weiter() -> None:
+        if darf():
+            return
+        if warten is None:
+            raise Unterbrochen()
+        while not darf():
+            if not warten(PAUSE_S):
+                raise Unterbrochen()
     ziel.unlink(missing_ok=True)
     db = sqlite3.connect(ziel)
     try:
@@ -375,8 +388,7 @@ def _land_einlesen(pbf: Path, ziel: Path, *, darf=lambda: True, fortschritt=None
             if art_block != "OSMData":
                 continue
             if i % BLOCKS_JE_SCHRITT == 0:
-                if not darf():
-                    raise Unterbrochen()
+                _weiter()
                 if fortschritt:
                     fortschritt(1, versatz)
             for e in _block_lesen(daten, wege=True):
@@ -411,8 +423,7 @@ def _land_einlesen(pbf: Path, ziel: Path, *, darf=lambda: True, fortschritt=None
                 if art_block != "OSMData":
                     continue
                 if i % BLOCKS_JE_SCHRITT == 0:
-                    if not darf():
-                        raise Unterbrochen()
+                    _weiter()
                     if fortschritt:
                         fortschritt(2, versatz)
                 for e in _block_lesen(daten, wege=False, knoten_ids=gesucht):
@@ -500,14 +511,21 @@ class Laenderdatei:
             self._db.close()
 
     def ort(self, kandidaten: list[str]) -> tuple[str, float, float, int] | None:
+        t = self.ort_treffer(kandidaten)
+        return t[0][3:7] if t else None
+
+    def ort_treffer(self, kandidaten: list[str]) -> list[tuple[int, int, int, str, float, float, int]]:
+        out = []
         with self._lock:
-            for k in kandidaten:
+            for i, k in enumerate(kandidaten):
                 norm = _norm(k.replace("St.", "Sankt"))
                 for n in {norm, _norm(k)}:
-                    r = self._db.execute("SELECT name, lat, lon, rang FROM ort WHERE norm=? ORDER BY rang DESC, einwohner DESC LIMIT 1", (n,)).fetchone()
+                    r = self._db.execute("SELECT name, lat, lon, rang, einwohner FROM ort WHERE norm=? ORDER BY rang DESC, einwohner DESC LIMIT 1",
+                                         (n,)).fetchone()
                     if r:
-                        return r
-        return None
+                        out.append((i, int(r[3] or 0), int(r[4] or 0), r[0], r[1], r[2], r[3]))
+                        break
+        return out
 
     def naechste(self, art: str, lat: float, lon: float, *, km: float, n: int) -> list[tuple[float, str, str]]:
         d_lat = km / 111.0
@@ -535,16 +553,27 @@ NACH_NAMEN = ("Berg", "Hütte", "Burg oder Schloss", "Museum", "Tierpark", "Seil
 BERGNAH = ("Hütte", "Aussichtspunkt", "Seilbahnstation")
 
 
+def bester_ort(dateien: list, kandidaten: list[str], frage: str = "") -> tuple[str, float, float, int] | None:
+    import region as region_mod
+    r = region_mod.erkennen(frage or "")
+    gewuenscht = r.land if r is not None else ""
+    if not gewuenscht:
+        import laender
+        gewuenscht = (laender.erkennen(frage or "") or "").lower()
+    alle = []
+    for d in dateien:
+        land = Path(getattr(d, "pfad", "")).stem.removeprefix("orte-") if getattr(d, "pfad", None) else ""
+        for i, rang, ew, name, la, lo, rang_roh in d.ort_treffer(kandidaten):
+            alle.append(((i, 0 if land == gewuenscht else 1, -rang, -ew), (name, la, lo, rang_roh)))
+    return min(alle, key=lambda x: x[0])[1] if alle else None
+
+
 def suchen_in(dateien: list[Laenderdatei], frage: str, *, stand: str = "", ort_hinweis: str = "") -> list[wissen.Treffer]:
     art = frage_art(frage)
     if not art or not dateien:
         return []
     kandidaten = _ortsworte(frage)
-    ort = None
-    for d in dateien:
-        ort = d.ort(kandidaten)
-        if ort:
-            break
+    ort = bester_ort(dateien, kandidaten, frage)
     worte = list(dict.fromkeys(w for k in kandidaten for w in k.split() if w.lower() not in _KEIN_ORT and not frage_art(w)))
     liste: list[tuple[float, str, str]] = []
     titel = ""
@@ -566,10 +595,7 @@ def suchen_in(dateien: list[Laenderdatei], frage: str, *, stand: str = "", ort_h
         if gruppen and ohne:
             gruppen.append((f"Weitere Berge dieses Namens, ohne eingetragene {art} im Umkreis von 5 km", [(0.0, x, "") for x in ohne]))
     if not ort and not liste and not gruppen and ort_hinweis:
-        for d in dateien:
-            ort = d.ort([ort_hinweis])
-            if ort:
-                break
+        ort = bester_ort(dateien, [ort_hinweis], frage)
     if not liste and not gruppen and ort:
         name, la, lo, rang = ort
         km = 8.0 if rang >= 3 else 15.0
@@ -713,7 +739,7 @@ class OrteKopie:
             self._belegt = (0.0, 0)
 
 
-    def _holen(self, adresse: str, *, bereich: int | None = None):
+    def _holen(self, adresse: str, *, bereich: int | None = None, fehlt_ok: bool = False):
         if not adresse.startswith(QUELLE):
             raise OrteError("OSM_ADRESSE", "nur von download.geofabrik.de")
         kopf = {"User-Agent": _UA}
@@ -722,20 +748,37 @@ class OrteKopie:
         oeffner = self._oeffner or __import__("datenfluss").oeffner("Orte aus OpenStreetMap von Geofabrik laden (einmal im Monat je Land)")
         try:
             return oeffner(urllib.request.Request(adresse, headers=kopf), timeout=TIMEOUT_S)
+        except urllib.error.HTTPError as exc:
+            if fehlt_ok and exc.code == 404:
+                return None
+            raise OrteError("OSM_HOLEN", f"download.geofabrik.de antwortet nicht (HTTP {exc.code} für {adresse.rsplit('/', 1)[-1]})") from None
         except Exception as exc:
             raise OrteError("OSM_HOLEN", f"download.geofabrik.de antwortet nicht ({type(exc).__name__})") from None
 
-    def _md5(self, name: str) -> str:
-        with self._holen(f"{QUELLE}{name}-latest.osm.pbf.md5") as r:
+    @staticmethod
+    def _md5_lesen(r) -> str:
+        with r:
             m = re.match(r"\s*([0-9a-f]{32})\b", r.read(1000).decode("ascii", "replace"))
         if not m:
             raise OrteError("OSM_MD5", "Prüfsumme bei Geofabrik nicht lesbar")
         return m.group(1)
 
-    def _laden(self, name: str, ziel: Path, md5: str) -> bool:
+    def _ausgabe(self, name: str) -> tuple[str, str]:
+        r = self._holen(f"{QUELLE}{name}-latest.osm.pbf.md5", fehlt_ok=True)
+        if r is not None:
+            return f"{name}-latest.osm.pbf", self._md5_lesen(r)
+        heute = datetime.fromtimestamp(self._jetzt(), timezone.utc).date()
+        for tage in range(AUSGABE_TAGE_ZURUECK + 1):
+            datei = f"{name}-{(heute - timedelta(days=tage)).strftime('%y%m%d')}.osm.pbf"
+            r = self._holen(f"{QUELLE}{datei}.md5", fehlt_ok=True)
+            if r is not None:
+                return datei, self._md5_lesen(r)
+        raise OrteError("OSM_AUSGABE", f"bei download.geofabrik.de keine Ausgabe für {name} aus den letzten {AUSGABE_TAGE_ZURUECK} Tagen")
+
+    def _laden(self, datei: str, ziel: Path, md5: str) -> bool:
         teil = ziel.with_suffix(".teil")
         schon = teil.stat().st_size if teil.exists() else 0
-        with self._holen(f"{QUELLE}{name}-latest.osm.pbf", bereich=schon or None) as r, open(teil, "ab" if schon else "wb") as f:
+        with self._holen(f"{QUELLE}{datei}", bereich=schon or None) as r, open(teil, "ab" if schon else "wb") as f:
             if schon and getattr(r, "status", 206) == 200:
                 f.seek(0)
                 f.truncate()
@@ -798,10 +841,11 @@ class OrteKopie:
         if not faellig:
             self.phase = "fertig"
             return 3600
-        kurz, name, deutsch = faellig[0]
-        if self._jetzt() - float(st.get(f"fehler_um_{kurz}", 0)) < 3600:
+        offen = [(k, n, d) for k, n, d in faellig if self._jetzt() - float(st.get(f"fehler_um_{k}", 0)) >= FEHLER_PAUSE_S]
+        if not offen:
             self.phase = "fertig" if self._dateien else "pause"
             return 600
+        kurz, name, deutsch = offen[0]
         pbf = self.ordner / f"{kurz}.osm.pbf"
         if not pbf.exists():
             frei = int(self._platte_frei_mb(self.ordner if self.ordner.exists() else self.ordner.parent))
@@ -810,27 +854,29 @@ class OrteKopie:
                 return 3600
             self.phase, self.meldung = "laedt", deutsch
             self.ordner.mkdir(parents=True, exist_ok=True)
-            md5 = st.get(f"md5_{kurz}") or self._md5(name)
-            self._stand_setzen(**{f"md5_{kurz}": md5})
             try:
-                if not self._laden(name, pbf, md5):
+                md5, datei = st.get(f"md5_{kurz}"), st.get(f"datei_{kurz}") or f"{name}-latest.osm.pbf"
+                if not md5:
+                    datei, md5 = self._ausgabe(name)
+                self._stand_setzen(**{f"md5_{kurz}": md5, f"datei_{kurz}": datei})
+                if not self._laden(datei, pbf, md5):
                     return 30
             except OrteError:
-                self._stand_setzen(**{f"md5_{kurz}": ""})
+                self._stand_setzen(**{f"md5_{kurz}": "", f"datei_{kurz}": "", f"fehler_um_{kurz}": self._jetzt()})
                 raise
             self._log(f"OK openstreetmap: {deutsch} geladen ({pbf.stat().st_size // 1_000_000} MB)")
         self.phase, self.meldung = "liest", deutsch
         bau = self.ordner / f"orte-{kurz}.bau.sqlite"
         beginn = time.monotonic()
         try:
-            z = land_einlesen(pbf, bau, darf=lambda: self._darf() and not self._halt.is_set())
+            z = land_einlesen(pbf, bau, darf=lambda: self._darf() and not self._halt.is_set(), warten=lambda s: not self._halt.wait(s))
         except Unterbrochen:
             bau.unlink(missing_ok=True)
             return 30
         except OrteError:
             bau.unlink(missing_ok=True)
             pbf.unlink(missing_ok=True)
-            self._stand_setzen(**{f"fehler_um_{kurz}": self._jetzt(), f"md5_{kurz}": ""})
+            self._stand_setzen(**{f"fehler_um_{kurz}": self._jetzt(), f"md5_{kurz}": "", f"datei_{kurz}": ""})
             raise
         with self._lock:
             alt = self._dateien.pop(kurz, None)
@@ -840,14 +886,14 @@ class OrteKopie:
             bau.replace(ziel)
             self._dateien[kurz] = Laenderdatei(ziel)
         pbf.unlink(missing_ok=True)
-        self._stand_setzen(**{f"fertig_{kurz}": datetime.now(timezone.utc).strftime("%Y%m%d"), f"fertig_um_{kurz}": self._jetzt(), f"md5_{kurz}": "",
+        self._stand_setzen(**{f"fertig_{kurz}": datetime.now(timezone.utc).strftime("%Y%m%d"), f"fertig_um_{kurz}": self._jetzt(), f"md5_{kurz}": "", f"datei_{kurz}": "",
                               f"eintraege_{kurz}": z["eintraege"], f"orte_{kurz}": z["orte"]})
         self._belegt = (0.0, 0)
         self._log(f"OK openstreetmap: {deutsch} bereit, {z['eintraege']} Stellen und {z['orte']} Orte ({time.monotonic() - beginn:.0f} s)")
         return 0
 
 
-    def suchen(self, frage: str) -> list[wissen.Treffer]:
+    def suchen(self, frage: str, *, ort_hinweis: str = "") -> list[wissen.Treffer]:
         with self._lock:
             dateien = [self._dateien[k] for k, _, _ in self._laender if k in self._dateien]
         if not dateien:
@@ -856,7 +902,7 @@ class OrteKopie:
         tage = sorted(str(st.get(f"fertig_{k}", "")) for k, _, _ in self._laender if st.get(f"fertig_{k}"))
         stand = f"{tage[0][6:8]}.{tage[0][4:6]}.{tage[0][:4]}" if tage and len(tage[0]) == 8 else ""
         try:
-            return suchen_in(dateien, frage, stand=stand)
+            return suchen_in(dateien, frage, stand=stand, ort_hinweis=ort_hinweis)
         except sqlite3.Error as exc:
             self._log(f"ABGELEHNT openstreetmap suchen: {type(exc).__name__}")
             return []
