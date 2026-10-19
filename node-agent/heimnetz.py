@@ -304,7 +304,7 @@ class Dienst:
             Handler.dienst = dienst
             try:
                 srv = Server((adresse, self.port), Handler, bind_and_activate=False)
-                srv.allow_reuse_address = False
+                srv.allow_reuse_address = sys.platform != "win32"
                 srv.daemon_threads = True
                 srv.server_bind()
                 srv.server_activate()
@@ -440,6 +440,17 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         self._json(403, {"fehler": "NETZ", "text": "nur aus dem eigenen Heimnetz"})
         return False
 
+    def _rest_verwerfen(self) -> None:
+        try:
+            n = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            return
+        while 0 < n <= MAX_BODY:
+            stueck = self.rfile.read(min(n, 65536))
+            if not stueck:
+                return
+            n -= len(stueck)
+
     def _body(self) -> dict | None:
         try:
             n = int(self.headers.get("Content-Length", "0"))
@@ -480,6 +491,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             token = auth[7:] if auth.startswith("Bearer ") else ""
             geraet = self.dienst.geraete.pruefen(token) if (len(token) == 64 and all(c in "0123456789abcdef" for c in token)) else None
             if geraet is None:
+                self._rest_verwerfen()
                 self._json(401, {"fehler": "NICHT_GEKOPPELT", "text": "dieses Gerät ist nicht (mehr) gekoppelt"})
                 return
             body = self._body()

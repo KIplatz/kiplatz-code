@@ -50,11 +50,11 @@ def test_herunterladen_rejects_wrong_bytes_and_http(tmp_path):
 def test_laufzeit_entpacken_flat_and_guarded(tmp_path):
     z = tmp_path / "rt.zip"
     with zipfile.ZipFile(z, "w") as zf:
-        zf.writestr("unter/ordner/llama-server.exe", b"MZ-probe")
+        zf.writestr("unter/ordner/" + kl.SERVER_EXE, b"MZ-probe")
         zf.writestr("unter/ordner/ggml.dll", b"dll")
         zf.writestr("unter/ordner/", b"")
     exe = kl.laufzeit_entpacken(z, tmp_path / "laufzeit")
-    assert exe.name == "llama-server.exe" and exe.read_bytes() == b"MZ-probe" and (tmp_path / "laufzeit" / "ggml.dll").exists()
+    assert exe.name == kl.SERVER_EXE and exe.read_bytes() == b"MZ-probe" and (tmp_path / "laufzeit" / "ggml.dll").exists()
     ohne = tmp_path / "ohne.zip"
     with zipfile.ZipFile(ohne, "w") as zf:
         zf.writestr("nur.dll", b"x")

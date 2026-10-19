@@ -18,7 +18,7 @@ MIN_WOERTER = 3
 _ABKUERZUNG = (r"(?<![\s(.][A-Za-zÄÖÜäöü]\.)(?<!^[A-Za-zÄÖÜäöü]\.)"
                r"(?<!\bca\.)(?<!\bbzw\.)(?<!\bggf\.)(?<!\bvgl\.)(?<!\binkl\.)(?<!\bexkl\.)(?<!\bevtl\.)"
                r"(?<!\bNr\.)(?<!\bDr\.)(?<!\bSt\.)(?<!\bStr\.)(?<!\bAbs\.)(?<!\bzB\.)")
-_SATZ_ENDE = re.compile(r"(?<=[.!?])(?<![\s*(]\d\.)(?<![\s*(]\d\d\.)" + _ABKUERZUNG + r"\s+(?=[A-ZÄÖÜ„\"(\-–0-9])")
+_SATZ_ENDE = re.compile(r"(?<=[.!?])(?<![\s*(]\d\.)(?<![\s*(]\d\d\.)(?<!^\d\.)(?<!^\d\d\.)" + _ABKUERZUNG + r"\s+(?=[A-ZÄÖÜ„\"(\-–0-9])")
 _QUELLE = re.compile(r"\(?\s*Quellen?\s*((?:\d+\s*(?:,|und|bis|&|\+)?\s*)+)\)?", re.I)
 _QUELLE_MARKE = re.compile(r"\s*[\(\[]\s*(?:Quellen?|Auszu(?:g|ege))\s*(?:\d+\s*(?:,|und|bis|&|\+)?\s*)+[\)\]]", re.I)
 

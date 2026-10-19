@@ -33,10 +33,10 @@ def test_the_question_translation_is_shown_by_example_first():
     assert "Austria" not in vor and "Kaiserschmarrn" not in vor
 
 
-def test_the_answer_direction_has_no_example():
+def test_the_answer_direction_is_shown_by_example_first():
     fn, gesehen = _uebersetzer("1| Use vinegar.")
     antwortsprache.antwort_uebersetzen(fn, "Nimm Essig.", {}, frage="How do I descale a kettle?")
-    assert len(gesehen[0]) == 1
+    assert gesehen[0][:-1] == antwortsprache.BEISPIEL_ANTWORT and gesehen[0][-1]["content"] == "1| Nimm Essig."
 
 
 def test_bold_never_reaches_the_german_chain_or_the_english_window():
@@ -144,7 +144,7 @@ def test_a_list_in_the_words_of_the_own_calendar_is_no_copy():
     antwort = "In Bayern gibt es 2027 diese Feiertage:\n\n– Neujahr: Freitag, 1.1.2027\n" + zeile
     kalender = "Gesetzliche Feiertage in Bayern (Deutschland), vom Programm aus dem Kalender berechnet:\n– Neujahr: Freitag, 1.1.2027\n" + zeile
     for art in ("berechnet", "abgefragt"):
-        text, notizen = app_web._eigene_worte(antwort, "Welche Feiertage gibt es 2027 in Bayern?", [{"nummer": 1, "art": art, "text": kalender}], None, date(2026, 10, 18))
+        text, notizen, _e = app_web.eigene_worte(antwort, belege.fremde_texte([{"nummer": 1, "art": art, "text": kalender}]), None)
         assert text == antwort and not notizen, art
-    text, notizen = app_web._eigene_worte(antwort, "Welche Feiertage gibt es 2027 in Bayern?", [{"nummer": 1, "art": "wikipedia", "text": kalender}], None, date(2026, 10, 18))
+    text, notizen, _e = app_web.eigene_worte(antwort, belege.fremde_texte([{"nummer": 1, "art": "wikipedia", "text": kalender}]), None)
     assert "Mariä" not in text and notizen

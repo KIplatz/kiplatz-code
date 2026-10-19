@@ -103,10 +103,13 @@ def test_detect_gpus_returns_empty_on_malformed_json(monkeypatch):
     assert hd.detect_gpus() == []
 
 
-def test_detect_gpus_skipped_on_non_windows(monkeypatch):
+def test_detect_gpus_on_non_windows_uses_the_tools_of_that_system(monkeypatch):
     monkeypatch.setattr(hd.platform, "system", lambda: "Linux")
+    monkeypatch.setattr("shutil.which", lambda name: None)
+    powershell = []
+    monkeypatch.setattr(hd.subprocess, "run", lambda *a, **k: powershell.append(a))
 
-    assert hd.detect_gpus() == []
+    assert hd.detect_gpus() == [] and powershell == []
 
 
 def test_build_report_produces_serializable_dict(monkeypatch, tmp_path):

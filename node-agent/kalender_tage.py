@@ -19,6 +19,9 @@ _WANN = re.compile(r"\bwann\b|\bwelche[mnrs]?\b.{0,25}\b(?:tag|datum|sonntag|woc
                    r"\bwhen\b|\bwhat (?:date|day)\b|\bwhich (?:date|day|sunday)\b|\bhow many days\b|\bis\b.{0,40}\b(?:19|20)\d\d\b", re.I)
 _DACH = frozenset({"AT", "DE", "CH", "LI"})
 _JAHR = re.compile(r"\b(19[5-9]\d|20\d\d|21\d\d)\b")
+_JAHR_WORT = re.compile(r"\b(?P<dieses>heuer|heurig\w*|diesjährig\w*|dies(?:es|em) jahr|im laufenden jahr|this year|this year's)\b|"
+                        r"\b(?P<naechstes>(?:im )?n[äa]chste[nms]? jahr|kommende[nms]? jahr|next year|next year's)\b|"
+                        r"\b(?P<letztes>(?:im )?letzte[nms]? jahr|vorige[nms]? jahr|vergangene[nms]? jahr|last year|last year's)\b", re.I)
 
 
 def _letzter_sonntag(jahr: int, monat: int) -> date:
@@ -60,8 +63,15 @@ def _tag(d: date) -> str:
     return f"{WOCHENTAGE[d.weekday()]}, {d.day}.{d.month}.{d.year}"
 
 
-def jahre(frage: str) -> list[int]:
-    return list(dict.fromkeys(int(j) for j in _JAHR.findall(frage or "")))[:3]
+def jahre(frage: str, heute: date | None = None) -> list[int]:
+    h = heute or date.today()
+    gefunden = []
+    for m in re.finditer(_JAHR.pattern + "|" + _JAHR_WORT.pattern, frage or "", re.I):
+        if m.group(1):
+            gefunden.append(int(m.group(1)))
+        else:
+            gefunden.append(h.year + (1 if m.group("naechstes") else -1 if m.group("letztes") else 0))
+    return list(dict.fromkeys(gefunden))[:3]
 
 
 def betrifft(frage: str) -> bool:
@@ -82,7 +92,7 @@ def _gefragt(frage: str, name: str) -> bool:
 
 def text(frage: str, heute: date | None = None) -> str:
     h = heute or date.today()
-    gefragt = jahre(frage)
+    gefragt = jahre(frage, h)
     if gefragt:
         eintraege = [x for j in gefragt for x in tage(j)]
         kopf = f"Termine im Kalender {', '.join(str(j) for j in gefragt)}, vom Programm berechnet (heute ist {_tag(h)}):"
@@ -93,4 +103,57 @@ def text(frage: str, heute: date | None = None) -> str:
     return "\n".join([kopf] + [f"– {n}: {_tag(d)}" for d, n in (passend or eintraege)])
 
 
-__all__ = ["erster_advent", "tage", "jahre", "betrifft", "text"]
+ZEITUMSTELLUNG = re.compile(r"zeit-?umstellung|uhren-?umstellung|uhr(?:en)?\b.{0,25}\bum(?:ge)?stell|umstellung der uhr|daylight[- ]sav\w*|"
+                            r"\bDST\b|clocks?\b.{0,30}\b(?:go|change|move|spring|fall|turn)\w*|\b(?:change|turn|move|set)\w* (?:the )?clocks?\b|"
+                            r"\b(?:spring|fall) (?:forward|back)\b", re.I)
+_ZEITUMSTELLUNG_SCHWACH = re.compile(r"sommerzeit|winterzeit|normalzeit|summer ?time", re.I)
+_MEZ = ("2 Uhr", "3 Uhr", "3 Uhr", "2 Uhr")
+_EU_REGEL = "Sommerzeit vom letzten Sonntag im März bis zum letzten Sonntag im Oktober, in ganz Europa zugleich um 1 Uhr Weltzeit (UTC)."
+_REGELN: dict[str, tuple[tuple[int, int], tuple[int, int], tuple[str, str, str, str], str]] = {
+    "US": ((3, 2), (11, 1), ("2 Uhr", "3 Uhr", "2 Uhr", "1 Uhr"), "Sommerzeit vom zweiten Sonntag im März bis zum ersten Sonntag im November, "
+          "umgestellt wird um 2 Uhr Ortszeit. Nicht umgestellt wird auf Hawaii, im größten Teil von Arizona und in den Außengebieten wie Puerto Rico."),
+    "CA": ((3, 2), (11, 1), ("2 Uhr", "3 Uhr", "2 Uhr", "1 Uhr"), "Sommerzeit vom zweiten Sonntag im März bis zum ersten Sonntag im November, "
+          "umgestellt wird um 2 Uhr Ortszeit. Nicht umgestellt wird im größten Teil von Saskatchewan und in Yukon."),
+    "AU": ((10, 1), (4, 1), ("2 Uhr", "3 Uhr", "3 Uhr", "2 Uhr"), "Sommerzeit vom ersten Sonntag im Oktober bis zum ersten Sonntag im April, "
+          "nur in New South Wales, Victoria, dem Australian Capital Territory, Tasmanien und South Australia; Queensland, Western Australia und "
+          "das Northern Territory stellen nicht um."),
+    "NZ": ((9, -1), (4, 1), ("2 Uhr", "3 Uhr", "3 Uhr", "2 Uhr"), "Sommerzeit vom letzten Sonntag im September bis zum ersten Sonntag im April."),
+}
+for _c in ("AT BE HR CZ DK FR DE HU IT LU MT NL PL SK SI ES SE NO CH LI AL AD BA ME MK RS MC SM VA XK").split():
+    _REGELN[_c] = ((3, -1), (10, -1), _MEZ, _EU_REGEL)
+for _c in ("GB", "IE", "PT"):
+    _REGELN[_c] = ((3, -1), (10, -1), ("1 Uhr", "2 Uhr", "2 Uhr", "1 Uhr"), _EU_REGEL)
+for _c in ("BG", "CY", "EE", "FI", "GR", "LV", "LT", "RO"):
+    _REGELN[_c] = ((3, -1), (10, -1), ("3 Uhr", "4 Uhr", "4 Uhr", "3 Uhr"), _EU_REGEL)
+_KEINE = {"JP": "", "CN": "", "IN": "", "KR": "", "HK": "", "TW": "", "SG": "", "MY": "", "TH": "", "VN": "", "ID": "", "PH": "", "AE": "",
+          "SA": "", "ZA": "", "IS": "", "BY": "", "AR": "", "BR": " (seit 2019)", "RU": " (seit 2014)", "TR": " (seit 2016)",
+          "MX": " (seit Oktober 2022; nur einige Orte an der Grenze zu den USA stellen mit den USA um)"}
+
+
+def _sonntag(jahr: int, monat: int, n: int) -> date:
+    return _letzter_sonntag(jahr, monat) if n < 0 else _nter_sonntag(jahr, monat, n)
+
+
+def zeitumstellung_welt(frage: str, heute: date | None = None) -> tuple[str, str, bool] | None:
+    gemeint = ZEITUMSTELLUNG.search(frage or "") or (_ZEITUMSTELLUNG_SCHWACH.search(frage or "") and _WANN.search(frage or ""))
+    if not gemeint or betrifft(frage):
+        return None
+    code = laender.erkennen(frage)
+    if code not in _REGELN and code not in _KEINE:
+        return None
+    h = heute or date.today()
+    name = laender.DEUTSCH.get(code, code)
+    if code in _KEINE:
+        return (f"Zeitumstellung in {name} (vom Programm)", f"In {name} gibt es keine Zeitumstellung{_KEINE[code]}; die Uhrzeit bleibt das "
+                f"ganze Jahr gleich (heute ist {_tag(h)}).", True)
+    (m1, n1), (m2, n2), (v1, z1, v2, z2), regel = _REGELN[code]
+    gefragt = jahre(frage, h)
+    eintraege = sorted((d, n) for j in (gefragt or (h.year, h.year + 1)) for d, n in (
+        (_sonntag(j, m1, n1), f"Beginn der Sommerzeit (die Uhr springt um {v1} eine Stunde vor auf {z1})"),
+        (_sonntag(j, m2, n2), f"Ende der Sommerzeit (die Uhr springt um {v2} eine Stunde zurück auf {z2})")) if gefragt or d >= h)
+    kopf = (f"Zeitumstellung in {name}, vom Programm nach der dort geltenden Regel berechnet (heute ist {_tag(h)}). {regel}"
+            + (f" Für {', '.join(str(j) for j in gefragt)}:" if gefragt else " Die nächsten:"))
+    return f"Zeitumstellung in {name} (vom Programm berechnet)", "\n".join([kopf] + [f"– {n}: {_tag(d)}" for d, n in eintraege]), True
+
+
+__all__ = ["erster_advent", "tage", "jahre", "betrifft", "text", "zeitumstellung_welt"]

@@ -38,9 +38,26 @@ _NAME = re.compile(r"(?<![\w])(" + "|".join(re.escape(n) for n in feiertage_name
 ZWEITES_LAND_ANTEIL = 0.1
 
 
-def gefragter_feiertag(frage: str) -> str | None:
+_DEUTSCH_ZU_ENGLISCH: dict[str, list[str]] = {}
+for _en, _de in DEUTSCH.items():
+    for _teil in _de.split(", "):
+        _DEUTSCH_ZU_ENGLISCH.setdefault(_teil.lower(), []).append(_en.lower())
+_NAME_DE = re.compile(r"(?<![\w])(" + "|".join(re.escape(n) for n in sorted(_DEUTSCH_ZU_ENGLISCH, key=len, reverse=True)) + r")(?![\w])", re.I)
+
+
+def gefragte_feiertage(frage: str) -> list[str]:
     m = _NAME.search(frage or "")
-    return " ".join(m.group(1).lower().split()) if m else None
+    if m:
+        return [" ".join(m.group(1).lower().split())]
+    m = _NAME_DE.search(frage or "")
+    if m and laender.alle(frage) - DACH:
+        return _DEUTSCH_ZU_ENGLISCH[" ".join(m.group(1).lower().split())]
+    return []
+
+
+def gefragter_feiertag(frage: str) -> str | None:
+    namen = gefragte_feiertage(frage)
+    return namen[0] if namen else None
 
 
 def _laender_mit(name: str) -> set[str]:
@@ -71,18 +88,21 @@ def betrifft(frage: str) -> bool:
 
 def jahre(frage: str, heute: date | None = None) -> list[int]:
     h = heute or date.today()
-    return kalender_tage.jahre(frage) or [h.year, h.year + 1]
+    return kalender_tage.jahre(frage, h) or [h.year, h.year + 1]
 
 
 def text(code: str, je_jahr: dict[int, list[dict]], frage: str, heute: date | None = None) -> str:
     h = heute or date.today()
     name = laender.DEUTSCH.get(code, code)
-    gefragt = bool(kalender_tage.jahre(frage))
-    feiertag = gefragter_feiertag(frage)
+    gefragt = bool(kalender_tage.jahre(frage, h))
+    feiertage = gefragte_feiertage(frage)
+
+    def gleich(gefragt: str, name: str) -> bool:
+        kurz, lang = sorted((gefragt, name), key=len)
+        return bool(kurz) and re.match(re.escape(kurz) + r"(?![\w])", lang) is not None
 
     def ist_er(t: dict) -> bool:
-        return bool(feiertag) and any(re.match(re.escape(feiertag) + r"(?![\w])", " ".join(str(t.get(k) or "").lower().split()))
-                                      for k in ("name", "lokal"))
+        return any(gleich(f, " ".join(str(t.get(k) or "").lower().split())) for f in feiertage for k in ("name", "lokal"))
     if any(ist_er(t) for ts in je_jahr.values() for t in ts):
         je_jahr = {j: [t for t in ts if ist_er(t)] for j, ts in je_jahr.items()}
     zeilen = [f"Gesetzliche Feiertage in {name} ({code}), vom Server bei Nager.Date abgefragt (heute ist {kalender_at._tag(h)})"

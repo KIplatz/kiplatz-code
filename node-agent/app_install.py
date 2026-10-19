@@ -480,7 +480,17 @@ def _zip_sicher_entpacken(zip_pfad: Path, ziel: Path) -> None:
             name = m.filename.replace("\\", "/")
             if name.startswith("/") or ".." in name.split("/") or ":" in name:
                 raise app_core.AppError("UPDATE_DATEI", "das Paket vom Server enthält einen unzulässigen Pfad; verworfen")
-        z.extractall(ziel)
+        if sys.platform == "win32":
+            z.extractall(ziel)
+            return
+        for m in z.infolist():
+            name = m.filename.replace("\\", "/")
+            if name.endswith("/"):
+                (ziel / name).mkdir(parents=True, exist_ok=True)
+                continue
+            (ziel / name).parent.mkdir(parents=True, exist_ok=True)
+            with z.open(m) as quelle, open(ziel / name, "wb") as aus:
+                shutil.copyfileobj(quelle, aus, 1 << 20)
 
 
 def _paketname_ok(name: str) -> bool:
@@ -876,6 +886,9 @@ def update_quelle_holen(adresse: str, install_dir: Path | None = None, *, eigene
     shutil.rmtree(neu, ignore_errors=True)
     _still_weg(zip_neu)
     sicher_schreiben.json_datei(target_dir / PROBE_DATEI, {"bau": server_bau, "von": eigener_bau, "zeit": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "zeit_s": time.time(), "starts": 0}, ascii_=True)
+    if sys.platform != "win32":
+        _marker_schreiben(target_dir, exe_sha256=server_bau, app_version="?", art="helfer")
+        return "aktualisiert", f"Neue Version (Bau {server_bau}) geholt und geprüft. Der Helfer startet gleich neu."
     try:
         starter_anlegen(target_dir)
     except app_core.AppError as exc:

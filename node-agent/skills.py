@@ -209,10 +209,11 @@ class Skillkiste:
         return out
 
 
-def vorlagen() -> list[Skill]:
+def vorlagen(sprache: str = "de") -> list[Skill]:
     aus: list[Skill] = []
+    ordner = VORLAGEN_DIR / "en" if sprache == "en" and (VORLAGEN_DIR / "en").is_dir() else VORLAGEN_DIR
     try:
-        for p in sorted(VORLAGEN_DIR.glob("*.md")):
+        for p in sorted(ordner.glob("*.md")):
             try:
                 aus.append(lesen(p.read_text(encoding="utf-8"), quelle="vorlage"))
             except (OSError, app_core.AppError):

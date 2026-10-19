@@ -70,6 +70,44 @@ LAUFZEIT_ALT = Paket(
     groesse=31708851,
 )
 
+_LLAMA = "https://github.com/ggml-org/llama.cpp/releases/download/b11003/"
+
+
+def _llama(plattform: str, datei: str, sha256: str, groesse: int, name: str) -> Paket:
+    return Paket(kennung=f"b11003-{plattform}", name=f"llama.cpp b11003 ({name})", datei=datei, url=_unser(datei), herkunft=_LLAMA + datei,
+                 sha256=sha256, groesse=groesse)
+
+
+LAUFZEITEN_HELFER: dict[str, Paket] = {
+    "linux-x64-vulkan": _llama("linux-x64-vulkan", "llama-b11003-bin-ubuntu-vulkan-x64.tar.gz",
+                               "856325d6e5a2f5fa54179065f3682d896c5720edda7c75fd941ff75b71fe3734", 30218750, "Linux x64, Vulkan"),
+    "linux-x64": _llama("linux-x64", "llama-b11003-bin-ubuntu-x64.tar.gz",
+                        "5a9558b3aa1add278d82fbebb9dd2f56448c29221e46cd8b1d93723c5b4435ef", 16855523, "Linux x64, Prozessor"),
+    "linux-arm64-vulkan": _llama("linux-arm64-vulkan", "llama-b11003-bin-ubuntu-vulkan-arm64.tar.gz",
+                                 "6f29395af963bdcfc86cf8cececa73305ca479922882998cb1b02e9fccaafb93", 24247006, "Linux arm64, Vulkan"),
+    "linux-arm64": _llama("linux-arm64", "llama-b11003-bin-ubuntu-arm64.tar.gz",
+                          "2630c0f5815a81766653c889ee6e70af166f63326f1f8a10167b8d9b6fd1de24", 13476945, "Linux arm64, Prozessor"),
+    "macos-arm64": _llama("macos-arm64", "llama-b11003-bin-macos-arm64.tar.gz",
+                          "b30339f4186a5a79654fbee087bd7f62964aa727c15f26481b2cc56610b3f768", 11155963, "macOS Apple-Chip, Metal"),
+    "macos-x64": _llama("macos-x64", "llama-b11003-bin-macos-x64.tar.gz",
+                        "7f44154b08f7b229368db76df57c8dd3f30d6f9d8856cf5f3de8a6fbc20d4f60", 11201898, "macOS Intel"),
+}
+
+
+def laufzeit_hier(system: str | None = None, cpu: str | None = None, vulkan: bool | None = None) -> Paket:
+    import platform as _pf
+    system = (system or _pf.system()).lower()
+    if system == "windows":
+        return LAUFZEIT
+    cpu = cpu or ("arm64" if _pf.machine().lower() in ("arm64", "aarch64") else "x64")
+    if system == "darwin":
+        return LAUFZEITEN_HELFER[f"macos-{cpu}"]
+    if vulkan is None:
+        import ctypes.util
+        vulkan = bool(ctypes.util.find_library("vulkan"))
+    return LAUFZEITEN_HELFER[f"linux-{cpu}" + ("-vulkan" if vulkan else "")]
+
+
 MODELLE: dict[str, Modell] = {
     "3B": Modell(
         kennung="3B", name="Ministral 3 3B", datei="Ministral-3-3B-Instruct-2512-Q4_K_M.gguf",
@@ -146,7 +184,7 @@ HOEREN = Modell(
                  sha256="41a342b5e4c514e968cb756de6cd1b7be39eff43c44c57a2ef5fc6522e36603d", groesse=214392480),
 )
 
-ALLE: tuple[Paket, ...] = (LAUFZEIT, LAUFZEIT_ALT, *MODELLE.values(), *(m.bilder for m in MODELLE.values() if m.bilder), EMBEDDING, BEWERTUNG, SPRACHE_LAUFZEIT,
+ALLE: tuple[Paket, ...] = (LAUFZEIT, LAUFZEIT_ALT, *LAUFZEITEN_HELFER.values(), *MODELLE.values(), *(m.bilder for m in MODELLE.values() if m.bilder), EMBEDDING, BEWERTUNG, SPRACHE_LAUFZEIT,
                            SPRACHE_MODELL, HOEREN, HOEREN.bilder)
 NACH_DATEI: dict[str, Paket] = {p.datei: p for p in ALLE}
 

@@ -180,8 +180,9 @@ def test_kein_satz_ueber_das_was_nicht_dasteht():
 
 
 def test_neufassungen_bekommen_die_wortgrenze_gleich_mit():
-    for z in (app_web.BELEGE_ZUSATZ, app_web.EIGENE_WORTE_ZUSATZ, app_web.FRAGE_FOKUS):
+    for z in (app_web.BELEGE_ZUSATZ, app_web.FRAGE_FOKUS):
         assert "nie mehr als 6 Wörter am Stück" in z
+    assert "nie mehr als 6 Wörter am Stück" in belege.UMSCHREIBEN_DE and "never more than 6 words in a row" in belege.UMSCHREIBEN_EN
     assert 6 < belege.WOERTLICH_WOERTER
 
 

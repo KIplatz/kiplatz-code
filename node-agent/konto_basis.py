@@ -178,3 +178,4 @@ class Anmeldung:
 
 
 HANDY_ARTEN = ("iPhone", "iPad", "Android-Handy", "Android-Tablet", "Handy", "Tablet", "Mac")
+PC_ARTEN = ("Windows-PC", "Linux-PC", "Mac")

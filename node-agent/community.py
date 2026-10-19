@@ -5,6 +5,7 @@ import hashlib
 import http.client
 import json
 import re
+import secrets
 import ssl
 import sys
 import threading
@@ -25,6 +26,7 @@ import geheim
 import sicher_schreiben
 import wissen
 
+TLS_KONTEXT = ssl.create_default_context
 STANDARD_ADRESSE = "https://kiplatz.at:8444"
 ALTE_ADRESSEN: dict[str, str] = {}
 DIRNAME = "community"
@@ -61,6 +63,7 @@ _ZWECKE = {
     "download": "Community-Server: Update holen", "modelle": "Community-Server: Modell holen",
     "konto-anmeldung": "Community-Server: wie die Anmeldung mit dem Konto geht", "konto-anmelden": "Community-Server: Anmeldenachweis des Kontos abgeben",
     "konto-abmelden": "Community-Server: Konto vom Gerät lösen",
+    "konto-start": "Community-Server: mit dem Konto beitreten (Beginn)", "konto-ergebnis": "Community-Server: mit dem Konto beitreten (Zugang abholen)",
     "meine-geraete": "Community-Server: deine Geräte (Konto)", "geraet-abmelden": "Community-Server: ein Gerät deines Kontos abmelden",
     "ueberall-abmelden": "Community-Server: auf allen anderen Geräten abmelden",
     "abgleich": "Community-Server: Gespräche abgleichen (Ende-zu-Ende-verschlüsselt, der Server sieht nur Datensalat)",
@@ -160,7 +163,7 @@ class Community:
         self.bei_weitergeben = None
         self._oeffner = oeffner
         self.teil_fehler = 0
-        self._ctx = ssl.create_default_context()
+        self._ctx = TLS_KONTEXT()
         self._leitungen = _Leitungen(self.adresse, self._ctx, verbinden=verbinden, uhr=uhr)
         self._leitung_extras = {"verbinden": verbinden, "uhr": uhr}
         self.letzte_suche = "wort"
@@ -416,6 +419,22 @@ class Community:
             wert = merk[1] if merk is not None else False
         self._pausiert_merk = (jetzt, wert)
         return wert
+
+    def suche_stand(self) -> dict | None:
+        jetzt = time.monotonic()
+        merk = getattr(self, "_suche_merk", None)
+        if merk is not None and jetzt - merk[0] < 600:
+            return merk[1]
+        try:
+            h = self._anfrage("/hallo")
+            wert = {"frei": int(h["suche_frei"]), "gesamt": int(h["suche_gesamt"])} if "suche_frei" in h else None
+        except (app_core.AppError, KeyError, TypeError, ValueError):
+            wert = merk[1] if merk is not None else None
+        self._suche_merk = (jetzt, wert)
+        return wert
+
+    def quellen_melden(self, quellen: dict) -> None:
+        self._anfrage("/quellen-stand", {"quellen": quellen}, als_geraet=True)
 
     def fenster_frei(self) -> bool:
         try:
@@ -1027,6 +1046,24 @@ class Community:
             raise CommunityError("COMMUNITY_ANTWORT", "der Server hat keine Gerätekennung geschickt")
         self._geraet_speichern(d)
         return d
+
+
+    def konto_beitritt_start(self, art: str, name: str = "") -> dict:
+        ticket = secrets.token_urlsafe(32)
+        basis = "https://kiplatz.at" if self.adresse.rstrip("/") == STANDARD_ADRESSE else self.adresse.rstrip("/")
+        a = self._anfrage("/konto-start", {"ticket": ticket, "rueckkehr": f"{basis}/app/", "geraet": str(art), "name": str(name)[:60]})
+        return {"ticket": ticket, "adresse": str(a.get("adresse", ""))}
+
+    def konto_beitritt_abholen(self, ticket: str) -> dict | None:
+        a = self._anfrage("/konto-ergebnis", {"ticket": str(ticket)})
+        if a.get("status") != "fertig":
+            return None
+        d = {"kennung": str(a.get("kennung", "")), "schluessel": str(a.get("schluessel", "")), "name": str(a.get("name") or "")[:60],
+             "seit": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+        if not d["kennung"] or not d["schluessel"]:
+            raise CommunityError("COMMUNITY_ANTWORT", "der Server hat keine Gerätekennung geschickt")
+        self._geraet_speichern(d)
+        return {**d, "konto": str(a.get("konto") or "")[:60]}
 
     def urteil_senden(self, auftrag: str, urteil: str, grund: str, titel: str = "", *, sicher: bool = False) -> dict:
         return self._anfrage("/ergebnis", {"auftrag": auftrag, "urteil": urteil, "grund": grund, "titel": titel, "sicher": bool(sicher)}, als_geraet=True, timeout=ERGEBNIS_TIMEOUT_S)

@@ -927,10 +927,22 @@ async function kontoRueckkehr(suche = null) {
 
 
 let anmeldeFrageOffen = null;
-const nameMitBenutzer = (konto, benutzer) => `„${konto}“` + (benutzer && benutzer.toLowerCase() !== konto.toLowerCase() ? ` (Benutzername ${benutzer})` : "");
+
+
+const mitBenutzer = (konto, benutzer) => !!benutzer && benutzer.toLowerCase() !== konto.toLowerCase();
+const nameMitBenutzer = (konto, benutzer) => (mitBenutzer(konto, benutzer) ? `„${konto}“ (Benutzername ${benutzer})` : `„${konto}“`);
+
+
+const PC_SYSTEM = { "Windows-PC": "Windows", "Linux-PC": "Linux", "Mac": "macOS" };
 function anmeldenFrage(state, r) {
   anmeldeFrageOffen = { state, frage: String(r.frage || "") };
-  $("#af-wer").textContent = `Mit dem Konto ${nameMitBenutzer(String(r.konto || ""), String(r.benutzer || ""))} anmelden?`;
+  const wer = nameMitBenutzer(String(r.konto || ""), String(r.benutzer || ""));
+  const pc = Object.hasOwn(PC_SYSTEM, String(r.geraet || "")) ? PC_SYSTEM[String(r.geraet)] : "";
+  $("#af-titel").textContent = pc ? "PC verbinden" : "Anmelden";
+  $("#af-wer").textContent = pc ? `Einen neuen PC (${pc}) mit dem Konto ${wer} verbinden?` : `Mit dem Konto ${wer} anmelden?`;
+  $("#af-hinweis").textContent = pc ? "Hast du das nicht gerade selbst im KIplatz-Programm an deinem PC begonnen, dann tipp auf „Nein“."
+    : "Hast du die Anmeldung nicht selbst in KIplatz angetippt, dann tipp auf „Nein“.";
+  $("#af-ja").textContent = pc ? "Ja, verbinden" : "Ja, anmelden";
   $("#af-meldung").textContent = ""; $("#af-knoepfe").hidden = false;
   $("#af-ja").disabled = $("#af-nein").disabled = false;
   const dlg = $("#anmelde-frage");
@@ -1500,7 +1512,7 @@ function loeschenBestaetigen(r) {
   loeschNachweis = String(r.nachweis || "");
   const konto = String(r.konto || ""), benutzer = String(r.benutzer || "");
   loeschenDialog("bestaetigen");
-  $("#ld-wer").textContent = `Gelöscht wird das Konto „${konto}“` + (benutzer && benutzer.toLowerCase() !== konto.toLowerCase() ? ` (Benutzername ${benutzer}).` : ".");
+  $("#ld-wer").textContent = mitBenutzer(konto, benutzer) ? `Gelöscht wird das Konto „${konto}“ (Benutzername ${benutzer}).` : `Gelöscht wird das Konto „${konto}“.`;
   $("#ld-wort").focus();
 }
 
@@ -1510,7 +1522,8 @@ function loeschenFrage(state, r) {
   loeschFrage = { state, frage: String(r.frage || "") };
   const konto = String(r.konto || ""), benutzer = String(r.benutzer || "");
   loeschenDialog("browser");
-  $("#ld-browser-wer").textContent = `Gelöscht werden soll dein Konto „${konto}“` + (benutzer && benutzer.toLowerCase() !== konto.toLowerCase() ? ` (Benutzername ${benutzer}).` : ".");
+  $("#ld-browser-wer").textContent = mitBenutzer(konto, benutzer) ? `Gelöscht werden soll dein Konto „${konto}“ (Benutzername ${benutzer}).`
+    : `Gelöscht werden soll dein Konto „${konto}“.`;
 }
 async function loeschenAntworten(ja) {
   const f = loeschFrage, m = $("#ld-meldung");
@@ -1538,8 +1551,12 @@ async function loeschenAusfuehren() {
   loeschNachweis = null;
   $("#loeschen-dialog").close();
 
-  alert(r.text || "Dein KIplatz-Konto ist gelöscht. Danke, dass du dabei warst.");
+
+  const text = r.text || "Dein KIplatz-Konto ist gelöscht. Danke, dass du dabei warst.";
+  abmeldeGrund = text;
+  alert(text);
   if (z.geraet) { try { await holen("/meine-daten", { body: {}, geraet: z.geraet }); } catch { } }
+  abmeldeGrund = "";
 }
 
 async function adminKontenSuchen() {
@@ -1661,6 +1678,7 @@ async function abgleichZeichnen() {
     }), "gefahr")));
 }
 
+let abmeldeGrund = "";
 function zugangVerloren() {
 
   if (!z.geraet) return;
@@ -1668,7 +1686,7 @@ function zugangVerloren() {
   tresor.loeschen("geraet"); tresor.loeschen("abgleich"); tresor.loeschen("zuhause"); z.zuhause = []; localStorage.removeItem("kiplatz." + konten.name("abgleich-zuordnung")); z.geraet = null; einstellungenZu(); z.platzl?.zu();
   konten.vergessen();
   anzeigen();
-  anmeldeInfo("Du bist auf diesem Gerät abgemeldet worden, von einem anderen Gerät aus oder weil es 90 Tage nicht benutzt wurde. Melde dich einfach neu an.");
+  anmeldeInfo(abmeldeGrund || "Du bist auf diesem Gerät abgemeldet worden, von einem anderen Gerät aus oder weil es 90 Tage nicht benutzt wurde. Melde dich einfach neu an.");
 }
 
 

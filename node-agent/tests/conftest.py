@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.dont_write_bytecode = True
 
 import rechenarbeit
 
@@ -29,6 +30,13 @@ import shutil
 _KARTE_FALLBACK = Path(tempfile.mkdtemp(prefix="kiplatz-karte-"))
 kartenteiler.ORDNER = _KARTE_FALLBACK
 atexit.register(shutil.rmtree, _KARTE_FALLBACK, ignore_errors=True)
+
+import geheim
+
+_GEHEIM = Path(tempfile.mkdtemp(prefix="kiplatz-geheim-"))
+geheim.ORDNER = _GEHEIM / "geheim"
+geheim.BUND_AN = False
+atexit.register(shutil.rmtree, _GEHEIM, ignore_errors=True)
 
 
 @pytest.fixture(autouse=True)
@@ -74,8 +82,12 @@ _LANG_GESCHLAFEN: list[float] = []
 _API_INIT = app_web.Api.__init__
 
 
+_PROGRAMME: list = []
+
+
 def _api_init_test(self, *a, **k):
     _API_INIT(self, *a, **k)
+    _PROGRAMME.append(self)
 
     def schlafen(s: float) -> None:
         if s > MESS_SCHLAF_MAX_S:
@@ -86,6 +98,14 @@ def _api_init_test(self, *a, **k):
 
 
 app_web.Api.__init__ = _api_init_test
+
+
+@pytest.fixture(autouse=True)
+def _programme_herunterfahren():
+    _PROGRAMME.clear()
+    yield
+    while _PROGRAMME:
+        _PROGRAMME.pop().herunterfahren()
 
 
 @pytest.fixture(autouse=True)

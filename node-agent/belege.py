@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import date
 from functools import lru_cache
 
+import antwortspeicher_basis
 import laender
 
 WOCHENTAGE = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
@@ -106,7 +107,7 @@ def _gedeckt_datum(d: tuple[int, int, int | None], belegt: set[tuple[int, int, i
 
 def _saetze(absatz: str) -> list[str]:
     import pruefung
-    return [s for s in re.split(r"(?<=[.!?])(?<!\d\.)" + pruefung._ABKUERZUNG + r"\s+(?=[A-ZÄÖÜ„\"(–-])", absatz) if s]
+    return [s for s in pruefung._SATZ_ENDE.split(absatz) if s]
 
 
 _SEIT = re.compile(r"\b(?:seit|ab)\s+(?:(?:dem|\d{1,2}\.|[A-Za-zÄÖÜäöü]+)\s+){0,3}20\d\d\b", re.I)
@@ -338,6 +339,15 @@ PRUEFER_SYSTEM = ("Du bekommst eine nummerierte Liste von Wörtern. Sag zu jedem
                   "Keine Erklärung.")
 
 
+UMSCHREIBEN_DE = ("Schreib jeden nummerierten Satz in eigenen Worten neu: dieselbe Aussage, nichts dazu, nichts weg. Zahlen, Daten, Beträge und "
+                  "Namen bleiben genau gleich. Ändere Satzbau und Wörter so, dass nie mehr als 6 Wörter am Stück wie im Original stehen. Antworte nur "
+                  "mit einer Zeile je Satz: die Nummer, dann der neue Satz.")
+UMSCHREIBEN_EN = ("Rewrite each numbered sentence in your own words: same statement, nothing added, nothing left out. Keep numbers, dates, amounts "
+                  "and names exactly. Change the wording and sentence structure so that never more than 6 words in a row match the original. Answer "
+                  "only with one line per sentence: the number, then the new sentence.")
+WEISS_NICHT_EN = "I don't know that yet."
+
+
 def pruefer_auftrag(woerter: list[str]) -> str:
     return "Wörter:\n" + "\n".join(f"{i + 1}. {' '.join(w.split())}" for i, w in enumerate(woerter))
 
@@ -420,12 +430,9 @@ def brauchbar(text: str) -> bool:
     return tabelle or any(len(re.sub(r"^\s*[-–•*]\s+", "", z).split()) >= 3 for z in worte)
 
 
-WOERTLICH_WOERTER = 10
-WORTLAUT_FREI = ("seite", "ortswissen", "berichtigung", "dokument", "pass", "berechnet", "abgefragt")
-
-
-def _wortliste(text: str) -> list[str]:
-    return [w for w in re.findall(r"[0-9a-zäöüß]+", str(text or "").lower()) if not w.isdigit()]
+WOERTLICH_WOERTER = antwortspeicher_basis.WOERTLICH_WOERTER
+WORTLAUT_FREI = antwortspeicher_basis.FREI_ARTEN
+_wortliste = antwortspeicher_basis.wortliste
 
 
 def fremde_texte(quellen) -> list[str]:

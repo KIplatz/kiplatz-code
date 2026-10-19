@@ -22,11 +22,11 @@ REGELN_UMGANG = [
     ("leute", "Freundlich bleiben, auch beim Widersprechen",
      "Hinter jedem Namen sitzt ein Mensch. Kritisier die Sache, nie die Person. Keine Beleidigungen, kein Herabsetzen, kein Nachtreten. Wer keine Nachrichten von dir will, bekommt keine.",
      "Stay friendly, even when you disagree",
-     "There is a person behind every name. Criticise the idea, never the person. No insults, no putting people down. If someone does not want messages from you, they get none."),
+     "There is a person behind every name. Criticise the idea, never the person. No insults, no putting people down. If someone doesn't want messages from you, don't send them any."),
     ("herz", "Neue willkommen heißen",
      "Jeder hat einmal angefangen. Auf eine einfache Frage gibt es eine Antwort oder einen Hinweis, wo sie schon steht, nie Spott.",
      "Welcome newcomers",
-     "Everyone started somewhere. A simple question gets an answer or a pointer to where it is already answered, never mockery."),
+     "Everyone started somewhere. A simple question gets an answer or a pointer to where it has already been answered, never mockery."),
     ("pfeil", "Beim Thema bleiben",
      "Schreib in den passenden Bereich und schau kurz nach, ob es das Thema schon gibt. Für Zustimmung gibt es den Knopf „Danke“, ein „+1“ als eigener Beitrag braucht es nicht.",
      "Stay on topic",
@@ -34,7 +34,7 @@ REGELN_UMGANG = [
     ("lampe", "Ehrlich bleiben",
      "Schreib, was du weißt, und sag dazu, wenn du dir nicht sicher bist. Hat eine KI deinen Text geschrieben, steht das dabei. Gib dich nie als jemand anderer aus, auch nicht als jemand vom KIplatz-Team.",
      "Be honest",
-     "Write what you know and say so when you are not sure. If an AI wrote your text, say so. Never pretend to be someone else, including the KIplatz team."),
+     "Write what you know and say so when you're not sure. If an AI wrote your text, mention it. Never pretend to be someone else, including someone from the KIplatz team."),
     ("schloss", "Fremde Daten bleiben privat",
      "Keine Namen, Adressen, Telefonnummern, Fotos oder Nachrichten anderer Menschen ohne ihr Einverständnis, auch nicht zum Spaß. Das gilt genauso für Fragen an die KI.",
      "Other people's data stays private",
@@ -44,11 +44,11 @@ REGELN_NICHT = [
     ("schild", "Hass und NS-Wiederbetätigung",
      "Keine Hetze gegen Menschen wegen Herkunft, Religion, Geschlecht, sexueller Orientierung oder Behinderung. Keine NS-Wiederbetätigung, keine Verharmlosung des Holocaust.",
      "Hate and Nazi propaganda",
-     "No hate against people because of origin, religion, gender, sexual orientation or disability. No Nazi propaganda, no trivialising of the Holocaust."),
+     "No stirring up hatred against people because of their origin, religion, gender, sexual orientation or disability. No Nazi propaganda, no trivialising the Holocaust."),
     ("stopp", "Gewalt und Drohungen",
      "Keine Drohungen und keine Aufrufe zu Gewalt. Keine Anleitungen für Waffen, Sprengstoff oder Anschläge und nichts, das zur Selbstverletzung anleitet.",
      "Violence and threats",
-     "No threats and no calls for violence. No instructions for weapons, explosives or attacks, and nothing that guides people towards self-harm."),
+     "No threats and no calls for violence. No instructions for weapons, explosives or attacks, and nothing that shows people how to harm themselves."),
     ("auge", "Sexuelle Inhalte",
      "Keine Pornographie. Nichts Sexuelles mit Kindern oder Jugendlichen, in keiner Form.",
      "Sexual content",
@@ -70,11 +70,11 @@ REGELN_NICHT = [
     ("werkzeug", "Angriffe auf KIplatz",
      "Versuch nicht, Programm, Server oder fremde Konten zu knacken, zu überlasten oder auszutricksen, und füttere die KI nicht absichtlich mit falschem Wissen. Hast du eine Lücke gefunden, sag es uns, dafür danken wir dir.",
      "Attacks on KIplatz",
-     "Do not try to break into, overload or trick the program, the server or other people's accounts, and do not feed the AI false knowledge on purpose. Found a weakness? Tell us, and thank you."),
+     "Don't try to break into, overload or trick the program, the server or other people's accounts, and don't feed the AI false knowledge on purpose. Found a weakness? Tell us, and we'll thank you for it."),
     ("rechner", "Dein Konto gehört dir",
      "Gib dein Konto nicht weiter. Mehrere Konten darfst du haben, aber nicht, um eine Sperre zu umgehen oder mehr Stimmen zu bekommen. Mitmachen kann man ab 14 Jahren, jünger mit dem Okay der Eltern.",
      "Your account is yours",
-     "Do not share your account. You may have more than one, but not to get around a block or to gain more votes. You can join from age 14, younger with a parent's consent."),
+     "Don't share your account. You may have more than one, but not to get around a block or to gain more votes. You can join from the age of 14, or younger with your parents' OK."),
 ]
 FOLGEN = (
     "Je nach Schwere gibt es einen Hinweis, der Beitrag wird entfernt oder das Konto gesperrt. Bei Hetze, Gewaltaufrufen und Sexuellem mit Kindern sperren wir sofort und auf Dauer.",
@@ -82,7 +82,7 @@ FOLGEN = (
 )
 EINSPRUCH = (
     "Sperren oder löschen wir ein Konto, bekommt die Person den Grund per Mail. Wird nur ein Beitrag entfernt, nennen wir den Grund auf Nachfrage an melden@kiplatz.at. Widersprechen kannst du binnen 6 Monaten an dieselbe Adresse, dann prüft noch einmal ein Mensch.",
-    "If we block or delete an account, the person gets the reason by e-mail. If only a post is removed, we give the reason on request at melden@kiplatz.at. You can object within 6 months at the same address, and a person checks again.",
+    "If we block or delete an account, the person gets the reason by email. If only a post is removed, we'll tell you the reason if you ask at melden@kiplatz.at. You can appeal within 6 months at the same address, and a person will look at it again.",
 )
 
 WEICH_GRENZE = 3

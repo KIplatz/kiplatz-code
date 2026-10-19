@@ -79,6 +79,9 @@ foreach ($n in @("LIES-MICH.txt", "README.txt")) {
 $teile = @("LIES-MICH.txt", "README.txt", "python", "node-agent", "KIplatz.exe", "KIplatz._pth", "$pyTag.dll", "python3.dll", "vcruntime140.dll", "vcruntime140_1.dll") | ForEach-Object { Join-Path $arbeit $_ }
 Compress-Archive -Path $teile -DestinationPath $zip -CompressionLevel Optimal
 Compress-Archive -Path (Join-Path $arbeit "node-agent") -DestinationPath $quelle -CompressionLevel Optimal
+& cmd /c "python `"$(Join-Path $here 'helfer_paket.py')`" `"$(Join-Path $arbeit 'node-agent')`" `"$dist`""
+if ($LASTEXITCODE -ne 0) { throw "Helfer-Pakete für Linux und Mac fehlgeschlagen (siehe oben)." }
+$helfer = @("KIplatz-Helfer-linux-x64.tar.gz", "KIplatz-Helfer-macos-arm64.tar.gz") | ForEach-Object { Join-Path $dist $_ }
 foreach ($f in @($zip, $quelle)) {
     $h = (Get-FileHash $f -Algorithm SHA256).Hash.ToLower()
     [System.IO.File]::WriteAllText("$f.sha256", "$h  $(Split-Path $f -Leaf)`n")
@@ -109,6 +112,7 @@ function Unterschreiben($datei) {
 Unterschreiben $zip
 Write-Host "Unterschrift Programm-ZIP: OK"
 Unterschreiben $quelle
+foreach ($h in $helfer) { Unterschreiben $h }
 $bau = python -c "import sys; sys.path.insert(0, r'$here'); import app_core; print(app_core.APP_BUILD)"
 [System.IO.File]::WriteAllText((Join-Path $dist "bau.txt"), "$bau`n")
 $neuester = Join-Path $dist "neuester.txt"

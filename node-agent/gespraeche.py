@@ -61,7 +61,7 @@ class Gespraech:
     def to_json_dict(self) -> dict:
         return {"kennung": self.kennung, "titel": self.titel, "erstellt": self.erstellt, "geaendert": self.geaendert, "nachrichten": self.nachrichten,
                 "projekt": self.projekt, "archiviert": self.archiviert, "angeheftet": self.angeheftet, "skill": self.skill, "herkunft": self.herkunft,
-                "ordner": self.ordner, "ordner_name": Path(self.ordner).name if self.ordner else "", "farbe": self.farbe, "farbe": self.farbe,
+                "ordner": self.ordner, "ordner_name": Path(self.ordner).name if self.ordner else "", "farbe": self.farbe,
                 "anhaenge": [{k: v for k, v in a.items() if k != "text"} for a in self.anhaenge]}
 
     def to_datei_dict(self) -> dict:

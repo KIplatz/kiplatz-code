@@ -1,0 +1,100 @@
+KIplatz-Helfer: Lies mich
+=========================
+
+Mit dem Helfer arbeitet dein Linux-Rechner oder dein Mac für die
+Community mit. Ein Fenster hat er nicht. Er läuft still im
+Hintergrund, mit niedriger Priorität, und nur so viel, wie du erlaubst.
+
+Es gibt ihn für normale PCs (x64) und für Macs mit Apple-Chip (M1 und
+neuer). Mit eigener Grafikkarte und 16 GB Arbeitsspeicher beantwortet
+dein Gerät Fragen anderer Mitglieder, am Mac zählt der Apple-Chip als
+Grafik. Sonst erledigt es Hintergrundarbeit für das gemeinsame Wissen.
+
+
+So richtest du ihn ein
+----------------------
+Alles geht im Terminal. Du brauchst dein KIplatz-Konto, wie in der App
+(Google, GitHub oder E-Mail-Code).
+
+Linux:
+
+  mkdir -p ~/.local/share/kiplatz
+  tar -xzf KIplatz-Helfer-linux-x64.tar.gz -C ~/.local/share/kiplatz
+  ~/.local/share/kiplatz/kiplatz-helfer/kiplatz-helfer einrichten
+
+Mac:
+
+  mkdir -p ~/Library/kiplatz
+  tar -xzf KIplatz-Helfer-macos-arm64.tar.gz -C ~/Library/kiplatz
+  ~/Library/kiplatz/kiplatz-helfer/kiplatz-helfer einrichten
+
+Am Mac lade das Paket am besten im Terminal mit curl, dann prüft das
+System es nicht als Datei aus dem Browser nach.
+
+Prüfen, ob die Datei unverändert ist (vor dem Auspacken):
+
+  sha256sum -c KIplatz-Helfer-linux-x64.tar.gz.sha256        (Linux)
+  shasum -a 256 -c KIplatz-Helfer-macos-arm64.tar.gz.sha256   (Mac)
+
+Beim Einrichten zeigt er eine Adresse. Öffne sie im Browser, gern auch
+am Handy, melde dich mit deinem Konto an und bestätige „Einen neuen PC
+verbinden?“. Dann tritt er der Community bei, setzt seine Grenzen
+und startet ab dann nach jeder Anmeldung von selbst. Dafür trägt er sich
+als Dienst nur für deinen Benutzer ein (systemd oder launchd).
+Administratorrechte braucht er nicht.
+
+Beim ersten Start holt er die KI-Laufzeit und ein passendes KI-Modell
+von unserem Server, je nach Gerät 2 bis 10 GB. Jede Datei wird mit einer
+fest eingebauten Prüfsumme geprüft.
+
+
+Was du einstellen kannst
+------------------------
+Die Befehle liegen im Ordner des Helfers (siehe unten).
+
+  kiplatz-helfer status                     angemeldet, läuft er, Protokoll
+  kiplatz-helfer grenzen --cpu 25 --ram 4   höchstens 25 % des Prozessors
+                                            und 4 GB Arbeitsspeicher
+  kiplatz-helfer aus                        stoppen, Autostart aus
+  kiplatz-helfer an                         wieder einschalten
+
+Ohne Angabe nimmt er, was zu deinem Gerät passt: ein Viertel des
+Arbeitsspeichers und 25 bis 50 % des Prozessors.
+
+Rechner ohne Bildschirm: Damit er auch läuft, wenn
+niemand angemeldet ist, einmal „loginctl enable-linger“ ausführen.
+
+
+Was er tut und was nicht
+------------------------
+- Fragen der Community kommen ohne Namen an.
+- Er öffnet keine deiner Dateien, keine Kamera, kein Mikrofon.
+- Solange jemand an deinem Gerät arbeitet (unter Linux: dort angemeldet
+  ist), ruht seine Hintergrundarbeit. Fragen beantwortet er weiter.
+- Seine Schlüssel liegen im Schlüsselbund deines Systems. Gibt es keinen
+  (Linux ohne Bildschirm), in einer Datei, die nur du lesen darfst.
+- Updates kommen von selbst und sind digital unterschrieben. Ein Update
+  ohne gültige Unterschrift wird abgelehnt.
+
+
+Wo die Dateien liegen
+---------------------
+Linux: Programm in ~/.local/share/kiplatz/kiplatz-helfer,
+       Daten und Modelle in ~/.local/share/kiplatz/daten
+Mac:   Programm in ~/Library/kiplatz/kiplatz-helfer,
+       Daten und Modelle in ~/Library/Application Support/KIplatz/Daten
+
+
+Entfernen
+---------
+  kiplatz-helfer aus
+
+Danach die beiden Ordner oben löschen. Aus der Community nimmst du dein
+Gerät in der Liste deiner Geräte, in der App oder im Programm.
+
+
+Hilfe
+-----
+Website:      https://kiplatz.at
+Fragen:       support@kiplatz.at
+Datenschutz:  https://kiplatz.at/datenschutz/

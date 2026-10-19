@@ -34,6 +34,19 @@ def abbruch_bei(ereignis: threading.Event):
         yield
     finally:
         _ABBRUCH_FADEN.ev = vorher
+
+
+_ORIGINAL_FADEN = threading.local()
+ORIGINAL_HINWEIS = ("Die Person hat auf Englisch gefragt: „{0}“. Die Frage im Gespräch ist eine Übersetzung davon; wenn ein Wort dort etwas "
+                    "anderes heißt als im Original, gilt das Original. Antworte trotzdem auf Deutsch.")
+
+
+def original_setzen(text: str) -> None:
+    _ORIGINAL_FADEN.text = " ".join(str(text or "").split())[:400]
+
+
+def original() -> str:
+    return getattr(_ORIGINAL_FADEN, "text", "")
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable
@@ -52,10 +65,11 @@ MAX_LOG_TAIL = 4000
 
 
 from modell_katalog import (
-    BEWERTUNG, EMBEDDING, EMBEDDING_DIMENSION, HOEREN, LAUFZEIT, MODELL_REIHENFOLGE, MODELLE, Modell, Paket,
+    BEWERTUNG, EMBEDDING, EMBEDDING_DIMENSION, HOEREN, MODELL_REIHENFOLGE, MODELLE, Modell, Paket, laufzeit_hier,
 )
 
-SERVER_EXE = "llama-server.exe"
+LAUFZEIT = laufzeit_hier()
+SERVER_EXE = "llama-server.exe" if sys.platform == "win32" else "llama-server"
 
 TEMPERATUR = 0.05
 
@@ -120,7 +134,7 @@ WINDOWS_SPERRE_TEXT = ("Windows lässt die KI auf diesem Gerät gerade nicht sta
 _windows_sperre_bis = 0.0
 
 
-UNTERSCHRIFT_PRUEFEN = sys.platform == "win32"
+UNTERSCHRIFT_PRUEFEN = True
 _unterschrift_gemerkt: dict[tuple, bool] = {}
 
 
@@ -239,7 +253,11 @@ class KiOrdner:
     def laufzeit_da(self) -> bool:
         if not self.server_exe.is_file():
             return False
-        return not (LAUFZEIT.unterschrift and UNTERSCHRIFT_PRUEFEN) or unterschrift_gueltig(self.server_exe)
+        if not UNTERSCHRIFT_PRUEFEN:
+            return True
+        if sys.platform != "win32":
+            return laufzeit_wie_im_archiv(self.server_exe, self.downloads_dir / LAUFZEIT.datei, LAUFZEIT)
+        return not LAUFZEIT.unterschrift or unterschrift_gueltig(self.server_exe)
 
     def modell_pfad(self, modell: Modell) -> Path:
         return self.modelle_dir / modell.datei
@@ -371,7 +389,13 @@ def probe_pruefsumme_ok(pfad: Path, sha256: str) -> bool:
 Fortschritt = Callable[[int, int], None]
 
 
-_download_lock = threading.Lock()
+_download_locks: dict[str, threading.Lock] = {}
+_download_locks_riegel = threading.Lock()
+
+
+def _download_lock_fuer(ziel: Path) -> threading.Lock:
+    with _download_locks_riegel:
+        return _download_locks.setdefault(str(Path(ziel)), threading.Lock())
 
 
 WARTEN_TEXT = "Einen kurzen Moment bitte, unser Server ist gerade ausgelastet. Dein KIplatz wird gleich fertig eingerichtet."
@@ -394,7 +418,7 @@ def _herunterladen_von_quellen(paket: Paket, ziel: Path, *, fortschritt: Fortsch
     if not quellen or any(not q.startswith("https://") for q in quellen):
         raise KiError("KI_QUELLE", "nur verschlüsselte Quellen (https) sind erlaubt")
     url = quellen[0]
-    with _download_lock:
+    with _download_lock_fuer(ziel):
         if pruefsumme_ok(ziel, paket):
             return ziel
         anfang = time.monotonic()
@@ -607,9 +631,93 @@ def pruefsumme_ok(pfad: Path, paket: Paket) -> bool:
         return False
 
 
+def _tar_mitglieder(tar) -> dict[str, "object"]:
+    alle = {m.name: m for m in tar.getmembers()}
+    out = {}
+    for m in alle.values():
+        name = Path(m.name).name
+        if not name or name.startswith(".") or m.isdir():
+            continue
+        quelle = m
+        for _ in range(8):
+            if not (quelle.issym() or quelle.islnk()):
+                break
+            ziel = quelle.linkname if quelle.islnk() else str(Path(quelle.name).parent / quelle.linkname)
+            ziel = os.path.normpath(ziel).replace(os.sep, "/")
+            quelle = alle.get(ziel) or alle.get("./" + ziel)
+            if quelle is None:
+                break
+        if quelle is not None and quelle.isfile():
+            out[name] = quelle
+    return out
+
+
+_archiv_gemerkt: dict[tuple, bool] = {}
+
+
+def laufzeit_wie_im_archiv(exe: Path, archiv: Path, paket: Paket) -> bool:
+    import tarfile
+    ordner = exe.parent
+    try:
+        sa = archiv.stat()
+        stand = tuple(sorted((q.name, q.stat().st_size, q.stat().st_mtime_ns) for q in ordner.iterdir() if q.is_file()))
+    except OSError:
+        return False
+    schluessel = (str(ordner), stand, sa.st_size, sa.st_mtime_ns)
+    if schluessel in _archiv_gemerkt:
+        return _archiv_gemerkt[schluessel]
+    ok = False
+    if exe.is_file() and pruefsumme_ok(archiv, paket):
+        try:
+            with tarfile.open(archiv, "r:*") as tar:
+                mitglieder = _tar_mitglieder(tar)
+                ok = exe.name in mitglieder
+                for name, m in mitglieder.items():
+                    ziel = ordner / name
+                    if not ok:
+                        break
+                    if ziel.is_symlink() or not ziel.is_file() or ziel.stat().st_size != m.size:
+                        ok = False
+                        break
+                    h_archiv, h_datei = hashlib.sha256(), hashlib.sha256()
+                    with tar.extractfile(m) as f, open(ziel, "rb") as g:
+                        for chunk in iter(lambda: f.read(CHUNK), b""):
+                            h_archiv.update(chunk)
+                        for chunk in iter(lambda: g.read(CHUNK), b""):
+                            h_datei.update(chunk)
+                    ok = h_archiv.digest() == h_datei.digest()
+        except (tarfile.TarError, OSError):
+            ok = False
+    if len(_archiv_gemerkt) > 16:
+        _archiv_gemerkt.clear()
+    _archiv_gemerkt[schluessel] = ok
+    return ok
+
+
 def laufzeit_entpacken(zip_pfad: Path, ziel_dir: Path) -> Path:
     app_core.ensure_plain_directory(ziel_dir)
     root = ziel_dir.resolve()
+    if not zipfile.is_zipfile(zip_pfad):
+        import tarfile
+        try:
+            with tarfile.open(zip_pfad, "r:*") as tar:
+                for name, m in _tar_mitglieder(tar).items():
+                    target = root / name
+                    if target.parent != root:
+                        raise KiError("KI_LAUFZEIT", "Archiv enthält einen unerlaubten Pfad")
+                    neu = root / f".{name}.neu"
+                    with tar.extractfile(m) as src, open(neu, "wb") as dst:
+                        for chunk in iter(lambda: src.read(CHUNK), b""):
+                            dst.write(chunk)
+                    if os.name == "posix":
+                        os.chmod(neu, 0o755 if m.mode & 0o111 else 0o644)
+                    os.replace(neu, target)
+        except (tarfile.TarError, OSError) as exc:
+            raise KiError("KI_LAUFZEIT", f"Laufzeit konnte nicht entpackt werden ({exc.__class__.__name__})") from None
+        exe = root / SERVER_EXE
+        if not exe.is_file():
+            raise KiError("KI_LAUFZEIT", f"{SERVER_EXE} fehlt im Archiv")
+        return exe
     try:
         with zipfile.ZipFile(zip_pfad) as z:
             for info in z.infolist():
@@ -660,12 +768,20 @@ def geraete_parsen(text: str) -> tuple[Geraet, ...]:
     return tuple(out)
 
 
+def kind_umgebung(exe: Path, extra: dict | None = None) -> dict:
+    env = {**os.environ, **(extra or {})}
+    if sys.platform != "win32":
+        name = "DYLD_LIBRARY_PATH" if sys.platform == "darwin" else "LD_LIBRARY_PATH"
+        env[name] = os.pathsep.join(p for p in (str(Path(exe).parent), env.get(name, "")) if p)
+    return env
+
+
 def geraete_ermitteln(server_exe: Path, *, runner=subprocess.run) -> tuple[Geraet, ...]:
     _windows_sperre_pruefen()
     _ohne_windows_fenster()
     try:
         res = runner([str(server_exe), "--list-devices"], capture_output=True, text=True, timeout=60,
-                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), env=kind_umgebung(server_exe))
     except (OSError, subprocess.SubprocessError) as exc:
         if isinstance(exc, OSError):
             _windows_sperre_merken(exc)
@@ -914,6 +1030,13 @@ class _Wache:
                 continue
             try:
                 sock = self._antwort.fp.raw._sock
+            except AttributeError:
+                return
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except (OSError, ValueError):
+                pass
+            try:
                 socket.close(sock.detach())
             except (AttributeError, OSError, ValueError):
                 pass
@@ -1074,7 +1197,7 @@ class KiServer:
         _log_kuerzen(self.ordner.log_path)
         log = open(self.ordner.log_path, "ab")
         try:
-            self.proc = self._popen(args, stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env={**os.environ, "LLAMA_API_KEY": key},
+            self.proc = self._popen(args, stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=kind_umgebung(exe, {"LLAMA_API_KEY": key}),
                                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), cwd=str(exe.parent))
         except OSError as exc:
             log.close()
@@ -1266,6 +1389,9 @@ class KiServer:
             raise KiError("KI_AUS", "die KI ist gerade nicht eingeschaltet")
         self.zuletzt_benutzt = time.monotonic()
         basis = system if system is not None else (SYSTEMTEXT_KURZ if kurz else SYSTEMTEXT)
+        original = getattr(_ORIGINAL_FADEN, "text", "") if system is None else ""
+        if original:
+            basis = basis + chr(10) + chr(10) + ORIGINAL_HINWEIS.format(original)
         zusatz, nachrichten, gekuerzt = self._einpassen(basis, zusatz, list(nachrichten), max_tokens)
         if abbruch is None:
             abbruch = getattr(_ABBRUCH_FADEN, "ev", None)

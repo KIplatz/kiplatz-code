@@ -28,8 +28,18 @@ def _lebt(pid: int) -> bool:
         k32.CloseHandle(h)
 
 
-@pytest.mark.skipif(os.name != "nt", reason="job objects are Windows")
 def test_child_ends_when_the_program_is_killed_hard(tmp_path):
+    if os.name != "nt":
+        import plattform
+        kind = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+        try:
+            assert ki_laufzeit.an_programm_binden(kind) is False
+        finally:
+            kind.kill()
+            kind.wait(timeout=10)
+        assert "KillMode=control-group" in plattform.systemd_einheit(tmp_path)
+        assert "AbandonProcessGroup" not in plattform.launchd_plist(tmp_path, tmp_path / "log")
+        return
     eltern = tmp_path / "eltern.py"
     eltern.write_text(textwrap.dedent(f"""
         import subprocess, sys, time

@@ -41,9 +41,13 @@ def test_starter_is_the_signed_pythonw_copy_with_its_dlls_and_pth(tmp_path):
     assert 'LAUNCHER_NAMES = ("kiplatz.exe", "community ai.exe")' in text and "os._exit(0)" in text and "app_web.py" in text and "Zone.Identifier" in text
 
 
-@pytest.mark.skipif(sys.platform != "win32", reason="alternate data streams exist on Windows only")
 def test_mark_of_the_web_is_removed_from_our_own_folder_and_does_not_travel_with_the_copy(tmp_path):
     root = _portable(tmp_path / "Downloads" / "CommunityAI")
+    if sys.platform != "win32":
+        fremd = root / "notiz.txt:Zone.Identifier"
+        fremd.write_text("meins", encoding="ascii")
+        assert app_install.internet_markierung_entfernen(root) == 0 and fremd.read_text(encoding="ascii") == "meins"
+        return
     for p in root.rglob("*"):
         if p.is_file():
             Path(str(p) + ":Zone.Identifier").write_text("[ZoneTransfer]\r\nZoneId=3\r\n", encoding="ascii")

@@ -40,6 +40,7 @@ NAMEN_WARTEN_S = 2.0
 VEKTOR_ZUERST_JE_ARTIKEL = 3
 VEKTOR_BATCH = 8
 VEKTOR_FENSTER = 20_000
+HASH_SCHRITT = 5_000
 HASH_STAPEL = 20_000
 _INT8_MAGIE = b"KIq8"
 GEMEINSCHAFT_ABSTAND_S = 3600
@@ -204,7 +205,15 @@ class Datenbank:
         self._abbrechen = None
         self._c.set_progress_handler(self._halt, 20_000)
         self._leser: Datenbank | None = None
+        self._leser_anlegen = threading.Lock()
         self._such_frei = threading.Lock()
+
+    def leser(self) -> "Datenbank":
+        if self._leser is None:
+            with self._leser_anlegen:
+                if self._leser is None:
+                    self._leser = Datenbank(self.pfad)
+        return self._leser
 
     def schliessen(self) -> None:
         if self._leser is not None:
@@ -301,20 +310,21 @@ class Datenbank:
         n = 0
         with self._lock:
             self._c.execute("CREATE TABLE IF NOT EXISTS abschnitt_hash (id INTEGER PRIMARY KEY, h BLOB NOT NULL)")
-            while True:
-                grenze = hoechstens - n if hoechstens is not None else 5000
-                if grenze <= 0:
-                    break
+        while True:
+            grenze = hoechstens - n if hoechstens is not None else HASH_SCHRITT
+            if grenze <= 0:
+                break
+            with self._lock:
                 rows = self._c.execute("SELECT s.id, a.titel, s.text FROM abschnitt s JOIN artikel a ON a.id = s.artikel "
-                                       "WHERE s.id > (SELECT coalesce(max(id), 0) FROM abschnitt_hash) ORDER BY s.id LIMIT ?", (min(grenze, 5000),)).fetchall()
+                                       "WHERE s.id > (SELECT coalesce(max(id), 0) FROM abschnitt_hash) ORDER BY s.id LIMIT ?", (min(grenze, HASH_SCHRITT),)).fetchall()
                 if not rows:
                     break
                 self._c.execute("BEGIN")
                 self._c.executemany("INSERT OR REPLACE INTO abschnitt_hash VALUES (?, ?)",
                                     [(sid, _hash(t, zlib.decompress(b).decode("utf-8"))) for sid, t, b in rows])
                 self._c.execute("COMMIT")
-                n += len(rows)
-            fertig = self.hashes_vollstaendig()
+            n += len(rows)
+        fertig = self.hashes_vollstaendig()
         if fertig:
             self.hash_index_anlegen()
         return n
@@ -611,10 +621,7 @@ class Datenbank:
 
         def lauf() -> None:
             try:
-                with self._lock:
-                    if self._leser is None:
-                        self._leser = Datenbank(self.pfad)
-                    leser = self._leser
+                leser = self.leser()
                 ergebnis["ok"] = leser._suchen_begrenzt(frage, vektor, n, ende, abbrechen)
             except BaseException as exc:
                 ergebnis["fehler"] = exc
@@ -1387,11 +1394,11 @@ class WikiKopie:
         return out
 
     def unbekannte_namen(self, text: str) -> list[str]:
-        db = self._db
+        db = self._leser_der_kopie()
         if db is None or not self.bereit():
             return []
         if not db._lock.acquire(timeout=NAMEN_WARTEN_S):
-            self._log("HINWEIS wikipedia unbekannte namen ausgelassen: die Kopie ist gerade belegt")
+            self._log("HINWEIS wikipedia unbekannte namen ausgelassen: eine Suche in der Kopie läuft noch")
             return []
         try:
             return db.unbekannte_namen(text)
@@ -1402,7 +1409,7 @@ class WikiKopie:
             db._lock.release()
 
     def namen_bekannt(self, namen: list[str]) -> set[str]:
-        db = self._db
+        db = self._leser_der_kopie()
         if db is None or not self.bereit() or not namen:
             return set()
         if not db._lock.acquire(timeout=NAMEN_WARTEN_S):
@@ -1416,14 +1423,14 @@ class WikiKopie:
             db._lock.release()
 
     def einleitung(self, frage: str, hoechstens: int = 3) -> list[wissen.Treffer]:
-        db = self._db
+        db = self._leser_der_kopie()
         if db is None:
             return []
         ausgabe = self.ausgabe()
         datum = f"{ausgabe[:4]}-{ausgabe[4:6]}-{ausgabe[6:8]}T00:00:00Z" if len(ausgabe) == 8 else _jetzt()
         out: list[wissen.Treffer] = []
         if not db._lock.acquire(timeout=NAMEN_WARTEN_S):
-            self._log("HINWEIS wikipedia einleitung ausgelassen: die Kopie ist gerade belegt")
+            self._log("HINWEIS wikipedia einleitung ausgelassen: eine Suche in der Kopie läuft noch")
             return []
         try:
             ortsfrage = bool(_ORTSFRAGE.search(frage or ""))
@@ -1463,11 +1470,30 @@ class WikiKopie:
             db._lock.release()
         return out
 
+    def _leser_der_kopie(self) -> "Datenbank | None":
+        db = self._db
+        if db is None:
+            return None
+        try:
+            return db.leser()
+        except sqlite3.Error as exc:
+            self._log(f"ABGELEHNT wikipedia leser: {type(exc).__name__}")
+            return None
+
     def zustand(self) -> dict:
         st = self._stand()
         z = self._zahlen_zeigen()
         return {"phase": self.phase, "meldung": self.meldung, "ausgabe": st.get("fertig_ausgabe", ""), "bau": st.get("bau_ausgabe", ""),
                 "belegt_mb": self.belegt_mb(), **z, "text": self.text_de(st, z)}
+
+    def belegt(self) -> bool:
+        db = self._db
+        if db is None:
+            return False
+        if not db._lock.acquire(timeout=NAMEN_WARTEN_S):
+            return True
+        db._lock.release()
+        return False
 
     def text_de(self, st: dict | None = None, z: dict | None = None) -> str:
         st = st if st is not None else self._stand()

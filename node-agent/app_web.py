@@ -82,12 +82,16 @@ import community
 import gemeinschaft
 import wortindex
 KONTO_ISSUER = "https://werkstatt.kiplatz.at"
+PC_ART = "Windows-PC" if sys.platform == "win32" else "Mac" if sys.platform == "darwin" else "Linux-PC"
+BEITRITT_BLICK_S = 3.0
+BEITRITT_FRIST_S = 600.0
 import pruefung
 import selbstauskunft
 import woerterbuch_at
 import bezug
 import schriftstueck
 import osm_orte
+import quellen_stand
 import schnittstelle
 import sicher_schreiben
 import rechenarbeit
@@ -605,6 +609,13 @@ class KiSteuerung:
 
 
 def anmelde_sicherung(base_dir: Path) -> Path | None:
+    if sys.platform != "win32":
+        import plattform
+        try:
+            helfer = Path(base_dir).resolve() == plattform.daten_ordner().resolve()
+        except OSError:
+            helfer = False
+        return plattform.sicherungs_ordner() if helfer and not os.environ.get("PYTEST_CURRENT_TEST") else None
     lokal = os.environ.get("LOCALAPPDATA")
     try:
         normal = Path(base_dir).resolve() in {app_core.default_base_dir(p).resolve() for p in app_core.Profile}
@@ -668,6 +679,7 @@ class Api:
         self._staerkste: tuple[float, float] | None = None
         self._ki_von_hand_aus = False
         self._nochmal_vorige: dict[str, str] = {}
+        self._beitritt: dict | None = None
         self._konto_anmeldung: konto_basis.Anmeldung | None = None
         self._konto_qr = ""
         self._letzter_stand: dict | None = None
@@ -730,11 +742,39 @@ class Api:
         self._gedaechtnis = gedaechtnis.Gedaechtnis(core.base_dir)
         self.prep_error: str | None = None
         self.start_meldung = ""
+        self._stopp = threading.Event()
         self.schliessen_angefordert = False
         self.versteckt = False
         self.abbruch_gewuenscht = False
         self._community_frage: str | None = None
         self.spielwiese =self._community.adresse.rstrip("/") == SPIELWIESE_ADRESSE
+
+    @property
+    def schliessen_angefordert(self) -> bool:
+        return self._stopp.is_set()
+
+    @schliessen_angefordert.setter
+    def schliessen_angefordert(self, an: bool) -> None:
+        if an:
+            self._stopp.set()
+        else:
+            self._stopp.clear()
+
+    def herunterfahren(self) -> None:
+        self.schliessen_angefordert = True
+        for teil, name in (("_sprechen", "beenden"),
+                           ("_schnittstelle", "stop"), ("_dienst", "stop"),
+                           ("_warmhalter", "stop"),
+                           ("_rechen", "stop"),
+                           ("_bedeutung", "ausschalten"), ("_bewertung", "ausschalten"),
+                           ("_ki", "ausschalten")):
+            schritt = getattr(getattr(self, teil, None), name, None)
+            if schritt is None:
+                continue
+            try:
+                schritt()
+            except Exception as exc:
+                _log(self._core, f"FEHLER herunterfahren {teil}.{name}: {type(exc).__name__}")
 
 
     def _guarded(self, name: str, action, ok_text: str = "") -> dict:
@@ -1078,6 +1118,11 @@ class Api:
                 auftrag += SUCHWORT_ANDERS.format(bisher="; ".join(f"„{b}“" for b in bisher)) + chr(10) + chr(10)
             if entscheiden:
                 auftrag += SUCHWORT_ENTSCHEIDEN + chr(10) + chr(10)
+            if such_sprache(frage) == "en":
+                auftrag += SUCHWORT_ENGLISCH + chr(10) + chr(10)
+            original = ki_laufzeit.original()
+            if original:
+                auftrag += f"Die Person hat auf Englisch gefragt: „{original}“." + chr(10) + chr(10)
             try:
                 a = self._ki.server.frage([{"role": "user", "content": wissen.zeit_zeile() + chr(10) + auftrag + "Suchanfragen für die letzte Frage:"}],
                                          system=SUCHWORT_SYSTEM, max_tokens=48, temperature=0.0)
@@ -1099,21 +1144,27 @@ class Api:
             return None
         if sache:
             regel = suchwoerter_ordnen([sache if len(sache.split()) <= 8 else (nachschauen.suchbegriffe_regel(sache, "") or sache)], frage, "") or [sache]
+        elif such_sprache(frage) == "en":
+            original = ki_laufzeit.original()
+            regel = suchwoerter_ordnen([nachschauen.suchbegriffe_regel(original, "") or original], frage, frueher) or [original]
         else:
             regel = suchwoerter_ordnen([nachschauen.suchbegriffe_regel(frage, frueher) or frage], frage, frueher) or [frage]
         if bisher:
             r = region.erkennen(frage)
-            anders = [f"{q} {r.land_name if r else ''} aktuell".replace("  ", " ").strip() for q in regel]
+            jetzt_wort = "latest" if such_sprache(frage) == "en" else "aktuell"
+            anders = [f"{q} {r.land_name if r else ''} {jetzt_wort}".replace("  ", " ").strip() for q in regel]
             return [q for q in anders if q.lower() not in {b.lower() for b in bisher}] or None
         return regel
 
     def _nachschauen_vorab(self, frage: str, treffer: list[wissen.Treffer], nachrichten: list[dict] | None, *, frisch: bool = True):
         fn, lauf, mess = getattr(_SCHRITT, "fn", None), getattr(_SUCHLAUF, "stand", None), ki_laufzeit.messung_liste()
         eigen = getattr(_EIGEN, "an", True)
+        original = ki_laufzeit.original()
         erg: dict = {}
 
         def suchen() -> None:
             _SCHRITT.fn, _SUCHLAUF.stand, _EIGEN.an = fn, lauf, eigen
+            ki_laufzeit.original_setzen(original)
             ki_laufzeit.messung_teilen(mess)
             try:
                 erg["r"] = self._nachschauen(frage, treffer, frisch=True, nachrichten=nachrichten) if frisch else \
@@ -1138,13 +1189,14 @@ class Api:
         if lauf is None or lauf["runde"] or lauf["gesucht"] or "nebenher" in lauf or not hasattr(self._nachschauer, "suche_runde"):
             return
         anfragen = nachschauen.anfragen_aufteilen(self._suchwoerter(nachrichten, frage, ohne_modell=True) or [frage], frage)
-        r = region.erkennen(frage)
         richtung = nachschauen.richtung(frage)
         erg: dict = {}
 
+        sprache = such_sprache(frage)
+
         def suchen() -> None:
             try:
-                erg["r"] = self._nachschauer.suche_runde(anfragen, frage, sprache=r.sprache if r else "", zeit="month" if richtung == "letzt" else "",
+                erg["r"] = self._nachschauer.suche_runde(anfragen, frage, sprache=sprache, zeit="month" if richtung == "letzt" else "",
                                                           ausser=frozenset(), ziel=zeitziel(frage))
             except BaseException as exc:
                 erg["e"] = exc
@@ -1284,7 +1336,7 @@ class Api:
             self._schritt(f"sucht im Internet nach „{''.join(anfragen)}“ und liest die besten Seiten …")
         try:
             ergebnisse, gelesen, woher = neben["holen"]() if neben is not None else self._nachschauer.suche_runde(
-                anfragen, frage, sprache=r.sprache if r else "", zeit="month" if richtung == "letzt" else "",
+                anfragen, frage, sprache=such_sprache(frage), zeit="month" if richtung == "letzt" else "",
                 ausser=frozenset(lauf["gelesen"]) if lauf else frozenset(), ziel=zeitziel(frage))
         except app_core.AppError as exc:
             _log(self._core, f"ABGELEHNT nachschauen suche: {exc.code}: {exc.detail}")
@@ -2033,6 +2085,7 @@ class Api:
         lauf_vorher = getattr(_SUCHLAUF, "stand", None)
         _SCHRITT.fn = schritt_melden
         _SUCHLAUF.stand = {"runde": 0, "gesucht": [], "gelesen": set()}
+        _FREMD.texte = []
         _FACH.wert = wissen.fachgebiete_pruefen(fachgebiete)
         privat: bool | str = False
         daheim = ""
@@ -2103,6 +2156,8 @@ class Api:
                     englisch = antwortsprache.frage_auf_deutsch(self._ki.server.frage, nachrichten)
                 except Exception as exc:
                     _log(self._core, f"FEHLER frage_auf_deutsch: {type(exc).__name__}")
+                if englisch:
+                    ki_laufzeit.original_setzen(antwortsprache.letzte_frage(nachrichten))
             text, schein = self._antwort_fuer_mitglied_ohne_schritt(englisch or nachrichten, auszuege, fuer, frisch=frisch,
                                                                     teil_melden=None if englisch else teil_melden, skill=skill, privat=privat)
             if en_frage and ab0.antwort:
@@ -2111,6 +2166,7 @@ class Api:
                 self._schritt("schreibt die Antwort auf Englisch …")
                 text, schein = antwortsprache.antwort_uebersetzen(self._ki.server.frage, text, schein, teil_melden, log=lambda z: _log(self._core, z),
                                                                   frage=antwortsprache.letzte_frage(nachrichten))
+                text, schein = self.eigene_worte_englisch(text, schein)
             if daheim:
                 schein = {**schein, "zuhause": daheim}
                 if daheim == "mit_unterlagen":
@@ -2118,6 +2174,7 @@ class Api:
             return text, schein
         finally:
             _SCHRITT.fn = vorher
+            ki_laufzeit.original_setzen("")
             _SUCHLAUF.stand = lauf_vorher
             _NETZ.an = False
             _FENSTERFRAGE.an = False
@@ -2353,6 +2410,35 @@ class Api:
             return belege.urteil_lesen(a.text, len(woerter))
         return pruefen
 
+    def _umschreiber(self):
+        if self._ki.quelle() != "lokal" or not self._ki.bereit():
+            return None
+
+        def umschreiben(saetze: list[str], englisch: bool) -> dict[int, str]:
+            self._schritt("schreibt übernommene Sätze in eigenen Worten …")
+            auftrag = "\n".join(f"{i + 1}. {' '.join(s.split())}" for i, s in enumerate(saetze))
+            a = self._ki.server.frage([{"role": "user", "content": (belege.UMSCHREIBEN_EN if englisch else belege.UMSCHREIBEN_DE) + "\n\n" + auftrag}],
+                                      max_tokens=80 * len(saetze) + 32, temperature=0.3, art="eigen")
+            return umschreibung_lesen(a.text, len(saetze))
+        return umschreiben
+
+    def eigene_worte_englisch(self, text: str, schein: dict) -> tuple[str, dict]:
+        neu, notizen, ersetzt = eigene_worte(text, list(getattr(_FREMD, "texte", None) or []), self._umschreiber(), englisch=True)
+        if neu == text:
+            return text, schein
+        schein = dict(schein)
+        schein["belege"] = list(schein.get("belege") or []) + notizen
+        pr = schein.get("pruefung") if isinstance(schein.get("pruefung"), dict) else None
+        if pr and isinstance(pr.get("saetze"), list):
+            saetze = []
+            for s in pr["saetze"]:
+                t = ersetzt.get(str(s.get("text", "")), str(s.get("text", ""))) if isinstance(s, dict) else ""
+                if t and t in neu:
+                    saetze.append({**s, "text": t})
+            schein["pruefung"] = {**pr, "saetze": saetze}
+        _log(self._core, "INFO belege englisch: " + " ".join(notizen))
+        return neu, schein
+
     def _belege_nachher(self, text: str, frage: str, zusatz: str, quellen: list[dict], lieferschein: dict, nochmal, *, schreiben: bool = False,
                         ampel: bool = True) -> str:
         def neu(extra: str) -> str:
@@ -2364,8 +2450,10 @@ class Api:
             self._schritt("lässt das Modell zweifelhafte Sätze noch einmal prüfen …")
             return pruefer(z, saetze)
         bekannt = getattr(self._wiki, "namen_bekannt", None)
+        _FREMD.texte = belege.fremde_texte(quellen)
         neu_text, notizen = belege_anwenden(text, frage, zusatz, quellen, nochmal=neu if nochmal is not None else None,
-                                            pruefer=pruefer_mit_schritt if pruefer is not None else None, schreiben=schreiben, bekannt=bekannt)
+                                            pruefer=pruefer_mit_schritt if pruefer is not None else None, schreiben=schreiben, bekannt=bekannt,
+                                            umschreiben=self._umschreiber() if nochmal is not None else None)
         if notizen:
             _log(self._core, "INFO belege: " + " ".join(notizen))
             lieferschein["belege"] = notizen
@@ -2571,6 +2659,71 @@ class Api:
             return {"geraet": {"kennung": d["kennung"], "name": d["name"], "seit": d["seit"]}, "fragt_community": self.fragt_community()}
         return self._guarded("community_beitreten", go, "Willkommen. Dieses Gerät gehört jetzt zur Community.")
 
+
+    def community_beitreten_konto(self, browser: bool = True) -> dict:
+        def go():
+            if self._community.geraet() is not None:
+                raise app_core.AppError("KONTO_SCHON", "dieses Gerät gehört schon zur Community")
+            lauf = self._beitritt
+            if lauf is not None and lauf["laeuft"]:
+                return self._beitritt_stand()
+            d = self._community.konto_beitritt_start(PC_ART, self._geraet_name)
+            if not d["adresse"].startswith(KONTO_ISSUER.rstrip("/") + "/"):
+                raise app_core.AppError("KONTO_ISSUER", f"die Anmeldestelle {d['adresse'][:60]} ist nicht die Werkstatt von KIplatz; abgebrochen")
+            self._beitritt = {"laeuft": True, "fertig": False, "fehler": "", "adresse": d["adresse"], "konto": ""}
+            threading.Thread(target=self._beitritt_abholen, args=(d["ticket"], self._beitritt), name="kiplatz-beitritt-konto", daemon=True).start()
+            try:
+                if browser:
+                    webbrowser.open(d["adresse"])
+            except Exception as exc:
+                _log(self._core, f"INFO browser nicht geöffnet: {type(exc).__name__}")
+            return self._beitritt_stand()
+        return self._guarded("community_beitreten_konto", go)
+
+    def _beitritt_stand(self) -> dict:
+        lauf = self._beitritt or {"laeuft": False, "fertig": False, "fehler": "", "adresse": "", "konto": ""}
+        return {**lauf, "adresse": lauf["adresse"] if lauf["laeuft"] else "", "fragt_community": self.fragt_community()}
+
+    def community_beitreten_konto_stand(self) -> dict:
+        return self._guarded("community_beitreten_konto_stand", self._beitritt_stand)
+
+    def community_beitreten_konto_abbrechen(self) -> dict:
+        def go():
+            if self._beitritt is not None and self._beitritt["laeuft"]:
+                self._beitritt.update(laeuft=False, fehler="")
+            return self._beitritt_stand()
+        return self._guarded("community_beitreten_konto_abbrechen", go)
+
+    def _beitritt_abholen(self, ticket: str, lauf: dict) -> None:
+        ende = time.monotonic() + BEITRITT_FRIST_S
+        while lauf["laeuft"] and not self._stopp.wait(BEITRITT_BLICK_S):
+            if not lauf["laeuft"]:
+                return
+            if time.monotonic() > ende:
+                lauf.update(laeuft=False, fehler="Die Anmeldung hat zu lange gedauert. Bitte noch einmal.")
+                return
+            try:
+                d = self._community.konto_beitritt_abholen(ticket)
+            except app_core.AppError as exc:
+                if exc.code in ("COMMUNITY_LANGSAM", "COMMUNITY_UNERREICHBAR"):
+                    continue
+                _log(self._core, f"ABGELEHNT community_beitreten_konto: {exc.code}: {exc.detail}")
+                lauf.update(laeuft=False, fehler="Abgebrochen oder abgelaufen. Bitte noch einmal." if exc.code == "COMMUNITY_KONTO_ABGELAUFEN"
+                            else menschlich(exc.code, exc.detail))
+                return
+            except Exception as exc:
+                _write_error_report(self._core, exc)
+                _log(self._core, f"FEHLER community_beitreten_konto: {type(exc).__name__}")
+                lauf.update(laeuft=False, fehler="Da ist etwas schiefgegangen. Das Programm hat es notiert.")
+                return
+            if d is None:
+                continue
+            self._ki.einstellung_setzen(konto={"name": d["konto"] or d["name"], "sub": ""})
+            self._community_stand = None
+            lauf.update(laeuft=False, fertig=True, konto=d["konto"] or d["name"])
+            _log(self._core, "OK community_beitreten_konto")
+            return
+
     def community_meine_daten(self) -> dict:
         return self._guarded("community_meine_daten", lambda: self._community.meine_daten())
 
@@ -2667,6 +2820,7 @@ class Api:
         if not self.spielwiese:
             self._wiki.start()
             self._osm.start()
+        self._quellen_melden_im_hintergrund()
         if not selbst_einrichten:
             return
         app_install.alt_aufraeumen(self._install_dir)
@@ -3016,6 +3170,46 @@ class Api:
         return self._guarded("speicher_stand", go)
 
 
+    def _quellen_sammeln(self) -> dict:
+        suche = None
+        if self._community.geraet() is not None:
+            try:
+                suche = self._community.suche_stand()
+            except Exception:
+                suche = None
+        return quellen_stand.sammeln(wiki=self._wiki, osm=self._osm, ki=self._ki, bedeutung=self._bedeutung, suche=suche)
+
+    def quellen_stand(self) -> dict:
+        def go():
+            if not self._community.ist_admin():
+                raise app_core.AppError("NUR_ADMIN", "nur für den Admin")
+            q = self._quellen_sammeln()
+            d = {"quellen": q, "zeilen": quellen_stand.zeilen(q), "geraete": None, "still": []}
+            try:
+                vom_server = self._community._anfrage("/quellen-stand", mit_schluessel=True)
+                d["geraete"] = [{"kennung": k, **{x: v.get(x) for x in ("name", "admin", "zeit")}, "kurz": quellen_stand.kurz(v.get("quellen") or {})}
+                                for k, v in (vom_server.get("geraete") or {}).items() if isinstance(v, dict)]
+                d["still"] = [s for s in vom_server.get("still") or [] if isinstance(s, dict)]
+            except app_core.AppError as exc:
+                _log(self._core, f"ABGELEHNT quellen_stand: {exc.code}: {exc.detail}")
+            return d
+        return self._guarded("quellen_stand", go)
+
+    def _quellen_melden_im_hintergrund(self) -> None:
+        def lauf():
+            gemeldet_fehler = 0.0
+            while not self._stopp.wait(quellen_stand.MELDEN_ABSTAND_S):
+                if self._community.geraet() is None:
+                    continue
+                try:
+                    self._community.quellen_melden(self._quellen_sammeln())
+                except Exception as exc:
+                    if time.monotonic() - gemeldet_fehler > 3600:
+                        gemeldet_fehler = time.monotonic()
+                        _log(self._core, f"ABGELEHNT quellen melden: {getattr(exc, 'detail', None) or type(exc).__name__}")
+        threading.Thread(target=lauf, name="quellen-melden", daemon=True).start()
+
+
     def ki_zustand(self) -> dict:
         return self._guarded("ki_zustand", lambda: {**self._ki.zustand(), "bedeutung": self._bedeutung.zustand(), "bewertung": self._bewertung.zustand()})
 
@@ -3331,7 +3525,7 @@ class Api:
                 raise app_core.AppError("VORLESEN_LEER", "da ist nichts zum Vorlesen")
             if not vorlesen.moeglich():
                 raise app_core.AppError("VORLESEN_FEHLT", "Windows hat auf diesem Gerät keine Sprachausgabe; unter Einstellungen → Zeit und Sprache → Sprache lässt sich eine deutsche Stimme nachladen")
-            return {"stimme": vorlesen.sprechen(t)}
+            return {"stimme": vorlesen.sprechen(t, antwortsprache.frage_sprache(t))}
         return self._guarded("vorlesen", go)
 
     def vorlesen_stopp(self) -> dict:
@@ -3463,11 +3657,11 @@ class Api:
         return self._guarded("meine_ki_entfernen", go, "„Meine KI“ ist zurückgesetzt. KIplatz antwortet wieder wie für alle.")
 
     def skill_vorlagen(self) -> dict:
-        return self._guarded("skill_vorlagen", lambda: {"vorlagen": [v.kurz() for v in skills.vorlagen()], "meine": [b["name"] for b in self._kiste.liste()]})
+        return self._guarded("skill_vorlagen", lambda: {"vorlagen": [v.kurz() for v in skills.vorlagen(community.SPRACHE)], "meine": [b["name"] for b in self._kiste.liste()]})
 
     def skill_vorlage_uebernehmen(self, name: str) -> dict:
         def go():
-            v = next((v for v in skills.vorlagen() if v.name == str(name)), None)
+            v = next((v for v in skills.vorlagen(community.SPRACHE) + skills.vorlagen() if v.name == str(name)), None)
             if v is None:
                 raise app_core.AppError("SKILL_VORLAGE", "diese Vorlage gibt es nicht")
             b = self._kiste.speichern(skills.Skill(v.name, v.beschreibung, v.text, quelle="vorlage"))
@@ -3506,16 +3700,17 @@ class Api:
             return {"adresse": a}
         return self._guarded("link_oeffnen", go)
 
-    def _vorlesen_still(self, text: str) -> None:
+    def _vorlesen_still(self, text: str, sprache: str = "de") -> None:
         try:
-            vorlesen.sprechen(text)
+            vorlesen.sprechen(text, sprache)
         except Exception as exc:
             _log(self._core, f"INFO morgenbericht vorlesen: {type(exc).__name__}")
 
     def _morgenbericht_erstellen(self) -> dict:
         s = self.morgenbericht_stand()
         jetzt = datetime.now()
-        text, fehler = morgenbericht.erstellen(self._nachschauer, ort=s["ort"], jetzt=jetzt, land=s.get("land") or "at")
+        sprache = "en" if community.SPRACHE == "en" else "de"
+        text, fehler = morgenbericht.erstellen(self._nachschauer, ort=s["ort"], jetzt=jetzt, land=s.get("land") or "at", sprache=sprache)
         e = self._ki.einstellung()
         alt = str(e.get("morgen_gespraech") or "")
         if alt and str(e.get("morgen_zuletzt") or "") == jetzt.strftime("%Y-%m-%d"):
@@ -3530,11 +3725,12 @@ class Api:
               "quellen_liste": morgenbericht.links(text), "gemacht": "Morgenbericht", "erfunden": "nichts, nur nachgeschaut", "pruefung": pruefung.pruefen("", []).kurz(),
               "guthaben_vorher": self._kontobuch.stand().guthaben}
         g = self._ablage.anhaengen(g, "assistant", text, lieferschein=ls, intern=True)
-        g = self._ablage.umbenennen(g.kennung, f"Morgenbericht {jetzt.strftime('%d.%m.')}")
+        g = self._ablage.umbenennen(g.kennung, f"Morning briefing {jetzt.day} {morgenbericht.MONATE_EN[jetzt.month - 1][:3]}" if sprache == "en"
+                                    else f"Morgenbericht {jetzt.strftime('%d.%m.')}")
         self._ki.einstellung_setzen(morgen_zuletzt=jetzt.strftime("%Y-%m-%d"), morgen_gespraech=g.kennung)
         _log(self._core, "OK morgenbericht" + (f" ({'; '.join(fehler)})" if fehler else ""))
         if s["vorlesen"]:
-            self._vorlesen_still(morgenbericht.zum_vorlesen(text))
+            self._vorlesen_still(morgenbericht.zum_vorlesen(text), sprache)
         if self._window is not None:
             self.fenster_zeigen()
             self._js(f"app.oeffne({json.dumps(g.kennung)})")
@@ -3925,15 +4121,16 @@ class Api:
                 _NETZ.an = False
                 _ABSICHT.wert = None
                 _FACH.wert = None
+                ki_laufzeit.original_setzen("")
 
         def frage_ohne_schritt():
             nonlocal frisch
             g = self._ablage.laden(str(kennung))
             hinweis_seite = (lambda t: self._js(f"app.hinweis({json.dumps(t, ensure_ascii=False)})")) if self._window is not None else (lambda t: None)
-            erk = gedaechtnis.erkennen(str(text))
+            erk = self._gedaechtnis.befehl(str(text))
             if erk is not None:
                 self._ablage.anhaengen(g, "user", str(text), intern=True)
-                antwort_g = self._gedaechtnis.anwenden(erk)
+                antwort_g = self._gedaechtnis.anwenden(erk, gedaechtnis.sprache(str(text)))
                 ls_g = {"modell": "gemerkt, ohne Modell", "geraet": "dieses Gerät", "dauer_s": 0.0, "wortstuecke": 0, "gelesen": 0,
                         "credits": "nichts verrechnet (Gedächtnis)", "quellen": "Gedächtnis auf diesem Gerät; nichts davon verlässt den Rechner.",
                         "quellen_liste": [], "gemacht": "gemerkt", "erfunden": "nichts, es wurde nur gemerkt", "pruefung": pruefung.pruefen("", []).kurz(),
@@ -4064,6 +4261,8 @@ class Api:
                     on_token = None
                 except Exception as exc:
                     _log(self._core, f"FEHLER frage_auf_deutsch: {type(exc).__name__}")
+                if nachrichten_de:
+                    ki_laufzeit.original_setzen(str(text))
             fm = (lambda: nachrichten_de) if nachrichten_de else g.fuer_modell
             a4 = nachschauen.erkennen_im_gespraech(fm()) if (not fern and self.nachschauen_an()) else None
             if a4 is not None and a4.rueckfrage:
@@ -4079,6 +4278,7 @@ class Api:
                 hinweis_seite("")
                 return {"text": text_f, "lieferschein": ls_f, "gespraech": g.to_json_dict(), "credits": self._credits_dict()}
             _SUCHLAUF.stand = {"runde": 0, "gesucht": [], "gelesen": set()}
+            _FREMD.texte = []
             schrift = None if (fern or ab.frisch or ohne_suche) else schriftstueck.runde(fm())
             klein = False
             if schrift is not None and not schrift[0].offen:
@@ -4295,6 +4495,7 @@ class Api:
                 hinweis_seite("Die Antwort wird ins Englische übertragen …")
                 antwort_text, lieferschein = antwortsprache.antwort_uebersetzen(self._ki.server.frage, antwort_text, lieferschein,
                                                                                log=lambda z: _log(self._core, z), frage=str(text))
+                antwort_text, lieferschein = self.eigene_worte_englisch(antwort_text, lieferschein)
                 hinweis_seite("")
             self._ablage.anhaengen(g, "assistant", antwort_text, lieferschein=lieferschein)
             if not stueckweise:
@@ -4859,8 +5060,7 @@ class Api:
     def _anbieten_spaeter(self) -> None:
         def lauf():
             for versuch in range(8):
-                time.sleep(self.HEIMNETZ_WARTE_S)
-                if self.schliessen_angefordert:
+                if self._stopp.wait(self.HEIMNETZ_WARTE_S):
                     return
                 r = self._guarded("heimnetz_anbieten_start", self._anbieten_start)
                 if r["ok"]:
@@ -5287,11 +5487,8 @@ class Api:
 
         def lauf():
             warte = self.GEMEINSCHAFT_ERSTES_S
-            while True:
-                time.sleep(warte)
+            while not self._stopp.wait(warte):
                 warte = gemeinschaft.HOLEN_ABSTAND_S
-                if self.schliessen_angefordert:
-                    return
                 if getattr(self._rechen, "phase", "") in ("antwortet", "laden"):
                     warte = 60
                     continue
@@ -5308,11 +5505,8 @@ class Api:
             warte = 6
             tausch_versuche = 0
             zuletzt = 0.0
-            while True:
-                time.sleep(warte)
+            while not self._stopp.wait(warte):
                 warte = self.UPDATE_BLICK_S
-                if self.schliessen_angefordert:
-                    return
                 if self._update_warten():
                     warte = 60
                     continue
@@ -5701,6 +5895,7 @@ def mit_auftrag(zusatz: str, nachrichten: list[dict]) -> str:
 
 
 _SUCHLAUF = threading.local()
+_FREMD = threading.local()
 _EIGEN = threading.local()
 _FACH = threading.local()
 
@@ -5787,6 +5982,20 @@ def saison_jetzt(heute=None) -> str:
     h = heute or date.today()
     j = h.year if h.month >= 7 else h.year - 1
     return f"{j}/{str(j + 1)[2:]}"
+
+
+DACH_LAENDER = ("at", "de", "ch", "li")
+
+
+def such_sprache(frage: str) -> str:
+    if ki_laufzeit.original() and any(land.lower() not in DACH_LAENDER for land in belege.laender_in(frage)):
+        return "en"
+    r = region.erkennen(frage)
+    return r.sprache if r else ""
+
+
+SUCHWORT_ENGLISCH = ("Die Person hat auf Englisch gefragt, und die Frage betrifft ein Land außerhalb des deutschen Sprachraums; die Suche läuft auf Englisch: schreib beide Zeilen "
+                     "auf Englisch, mit den Wörtern, die man in diesem Land dafür verwendet.")
 
 
 def zeitziel(frage: str, heute=None) -> tuple[int | None, int | None]:
@@ -5993,6 +6202,9 @@ REGEL_ZUSATZ = ("Eine Regel (was man braucht, muss, darf oder nicht darf) schrei
 ANDERE_PERSON = "Die gefundenen Seiten handeln von jemand anderem; über die gefragte Person schreibt KIplatz darum nichts."
 
 
+_ANLEITUNGSSCHRITT = re.compile(r"^\s*(?:\*\*)?(?:\d{1,2}[.)]|(?:Schritt|Step)\s+\d{1,2}\b)", re.IGNORECASE)
+
+
 def nur_rest(vorher: str, nachher: str, raus: list[str]) -> bool:
     if not raus:
         return False
@@ -6002,6 +6214,9 @@ def nur_rest(vorher: str, nachher: str, raus: list[str]) -> bool:
     if saetze[0].strip()[:25] not in (nachher or ""):
         return True
     ganz_weg = [s for s in raus if s.strip()[:25] not in (nachher or "")]
+    schritte = [z for z in (vorher or "").split("\n") if _ANLEITUNGSSCHRITT.match(z)]
+    if any(s.strip()[:25] in z for s in ganz_weg for z in schritte):
+        return True
     return len(ganz_weg) * 2 > len(saetze)
 
 
@@ -6074,6 +6289,7 @@ def _streng(t: str, belegtext: str, zusatz: str, rechnen: bool, pruefer, auszueg
 
 
 def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, heute: date | None = None, nochmal=None, pruefer=None,
+                    umschreiben=None,
                     schreiben: bool = False, bekannt=None) -> tuple[str, list[str]]:
     heute = heute or date.today()
     notizen: list[str] = []
@@ -6092,10 +6308,14 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
     ziel = zeitziel(frage, heute)
     if ziel != (None, None):
         gelesen = "\n".join(str(q.get("text") or "") for q in (quellen or []) if q.get("art") == "nachgeschaut")
+        vor_alt = t
         t, raus_alt = belege.saetze_streichen(t, lambda s: nachschauen.veraltet_text(s, *ziel) and not belege.seit_belegt(s, gelesen))
         if raus_alt:
             notizen.append("1 Satz über eine frühere Saison oder ein früheres Jahr vom Programm gestrichen." if len(raus_alt) == 1
                            else f"{len(raus_alt)} Sätze über eine frühere Saison oder ein früheres Jahr vom Programm gestrichen.")
+            if t != "Das weiß ich noch nicht." and nur_rest(vor_alt, t, raus_alt):
+                notizen.append("Nach dem Streichen fehlte der Anfang der Antwort; ein Rest wird nicht ausgegeben.")
+                t = "Das weiß ich noch nicht."
     if schreiben or not any(str(q.get("text") or "").strip() for q in (quellen or [])):
         if not schreiben and belege.preisfrage(frage) and any(belege.betraege(t)):
             notizen.append("Ein Preis ohne Quelle wurde nicht ausgegeben: Preise ändern sich, ohne aktuelle Quelle nennt KIplatz keinen.")
@@ -6103,7 +6323,7 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
         if not schreiben and belege.regelfrage(frage) and not belege.preisfrage(frage) and not _WEISS_NICHT.search(t):
             notizen.append(REGEL_OHNE_QUELLE)
             return "Das weiß ich noch nicht.", notizen
-        t, n_eigen = _eigene_worte(t, frage, quellen, nochmal, heute)
+        t, n_eigen, _ersetzt = eigene_worte(t, belege.fremde_texte(quellen), umschreiben)
         return t, notizen + n_eigen
     if not _WEISS_NICHT.search(t) and belege.gefragter_name_fehlt(frage, t, [str(q.get("text") or "") for q in quellen]):
         notizen.append(ANDERE_PERSON)
@@ -6169,9 +6389,6 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
             notizen.append(f"{n_rest} Sätze mit einer Zahl, einem Datum oder einem Namen, die in keiner Quelle stehen, vom Programm gestrichen ({vom_pruefer} davon nach einem zweiten Blick des Modells).")
         else:
             notizen.append(f"{n_rest} Sätze mit einer Zahl, einem Datum oder einem Namen, die in keiner Quelle stehen, vom Programm gestrichen.")
-    geprueft, n_eigen = _eigene_worte(geprueft, frage, quellen, nochmal, heute, belegtext=belegtext, zusatz=zusatz, rechnen=rechnen, auszuege=auszuege,
-                                      pruefer=pruefer, regelfrage=regelfrage)
-    notizen += n_eigen
     if (regel and geprueft != "Das weiß ich noch nicht." and not any(s.farbe == "gruen" for s in pruefung.pruefen(geprueft, auszuege).saetze)
             and not belege.regel_gestuetzt(geprueft, frage, [x for _n, x in auszuege])):
         notizen.append(REGEL_OHNE_QUELLE)
@@ -6197,42 +6414,55 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
         if fehlend:
             geprueft = geprueft.rstrip() + "\n\nZu " + " und ".join(fehlend) + " habe ich in meinen Quellen keine sichere Zahl gefunden."
             notizen.append("Zu " + ", ".join(fehlend) + " stand nichts Belegtes in der Antwort; das Programm sagt es dazu.")
+    if geprueft != "Das weiß ich noch nicht.":
+        geprueft, n_eigen, _ersetzt = eigene_worte(geprueft, belege.fremde_texte(quellen), umschreiben)
+        notizen += n_eigen
     return geprueft, notizen
 
 
-EIGENE_WORTE_ZUSATZ = ("Prüfung: Diese Sätze einer ersten Fassung stehen Wort für Wort so in einer Quelle: „{saetze}“. Schreib die ganze Antwort "
-                       "neu, als wäre es die erste: dieselbe Aussage, aber in eigenen Worten und mit eigenem Satzbau, ohne eine Wortfolge aus den "
-                       "Quellen zu übernehmen, nie mehr als 6 Wörter am Stück. Zahlen, Daten, Beträge und Namen genau so wie in den Quellen. Erwähne nie eine erste Fassung, einen "
-                       "Fehler oder eine Prüfung. Schreib nie „Quellen“ oder „Auszüge“.")
+EIGENE_WORTE_RUNDEN = 2
+_UMSCHRIEBEN = re.compile(r"(?m)^\s*(\d{1,2})\s*[.):]\s*(\S.*?)\s*$")
 
 
-def _eigene_worte(t: str, frage: str, quellen: list[dict], nochmal, heute: date, *, belegtext: str | None = None, zusatz: str = "",
-                  rechnen: bool = False, auszuege: list[tuple[int, str]] | None = None, pruefer=None, regelfrage: str = "") -> tuple[str, list[str]]:
-    fremd = belege.fremde_texte(quellen)
-    woertlich = belege.woertliche_saetze(t, fremd) if fremd else []
+def umschreibung_lesen(text: str, anzahl: int) -> dict[int, str]:
+    out: dict[int, str] = {}
+    for m in _UMSCHRIEBEN.finditer(text or ""):
+        i = int(m.group(1)) - 1
+        if 0 <= i < anzahl and i not in out:
+            out[i] = m.group(2).strip().strip("„“\"")
+    return out
+
+
+def eigene_worte(text: str, fremd: list[str], umschreiben=None, *, englisch: bool = False) -> tuple[str, list[str], dict[str, str]]:
+    weiss_nicht = belege.WEISS_NICHT_EN if englisch else "Das weiß ich noch nicht."
+    woertlich = belege.woertliche_saetze(text, fremd) if fremd and text else []
     if not woertlich:
-        return t, []
-    if nochmal is not None:
+        return text, [], {}
+    neu_text, ersetzt, runden = text, {}, 0
+    while woertlich and umschreiben is not None and runden < EIGENE_WORTE_RUNDEN:
+        runden += 1
         try:
-            neu = nochmal(EIGENE_WORTE_ZUSATZ.format(saetze=" ".join(woertlich)[:400]) + " " + frage_fokus(frage))
-            neu, _ = belege.ohne_platzhalter(neu or "")
-            neu, _ = belege.ohne_selbstbezug(neu)
-            neu, _ = belege.wochentage_berichtigen(neu, heute)
-            if belegtext is not None:
-                neu, _raus, _vom = _streng(neu, belegtext, zusatz, rechnen, pruefer, auszuege or [], regelfrage=regelfrage)
-            quell_z = belege.zahlenwerte((belegtext or "") + "\n" + "\n".join(str(q.get("text") or "") for q in quellen or []))
-            ganz = bool(re.search(r"[.!?…“\")]\s*$", neu.strip())) and len(neu.strip()) >= 0.6 * len(t.strip())
-            if (neu.strip() and ganz and belege.brauchbar(neu) and not belege.woertliche_saetze(neu, fremd)
-                    and (not _WEISS_NICHT.search(neu) or _WEISS_NICHT.search(t))
-                    and len(belege.zahlenwerte(neu) & quell_z) >= len(belege.zahlenwerte(t) & quell_z)):
-                return neu, ["Ein Satz stand fast wörtlich so in einer Quelle; KIplatz hat die Antwort in eigenen Worten geschrieben."]
+            neue = umschreiben(woertlich, englisch) or {}
         except app_core.AppError:
-            pass
-    rest, raus = belege.saetze_streichen(t, set(woertlich).__contains__)
-    if rest.strip() and rest != "Das weiß ich noch nicht." and belege.brauchbar(rest):
+            break
+        for i, alt in enumerate(woertlich):
+            neu = " ".join(str(neue.get(i) or "").split())
+            if (neu and re.search(r"[.!?…“\")]$", neu) and belege.brauchbar(neu) and not belege.woertliche_saetze(neu, fremd)
+                    and not _WEISS_NICHT.search(neu) and belege.zahlenwerte(alt) <= belege.zahlenwerte(neu) and belege.daten(alt) <= belege.daten(neu)
+                    and alt in neu_text):
+                neu_text = neu_text.replace(alt, neu, 1)
+                ursprung = next((k for k, v in ersetzt.items() if v == alt), alt)
+                ersetzt[ursprung] = neu
+        woertlich = belege.woertliche_saetze(neu_text, fremd)
+    if not woertlich:
+        n = len(ersetzt)
+        return neu_text, ["1 Satz stand fast wörtlich so in einer Quelle; KIplatz hat ihn in eigenen Worten geschrieben." if n == 1
+                          else f"{n} Sätze standen fast wörtlich so in einer Quelle; KIplatz hat sie in eigenen Worten geschrieben."], ersetzt
+    rest, raus = belege.saetze_streichen(neu_text, set(woertlich).__contains__)
+    if rest.strip() and rest != "Das weiß ich noch nicht." and belege.brauchbar(rest) and not nur_rest(neu_text, rest, raus):
         return rest, ["1 Satz, der fast wörtlich so in einer Quelle stand, vom Programm gestrichen." if len(raus) == 1
-                      else f"{len(raus)} Sätze, die fast wörtlich so in einer Quelle standen, vom Programm gestrichen."]
-    return "Das weiß ich noch nicht.", ["Die Antwort stand fast wörtlich so in einer Quelle und ließ sich nicht in eigenen Worten schreiben; sie wurde nicht ausgegeben."]
+                      else f"{len(raus)} Sätze, die fast wörtlich so in einer Quelle standen, vom Programm gestrichen."], ersetzt
+    return weiss_nicht, ["Die Antwort stand fast wörtlich so in einer Quelle und ließ sich nicht in eigenen Worten schreiben; sie wurde nicht ausgegeben."], {}
 
 
 NAMEN_ZUSATZ = ("Prüfung: Die Frage nennt mehrere Namen, eine erste Fassung dieser Antwort ließ aus: {namen}. Schreib die Antwort ganz neu und nenne "
@@ -6439,14 +6669,7 @@ def run_window(core: app_core.AppCore, *, start_minimized: bool = False, registr
         tray.clear()
         hotkey.stoppen()
         vorlesen.stopp()
-        api._sprechen.beenden()
-        api._schnittstelle.stop()
-        api._dienst.stop()
-        api._warmhalter.stop()
-        api._rechen.stop()
-        api._bedeutung.ausschalten()
-        api._bewertung.ausschalten()
-        api._ki.ausschalten()
+        api.herunterfahren()
 
     def _schliessen_abfangen():
         if api.schliessen_angefordert or not tray:

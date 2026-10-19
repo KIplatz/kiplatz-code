@@ -153,9 +153,12 @@ def _runde(gov_gesperrt: bool):
         return [{"titel": "UK ETA application", "adresse": "https://application-eta.uk/apply", "text": "Apply for your UK ETA online"},
                 {"titel": "Get an ETA", "adresse": "https://www.gov.uk/eta", "text": "electronic travel authorisation"},
                 {"titel": "UK ETA Hilfe", "adresse": "https://visa-hilfe.example/uk", "text": "UK ETA service"}]
-    nachschauen._GESPERRT.clear() if hasattr(nachschauen, "_GESPERRT") else None
+    nachschauen._GESPERRT.clear()
     n = nachschauen.Nachschauer(suche_fn=suche, seiten_oeffner=oeffner)
-    erg, gelesen, _ = n.suche_runde(["UK ETA"], "Do I need an ETA to enter the UK?", sprache="en-GB")
+    try:
+        erg, gelesen, _ = n.suche_runde(["UK ETA"], "Do I need an ETA to enter the UK?", sprache="en-GB")
+    finally:
+        nachschauen._GESPERRT.clear()
     return [e.adresse for e in erg if not e.titel.startswith("Suchergebnisse")], [e.titel for e in erg]
 
 

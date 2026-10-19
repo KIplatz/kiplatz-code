@@ -106,12 +106,15 @@ def _text_ch(r: region_mod.Region, h: date, jahre: list[int] | None = None) -> s
 
 
 def quelle(frage: str, heute: date | None = None) -> tuple[str, str, bool] | None:
+    welt = kalender_tage.zeitumstellung_welt(frage, heute)
+    if welt is not None:
+        return welt
     if not betrifft(frage):
         return None
     if kalender_welt.land(frage) is not None:
         return None
     h = heute or date.today()
-    jahre = kalender_tage.jahre(frage)
+    jahre = kalender_tage.jahre(frage, h)
     feiertag = _feiertage(frage, h, jahre) if BETRIFFT.search(frage or "") else None
     if not kalender_tage.betrifft(frage):
         return feiertag

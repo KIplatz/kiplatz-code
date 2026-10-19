@@ -13,6 +13,7 @@ import * as hf from "/js/helfer.js";
 import { HELFER_SHA256 } from "/js/helfer-pruefsummen.js";
 import * as kt from "/js/konten.js";
 import * as mk from "/js/meine-ki.js";
+import { istDateifrage } from "/js/zuhause.js";
 
 basisSetzen("");
 
@@ -465,6 +466,13 @@ test("Meine KI: gleicher Skill-Text wie im Programm, nichts Unbekanntes, Name un
   const s = sk.lesen(mk.alsSkillMd(MK.wahl));
   gleich([s.name, s.beschreibung], [mk.NAME, mk.BESCHREIBUNG]);
   gleich(mk.BAUSTEINE.wofuer.slice(0, 4).map((b) => b.id), ["programmieren", "web", "ki", "linux"]);
+});
+
+
+const DF = await (await fetch("dateifragen.json", { cache: "no-store" })).json();
+test("Frag dein Zuhause: Dateifragen auf Deutsch und Englisch erkannt, andere Fragen nicht", () => {
+  gleich(DF.ja.filter((f) => !istDateifrage(f)), [], "nicht erkannt");
+  gleich(DF.nein.filter((f) => istDateifrage(f)), [], "fälschlich erkannt");
 });
 
 const ergebnis = { gut: 0, schlecht: 0, fehler: [] };

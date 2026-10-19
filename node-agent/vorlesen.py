@@ -6,6 +6,7 @@ import threading
 _LOCK = threading.Lock()
 _SYNTH = None
 _STIMME = ""
+_STIMMEN: dict[str, str] = {}
 
 
 def _laden():
@@ -23,10 +24,12 @@ def _laden():
         try:
             for v in s.GetInstalledVoices():
                 info = v.VoiceInfo
-                if v.Enabled and str(info.Culture.Name).lower().startswith("de"):
-                    s.SelectVoice(info.Name)
-                    _STIMME = str(info.Name)
-                    break
+                sprache = str(info.Culture.Name).lower()[:2]
+                if v.Enabled and sprache in ("de", "en") and sprache not in _STIMMEN:
+                    _STIMMEN[sprache] = str(info.Name)
+            if "de" in _STIMMEN:
+                s.SelectVoice(_STIMMEN["de"])
+                _STIMME = _STIMMEN["de"]
         except Exception:
             pass
         s.Rate = 0
@@ -46,9 +49,21 @@ def stimme() -> str:
     return _STIMME or "Windows-Stimme"
 
 
-def sprechen(text: str) -> str:
+def stimme_fuer(sprache: str) -> str:
+    return _STIMMEN.get((sprache or "de")[:2].lower(), "")
+
+
+def sprechen(text: str, sprache: str = "de") -> str:
+    global _STIMME
     s = _laden()
     s.SpeakAsyncCancelAll()
+    name = stimme_fuer(sprache)
+    if name and name != _STIMME:
+        try:
+            s.SelectVoice(name)
+            _STIMME = name
+        except Exception:
+            pass
     s.SpeakAsync(str(text)[:4000])
     return stimme()
 

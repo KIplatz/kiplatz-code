@@ -710,8 +710,14 @@
           <div class="card" id="speicher-card"><h3>Gemeinsamer Speicher</h3><div id="speicher-text" class="small"></div><p class="muted small" id="speicher-zuletzt" style="margin:6px 0 0"></p><p class="muted small" id="speicher-netz" style="margin:6px 0 0"></p><div id="speicher-landkarte" class="small" style="margin-top:8px"></div></div>
           <div class="card" id="beitritt-card" style="display:none"><h3>Zur Community dazukommen</h3>
             <p class="muted small" style="margin-top:0">Dieses Gerät ist noch nicht angemeldet. Melde dich mit deinem KIplatz-Konto an oder mit einem Code. Der Gerätename ist für Mitglieder sichtbar. Datenschutz: kiplatz.at/datenschutz</p>
-            <p class="small" id="spielwiese-hinweis" style="display:none"><b>Spielwiese:</b> der Übungsserver für Mitbauende, Code <span class="mono">spielwiese</span>, alles Wegwerfdaten.</p>
-            <div class="row"><input aria-label="Einladungscode" id="beitritt-code" placeholder="Code, z. B. AB3K-9XQ2" style="max-width:240px"><button class="btn primary" id="btn-beitreten">Dazukommen</button></div></div>
+            
+            <div class="row" id="beitritt-konto-knopf"><button class="btn primary" id="btn-beitreten-konto">Mit KIplatz-Konto dazukommen</button></div>
+            <div id="beitritt-konto-laeuft" style="display:none"><p class="small" style="margin:0 0 6px" role="status">Dein Browser zeigt die Anmeldung von KIplatz. Melde dich dort an und bestätige „Einen neuen PC … verbinden?“. Danach geht es hier von selbst weiter.</p>
+              <p class="muted small" style="margin:0 0 6px">Geht kein Browser auf, öffne diese Adresse: <span class="mono" id="beitritt-konto-adresse" style="user-select:all;word-break:break-all"></span></p>
+              <div class="row"><button class="btn" id="btn-beitreten-konto-abbrechen">Abbrechen</button></div></div>
+            <details id="beitritt-code-weg" style="margin-top:10px"><summary class="small" style="cursor:pointer">Mit einem Code vom Admin</summary>
+              <p class="small" id="spielwiese-hinweis" style="display:none"><b>Spielwiese:</b> der Übungsserver für Mitbauende, Code <span class="mono">spielwiese</span>, alles Wegwerfdaten.</p>
+              <div class="row"><input aria-label="Einladungscode" id="beitritt-code" placeholder="Code, z. B. AB3K-9XQ2" style="max-width:240px"><button class="btn" id="btn-beitreten">Dazukommen</button></div></details></div>
           
           <div class="card" id="konto-card"><h3>Dein KIplatz-Konto</h3>
             <p class="muted small" id="konto-text" style="margin-top:0"></p>
@@ -834,6 +840,11 @@
               <div class="row" style="margin-top:6px;gap:6px;flex-wrap:wrap"><input aria-label="Frage" type="text" id="pf-frage" placeholder="Frage" style="flex:2;min-width:200px"><input aria-label="Erwartete Antwort in 1 bis 3 Sätzen" type="text" id="pf-erwartet" placeholder="Erwartete Antwort in 1 bis 3 Sätzen" style="flex:3;min-width:220px"></div>
               <div class="row" style="margin-top:6px;gap:6px;flex-wrap:wrap"><input aria-label="Pflichtwörter, mit Komma" type="text" id="pf-pflicht" placeholder="Pflichtwörter, mit Komma" style="flex:1;min-width:160px"><button class="btn" id="btn-pf-hinzu" type="button">Hinzufügen</button></div>
               <p class="muted small">Richtig heißt: alle Pflichtwörter kommen vor und mindestens die Hälfte der Wörter der erwarteten Antwort.</p></details></div>
+          
+          <div class="card" id="quellen-card"><h3>Quellen</h3>
+            <p class="muted small" style="margin-top:0">Jede Wissensquelle dieses Geräts meldet alle 5 Minuten ihren Zustand an den Server, nur Zustände, nie Fragen. Fehlt eine Quelle an einem Admin-Gerät länger als eine Stunde, schickt die Wache am Server eine Mail.</p>
+            <div id="quellen-liste" class="small"></div>
+            <p class="small muted" id="quellen-geraete" style="margin:8px 0 0"></p></div>
           <div class="card" id="fehlerberichte-card"><h3>Fehlerberichte <span class="muted" id="fehlerberichte-anzahl"></span></h3>
             <p class="muted small" style="margin-top:0">Die letzten Protokollzeilen aus „Hilfe → Fehler melden“, ohne Fragen und Namen.</p>
             <div id="fehlerberichte-liste"></div></div>
@@ -940,7 +951,7 @@
           <div class="card"><h3>Nachschauen im Internet</h3>
             <label class="switch"><input type="checkbox" id="nachschauen"> <span>Bei Wetter, Schlagzeilen und offenen Fragen im Internet nachschauen</span></label>
             <label class="switch"><input type="checkbox" id="vorwaermen"> <span>In der Früh Wetter und Schlagzeilen für dich vorholen (einmal am Tag, wenn der Rechner nichts zu tun hat; bleibt privat auf diesem PC)</span></label>
-            <p class="muted small">Wetter von Open-Meteo, Schlagzeilen von ORF, tagesschau und SRF, sonst die Suche von DuckDuckGo. Nachgeschautes wird für das nächste Mitglied gemerkt: Wetter 6 Stunden, Schlagzeilen 3, Suche 7 Tage.</p></div>
+            <p class="muted small">Wetter von Open-Meteo, Schlagzeilen von ORF, tagesschau, SRF, BBC, NPR und der Deutschen Welle, sonst die Suche von DuckDuckGo. Nachgeschautes wird für das nächste Mitglied gemerkt: Wetter 6 Stunden, Schlagzeilen 3, Suche 7 Tage.</p></div>
           
           <div class="card"><h3>Morgenbericht</h3>
             <label class="switch"><input type="checkbox" id="morgen-an"> <span>Jeden Tag Wetter und Schlagzeilen als neues Gespräch</span></label>
@@ -1181,6 +1192,7 @@ window.addEventListener("unhandledrejection", (e) => __fehlerZeigen(String(e.rea
     adminZeigen(!!z.admin);
     $("#profil").textContent = z.app.profil; $("#profil").style.display = z.app.profil ? "" : "none";
     $("#spielwiese-hinweis").style.display = z.app.spielwiese ? "" : "none";
+    if (z.app.spielwiese) $("#beitritt-code-weg").open = true;
     $("#geraet").textContent = z.app.geraet_name;
     $("#chip").textContent = z.credits.admin ? "Admin" : (z.credits.guthaben ?? "?") + " Credits";
     $("#dot").className = "dot " + z.lauf.zustand;
@@ -1327,7 +1339,29 @@ window.addEventListener("unhandledrejection", (e) => __fehlerZeigen(String(e.rea
   $("#btn-meine-daten").addEventListener("click", () => { api().community_meine_daten().then((r) => nach(r, (d) => { const g = d.geraet || {}; const z = [`Name: ${g.name || ""}`, `Kennung: ${g.kennung || ""}`, `Schlüssel: ${g.schluessel || ""}`, `Dabei seit: ${g.angelegt ? wann(g.angelegt) : ""}`, `Credits: ${g.credits ?? 0}`, `Antworten für andere: ${g.antworten ?? 0}`, `Abschnitte erarbeitet: ${g.abschnitte ?? 0}`, `Bestenliste: ${d.bestenliste_platz ? "Platz " + d.bestenliste_platz : "nicht gereiht"}`, `Offene Fragen am Server: ${d.offene_fragen ?? 0}`, "", d.sonst || ""]; const p = $("#meine-daten"); p.textContent = z.join("\n"); p.style.display = ""; })); });
   $("#btn-schluessel-neu").addEventListener("click", () => { if (!confirm("Einen neuen Schlüssel für dieses Gerät holen? Das brauchst du nur, wenn du glaubst, dass jemand den alten hat. Das Programm erneuert ihn sonst alle 90 Tage von selbst. Name und Credits bleiben.")) return; api().community_schluessel_erneuern().then((r) => nach(r, () => {})); });
   $("#btn-austreten").addEventListener("click", () => { if (!confirm("Die Community verlassen? Am Server werden Name, Credits und Zähler gelöscht. Deine Gespräche und was du nachgeschaut hast, bleiben bei dir.")) return; api().community_austreten().then((r) => nach(r, () => { $("#meine-daten").style.display = "none"; api().zustand().then((r2) => nach(r2, uebernehme)); api().community().then((r3) => nach(r3, zeichneCommunity)); })); });
-  $("#btn-anmelde-band").addEventListener("click", () => { zeige("community"); setTimeout(() => { const k = $("#beitritt-code"); if (k) { k.scrollIntoView({ block: "center" }); k.focus(); } }, 50); });
+
+
+  $("#btn-anmelde-band").addEventListener("click", () => { zeige("community", "Konto und Geräte"); setTimeout(() => { const k = $("#btn-beitreten-konto"); if (k) { k.scrollIntoView({ block: "center" }); k.focus(); } }, 50); });
+
+  let beitrittTimer = null;
+  function beitrittZeichnen(s) {
+    const laeuft = !!(s && s.laeuft);
+    $("#beitritt-konto-knopf").style.display = laeuft ? "none" : "";
+    $("#beitritt-konto-laeuft").style.display = laeuft ? "" : "none";
+    $("#beitritt-konto-adresse").textContent = laeuft ? s.adresse : "";
+  }
+  function beitrittNachsehen() {
+    beitrittTimer = null;
+    api().community_beitreten_konto_stand().then((r) => {
+      if (!r.ok) { beitrittZeichnen(null); sag(r.text, true); return; }
+      const s = r.daten; beitrittZeichnen(s);
+      if (s.laeuft) { beitrittTimer = setTimeout(beitrittNachsehen, 2000); return; }
+      if (s.fertig) { sag(`Willkommen. Dieses Gerät gehört jetzt mit dem Konto ${s.konto} zur Community.`); api().zustand().then((r2) => nach(r2, uebernehme)); api().community().then((r3) => nach(r3, zeichneCommunity)); kontoNachsehen(); }
+      else if (s.fehler) sag(s.fehler, true);
+    });
+  }
+  $("#btn-beitreten-konto").addEventListener("click", () => api().community_beitreten_konto().then((r) => nach(r, (s) => { beitrittZeichnen(s); clearTimeout(beitrittTimer); beitrittTimer = setTimeout(beitrittNachsehen, 2000); })));
+  $("#btn-beitreten-konto-abbrechen").addEventListener("click", () => { clearTimeout(beitrittTimer); beitrittTimer = null; api().community_beitreten_konto_abbrechen().then((r) => nach(r, beitrittZeichnen)); });
   $("#btn-beitreten").addEventListener("click", () => { const code = $("#beitritt-code").value.trim(); if (!code) { sag("Bitte den Code eintippen."); return; } sag("Melde an …"); api().community_beitreten(code).then((r) => nach(r, () => { $("#beitritt-code").value = ""; api().zustand().then((r2) => nach(r2, uebernehme)); api().community().then((r3) => nach(r3, zeichneCommunity)); })); });
   $("#btn-hn-anbieten").addEventListener("click", () => api().heimnetz_anbieten(!(Z && Z.heimnetz && Z.heimnetz.laeuft)).then((r) => nach(r, (h) => { zeichneHeimnetz(h); api().ki_zustand().then((r2) => nach(r2, zeichneKi)); })));
   $("#btn-hn-koppeln").addEventListener("click", () => api().heimnetz_koppeln_oeffnen().then((r) => nach(r, zeichneHeimnetz)));
@@ -2497,6 +2531,8 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
     $("#mitglieder").innerHTML = c.mitglieder.map((m) => `<div class="row" style="padding:6px 0"><span class="dot ${m.lauf}"></span><b>${esc(m.name)}</b>${m.du ? '<span class="muted small">(das bist du)</span>' : ""}<span class="muted small">– <span>${esc(m.rolle)}</span></span></div>`).join("");
     $("#community-hinweis").replaceChildren(...(c.hinweis_saetze || [c.hinweis]).flatMap((s, i) => { const e = document.createElement("span"); e.textContent = s; return i ? [" ", e] : [e]; }));
     $("#beitritt-card").style.display = c.mitglied || c.admin ? "none" : "";
+
+    if (!c.mitglied && !c.admin && !beitrittTimer) api().community_beitreten_konto_stand().then((r) => { if (r.ok && r.daten.laeuft) { beitrittZeichnen(r.daten); beitrittTimer = setTimeout(beitrittNachsehen, 2000); } });
     if (c.admin) api().community_teams_admin().then((r) => { if (r.ok) zeichneTeamsAdmin(r.daten); });
     $("#daten-card").style.display = c.mitglied ? "" : "none";
     $("#zuhause-card").style.display = c.mitglied || c.admin ? "" : "none";
@@ -2505,6 +2541,7 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
     if (c.admin) api().community_geraete().then((r) => { if (r.ok) zeichneGeraete(r.daten); });
     if (c.admin) api().sammler_stand().then((r) => { if (r.ok) zeichneSammler(r.daten); else $("#sammler-stand").textContent = r.text || ""; });
     if (c.admin) api().pruefstand_stand().then((r) => { if (r.ok) zeichnePruefstand(r.daten); else $("#pruefstand-stand").textContent = r.text || ""; });
+    if (c.admin) api().quellen_stand().then((r) => { if (r.ok) zeichneQuellen(r.daten); else $("#quellen-geraete").textContent = r.text || ""; });
     zeichneNotaus(c.not_aus || {});
     zeichneKonto({ konto: c.konto, laeuft: false, mitglied: !!(c.mitglied || c.admin) });
     zeichneRangliste(c.rangliste);
@@ -2606,7 +2643,8 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
   function zeichneKonto(s) {
     if (s.mitglied !== undefined) kontoMitglied = s.mitglied;
     const k = s.konto;
-    $("#konto-ohne").style.display = (!k && !s.laeuft && !qrTimer) ? "" : "none";
+
+    $("#konto-ohne").style.display = (!k && !s.laeuft && !qrTimer && kontoMitglied) ? "" : "none";
     if (k && qrTimer) { clearTimeout(qrTimer); qrTimer = null; $("#konto-qr-box").style.display = "none"; }
     $("#konto-laeuft").style.display = s.laeuft ? "" : "none";
     $("#konto-mit").style.display = k ? "" : "none";
@@ -2619,7 +2657,7 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
     $("#btn-konto-anmelden").disabled = !kontoMitglied; $("#btn-konto-qr").disabled = !kontoMitglied;
     $("#konto-text").textContent = k ? "Credits und Bestenliste zählen für dein Konto, auf allen Geräten, auf denen du angemeldet bist. Name und Passwort änderst du in der Werkstatt."
       : (kontoMitglied ? "Ein Konto für Mitreden, Mitbauen und das Programm. Die Anmeldung läuft im Browser auf der Anmeldeseite von KIplatz; das Programm bekommt kein Passwort zu sehen."
-                       : "Zuerst muss dieses Gerät zur Community dazukommen (Karte oben), danach kannst du dein KIplatz-Konto anmelden.");
+                       : "Mit „Mit KIplatz-Konto dazukommen“ in der Karte oben ist dieses Gerät gleich auch mit deinem Konto angemeldet.");
   }
 
   let abgleichGezeichnet = false;
@@ -3245,8 +3283,18 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
     $("#fehlerberichte-anzahl").textContent = f.length ? `(${f.length})` : "";
     $("#fehlerberichte-liste").innerHTML = f.length ? f.map((x, i) => `<details class="geraet-zeile" style="display:block"><summary style="cursor:pointer"><b>${esc(x.zeit.slice(0, 16).replace("T", " "))} UTC</b> · ${esc(x.von === "admin" ? "Admin" : "Gerät " + x.von)} · Bau ${esc(x.bau)}</summary><pre class="small" style="white-space:pre-wrap;margin:6px 0 0">${esc(x.text)}</pre></details>`).join("") : '<p class="muted">Keine Fehlerberichte. Gut so.</p>';
   }
+
+  function zeichneQuellen(q) {
+    if (!q) return;
+    $("#quellen-liste").innerHTML = (q.zeilen || []).map((z) => { const fehlt = z.startsWith("FEHLT"); return `<div class="geraet-zeile" style="display:block;padding:4px 0${fehlt ? ";color:var(--accent-dark)" : ""}">${fehlt ? "<b>" : ""}${esc(z)}${fehlt ? "</b>" : ""}</div>`; }).join("");
+    const still = q.still || [];
+    const geraete = q.geraete || [];
+    $("#quellen-geraete").textContent = (still.length ? `Länger als eine Stunde ohne Quelle: ${still.map((s) => `${s.name || s.geraet}: ${s.text}`).join(" · ")}. ` : "")
+      + (geraete.length ? `Berichte am Server: ${geraete.map((g) => `${g.name || g.kennung.slice(0, 8)} (${g.kurz || "ohne Angabe"}, ${wann(g.zeit)})`).join(" · ")}.` : "Noch kein Bericht eines Geräts am Server.");
+  }
   document.getElementById("nav-admin").addEventListener("click", () => {
     api().community_fehlerberichte().then((r) => nach(r, zeichneFehlerberichte));
+    api().quellen_stand().then((r) => { if (r.ok) zeichneQuellen(r.daten); else $("#quellen-geraete").textContent = r.text || ""; });
     api().sammler_stand().then((r) => { if (r.ok) zeichneSammler(r.daten); else $("#sammler-stand").textContent = r.text || ""; });
     api().pruefstand_stand().then((r) => { if (r.ok) zeichnePruefstand(r.daten); else $("#pruefstand-stand").textContent = r.text || ""; });
   });
@@ -3344,7 +3392,7 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
     ],
     admin: [
       ["Sofort", [["Not-Aus", ""]]],
-      ["Pflege", [["Nachschub", ""], ["Prüfstand", ""], ["Fehlerberichte", ""]]],
+      ["Pflege", [["Nachschub", ""], ["Prüfstand", ""], ["Quellen", ""], ["Fehlerberichte", ""]]],
       ["Schlüssel", [["Community-Schlüssel", ""]]],
     ],
   };

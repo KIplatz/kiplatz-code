@@ -54,26 +54,29 @@ def test_a_neighbour_sentence_is_kept_when_only_one_word_touches_the_copy():
 def test_a_copied_answer_is_rewritten_in_own_words_before_anyone_sees_it():
     auftraege = []
 
-    def nochmal(extra):
-        auftraege.append(extra)
-        return EIGEN
-    t, notizen = app_web.belege_anwenden(KOPIE, FRAGE, "Quelle 1: " + SEITE, FREMD, heute=HEUTE, nochmal=nochmal)
-    assert t == EIGEN and len(auftraege) == 1 and "eigenen Worten" in auftraege[0]
+    def umschreiben(saetze, englisch):
+        auftraege.append((saetze, englisch))
+        return {0: EIGEN}
+    t, notizen = app_web.belege_anwenden(KOPIE, FRAGE, "Quelle 1: " + SEITE, FREMD, heute=HEUTE, umschreiben=umschreiben)
+    assert t == EIGEN and auftraege == [([KOPIE], False)]
     assert any("eigenen Worten" in n for n in notizen)
 
 
 def test_an_answer_in_own_words_costs_no_extra_round():
-    def nochmal(extra):
+    def umschreiben(saetze, englisch):
         raise AssertionError("kein zweiter Durchgang ohne Fund")
-    t, notizen = app_web.belege_anwenden(EIGEN, FRAGE, "Quelle 1: " + SEITE, FREMD, heute=HEUTE, nochmal=nochmal)
+    t, notizen = app_web.belege_anwenden(EIGEN, FRAGE, "Quelle 1: " + SEITE, FREMD, heute=HEUTE, umschreiben=umschreiben)
     assert t == EIGEN and not any("wörtlich" in n or "eigenen Worten" in n for n in notizen)
 
 
 def test_a_rewrite_that_still_copies_or_loses_the_date_is_not_taken():
+    zweiter = "Für den PC gibt es noch keine Fassung (Quelle 1)."
     for schlecht in (KOPIE, "GTA VI erscheint bald für PlayStation 5 und Xbox Series X (Quelle 1)."):
-        zweiter = "Für den PC gibt es noch keine Fassung (Quelle 1)."
-        t, notizen = app_web.belege_anwenden(KOPIE + " " + zweiter, FRAGE, "Quelle 1: " + SEITE, FREMD, heute=HEUTE, nochmal=lambda _e, s=schlecht: s)
-        assert t == zweiter and any("gestrichen" in n for n in notizen)
+        t, notizen = app_web.belege_anwenden(KOPIE + " " + zweiter, FRAGE, "Quelle 1: " + SEITE, FREMD, heute=HEUTE,
+                                             umschreiben=lambda _s, _e, s=schlecht: {0: s})
+        assert t == "Das weiß ich noch nicht." and any("nicht ausgegeben" in n for n in notizen)
+    t, notizen = app_web.belege_anwenden(zweiter + " " + KOPIE, FRAGE, "Quelle 1: " + SEITE, FREMD, heute=HEUTE, umschreiben=lambda _s, _e: {0: KOPIE})
+    assert t == zweiter and any("gestrichen" in n for n in notizen)
 
 
 def test_a_cut_off_or_much_shorter_rewrite_is_not_taken():

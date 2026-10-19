@@ -22,7 +22,15 @@ FEEDS: dict[str, list[tuple[str, str]]] = {
     "de": [("tagesschau", "https://www.tagesschau.de/index~rss2.xml"), ("ZDFheute", "https://www.zdfheute.de/rss/zdf/nachrichten"),
            ("Deutschlandfunk", "https://www.deutschlandfunk.de/nachrichten-100.rss"), ("Deutsche Welle", "https://rss.dw.com/rdf/rss-de-all")],
     "ch": [("SRF", "https://www.srf.ch/news/bnf/rss/1646")],
+    "gb": [("BBC News", "https://feeds.bbci.co.uk/news/rss.xml"), ("Sky News", "https://feeds.skynews.com/feeds/rss/home.xml")],
+    "us": [("NPR", "https://feeds.npr.org/1001/rss.xml")],
 }
+FEEDS_INTERNATIONAL = {"en": [("DW", "https://rss.dw.com/rdf/rss-en-top")]}
+FEED_SPRACHE = {"at": "de", "de": "de", "ch": "de", "gb": "en", "us": "en"}
+
+
+def land_name(land: str) -> str:
+    return LAENDER.get(land) or ("international" if land in FEEDS_INTERNATIONAL else "Österreich")
 SCHLAGZEILEN_JE_FEED = 6
 SCHLAGZEILEN_MAX = 15
 SUCHE_SEITEN = 2
@@ -35,7 +43,7 @@ GUELTIG = {"wetter": timedelta(hours=6), "schlagzeilen": timedelta(hours=3), "su
 MAX_GUELTIG_TAGE = 30
 MAX_TEXT = 20_000
 _UA = wissen._UA
-LAENDER = {"at": "Österreich", "de": "Deutschland", "ch": "Schweiz"}
+LAENDER = {"at": "Österreich", "de": "Deutschland", "ch": "Schweiz", "gb": "Großbritannien", "us": "USA"}
 NAMENSNENNUNG = {"wetter": "Open-Meteo (CC BY 4.0)", "schlagzeilen": "", "suche": ""}
 
 _WETTER_STARK = re.compile(r"\b(wetter|wettervorhersage|wetterbericht|regnet|schneit)\b", re.I)
@@ -142,7 +150,7 @@ class Auftrag:
         if self.art == "wetter":
             return f"Wetter {['heute', 'morgen', 'übermorgen'][self.tag]} in {self.ort}"
         if self.art == "schlagzeilen":
-            return f"Schlagzeilen {LAENDER.get(self.land, 'Österreich')}"
+            return f"Schlagzeilen {land_name(self.land)}"
         return ""
 
 
@@ -168,6 +176,11 @@ _DATEI_WORT = r"(?:datei|dateien|dokument|dokumente|dokumenten|ordner|unterlagen
 _DATEI_ART_BESITZ = r"(?:meine?[nmrs]?|unsere?[nmrs]?)\s+(?:\w+\s+){0,2}?\w*(?:datei|dateien|dokument\w*|ordner|unterlagen|pdfs?|word\w*|excel\w*|fotos?|bilder|scans?|bewerbung\w*|rechnung\w*|vertr(?:a|ä)g\w*|lebenslauf|zeugnis\w*|bescheid\w*|befund\w*)\b"
 _DATEI_TUN = r"(?:such|find|wo\s+(?:ist|sind|liegt|liegen|hab|habe|finde)|zeig|hol|schick|brauch|gib\s+mir|öffne|oeffne|hast\s+du|gibt\s+es)"
 _WIE_FRAGE = re.compile(r"\s*(?:wie|warum|wieso|weshalb|was\s+(?:ist|sind|bedeutet|heißt|heisst|macht)|kann\s+man|welches?\s+programm)\b", re.I)
+DATEI_WORT_EN = r"(?:files?|documents?|folders?|paperwork|pdfs?|spreadsheets?|scans?)"
+DATEI_BESITZ_EN = (r"(?:my|our)\s+(?:\S+\s+){0,2}?(?:files?|documents?|folders?|paperwork|pdfs?|spreadsheets?|photos?|pictures?|scans?|"
+                   r"applications?|invoices?|bills?|contracts?|cv|resume|certificates?|payslips?|tax\s+returns?|receipts?|letters?)")
+DATEI_TUN_EN = r"(?:find|search|look\s+for|where\s+(?:is|are|did\s+i\s+(?:put|save))|where's|show\s+me|fetch|get\s+me|send\s+me|i\s+need|open|do\s+you\s+have|is\s+there)"
+DATEI_WIE_EN = r"\s*(?:how|why|what|which|should|explain|write|can\s+you\s+(?:explain|write|tell))"
 
 
 SUCHERGEBNISSE_TITEL = "Suchergebnisse"
@@ -182,11 +195,14 @@ def ohne_wortlaut(titel: str, text: str) -> tuple[str, str]:
 
 def ist_dateifrage(text: str) -> bool:
     t = " ".join(str(text or "").lower().split())
-    if not t or _WIE_FRAGE.match(t):
+    if not t or _WIE_FRAGE.match(t) or re.match(DATEI_WIE_EN + r"\b", t):
         return False
     if re.search(r"\b" + _DATEI_WORT + r"\b", t) and re.search(_DATEI_TUN, t):
         return True
-    return bool(re.search(r"\b" + _DATEI_ART_BESITZ, t) and re.search(_DATEI_TUN, t))
+    if re.search(r"\b" + _DATEI_ART_BESITZ, t) and re.search(_DATEI_TUN, t):
+        return True
+    tun_en = re.search(r"\b" + DATEI_TUN_EN + r"\b", t)
+    return bool(tun_en and (re.search(r"\b" + DATEI_WORT_EN + r"\b", t) or re.search(r"\b" + DATEI_BESITZ_EN + r"\b", t)))
 
 
 def frage_kennung(frage: str) -> str:
@@ -224,7 +240,7 @@ def erkennen(frage: str) -> Auftrag | None:
         genannt = belege.gefragtes_land(f)
         if genannt and genannt not in LAENDER:
             return Auftrag("suche", f) if len(wissen.woerter(f)) >= 2 else None
-        land = "de" if re.search(r"deutschland|tagesschau", unten) else ("ch" if re.search(r"schweiz|\bsrf\b", unten) else "at")
+        land = genannt or ("de" if re.search(r"deutschland|tagesschau", unten) else ("ch" if re.search(r"schweiz|\bsrf\b", unten) else "at"))
         return Auftrag("schlagzeilen", f, land=land)
     if (_SUCHE.search(f) or _ANGEBOT.search(f)) and len(wissen.woerter(f)) >= 2:
         return Auftrag("suche", f)
@@ -435,7 +451,7 @@ class Nachschauer:
 
 
     def schlagzeilen(self, a: Auftrag) -> Ergebnis:
-        feeds = FEEDS.get(a.land) or FEEDS["at"]
+        feeds = FEEDS.get(a.land) or FEEDS_INTERNATIONAL.get(a.land) or FEEDS["at"]
         je_feed: list[list[tuple[str, str, str, str]]] = []
         fehler = []
         for name, adresse in feeds:
@@ -470,7 +486,7 @@ class Nachschauer:
             raise NachschauError("NACHSCHAU_LEER", "kein Nachrichtenfeed hat gerade etwas geliefert" + (f" ({'; '.join(fehler)})" if fehler else ""))
         namen = [n for n, _ in feeds if any(e[3] == n for e in eintraege)]
         zeilen = [f"{i}. {titel} ({quelle})\n{link}" + (f"\n{teaser}" if teaser else "") for i, (titel, link, teaser, quelle) in enumerate(eintraege, 1)]
-        text = frage_kennung(a.frage) + f"\nSchlagzeilen {LAENDER.get(a.land, 'Österreich')} von {', '.join(namen)}, nachgeschaut am " + self._jetzt().strftime("%d.%m.%Y um %H:%M UTC") + ":\n\n" + "\n\n".join(zeilen)
+        text = frage_kennung(a.frage) + f"\nSchlagzeilen {land_name(a.land)} von{', '.join(namen)}, nachgeschaut am " + self._jetzt().strftime("%d.%m.%Y um %H:%M UTC") + ":\n\n" + "\n\n".join(zeilen)
         return Ergebnis("schlagzeilen", a.titel, feeds[0][1], text[:MAX_TEXT], gueltig_bis("schlagzeilen", self._jetzt()), f"Schlagzeilen in den Nachrichtenfeeds von {', '.join(namen)} nachgeschaut")
 
     def land_fuer_ort(self, ort: str) -> str:
@@ -700,6 +716,9 @@ def richtung(frage: str) -> str:
     if _LETZT.search(f):
         return "letzt"
     if _NAECHST.search(f):
+        import kalender_tage
+        if kalender_tage.jahre(f) and not re.search(r"n[äa]chste|kommende|als n[äa]chstes|demn[äa]chst", f, re.I):
+            return ""
         return "naechst"
     return ""
 

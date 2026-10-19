@@ -8,7 +8,18 @@ import sys
 from pathlib import Path
 
 WURZEL = Path(__file__).resolve().parents[1]
-_ESBUILD_UNTER = Path("app") / "node_modules" / "@esbuild" / "win32-x64" / "esbuild.exe"
+
+
+def _esbuild_unter() -> Path:
+    import platform
+    cpu = {"amd64": "x64", "x86_64": "x64", "aarch64": "arm64", "arm64": "arm64"}.get(platform.machine().lower(), platform.machine().lower())
+    basis = Path("app") / "node_modules" / "@esbuild"
+    if sys.platform == "win32":
+        return basis / f"win32-{cpu}" / "esbuild.exe"
+    return basis / f"{'darwin' if sys.platform == 'darwin' else 'linux'}-{cpu}" / "bin" / "esbuild"
+
+
+_ESBUILD_UNTER = _esbuild_unter()
 ESBUILD = WURZEL / _ESBUILD_UNTER
 
 

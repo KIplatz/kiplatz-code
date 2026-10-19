@@ -22,7 +22,7 @@ import sicher_schreiben
 
 APP_NAME = "KIplatz"
 APP_VERSION = "0.4.0-community"
-APP_BUILD = "2026-10-18m"
+APP_BUILD = "2026-10-19d"
 
 FIRST_START_FILENAME = "erststart.json"
 FREIGABE_FILENAME = "freigabe.json"
@@ -133,11 +133,10 @@ def ensure_plain_directory(path: Path) -> Path:
 def _mask(text: str) -> str:
     import re
 
-    user = os.environ.get("USERNAME") or Path.home().name
-    out = text.replace(user, "<benutzer>") if user else text
     host = platform.node()
-    if host and len(host) >= 3:
-        out = out.replace(host, "<rechner>")
+    out = text.replace(host, "<rechner>") if host and len(host) >= 3 else text
+    user = os.environ.get("USERNAME") or os.environ.get("USER") or Path.home().name
+    out = out.replace(user, "<benutzer>") if user else out
     out = re.sub(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+", "<mail>", out)
     out = re.sub(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", "<ip>", out)
     out = re.sub(r"\b(?:[0-9a-fA-F]{1,4}:){4,7}[0-9a-fA-F]{1,4}\b|(?<![\w:])[0-9a-fA-F]{0,4}::[0-9a-fA-F:]*[0-9a-fA-F]", "<ip>", out)

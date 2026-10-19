@@ -34,13 +34,35 @@ BEISPIEL_FRAGE = [
                                      "5| Was bedeutet 'Bim'?"},
 ]
 SYSTEM_ANTWORT = (
-    "You translate German into natural English. Each input line starts with a number and a vertical bar, like 3| … "
-    "Translate every line on its own and keep its number and bar: one line in, one line out, never merge or split lines, add nothing. "
-    "Keep numbers, units, names, list dashes and marks like (Quelle 1) exactly as they are. "
+    "You translate a German answer into natural English, the way a native English speaker would write it. "
+    "The answer comes split into numbered lines, each starting with a number and a vertical bar, like 3| … "
+    "Read all lines first so you understand the whole answer, then translate each line: keep its number and bar, one line in, one line out, "
+    "never merge or split lines, never add or leave out anything. Translate the meaning, not word for word: use English word order and "
+    "everyday English phrasing, never German sentence structure (write „The shops are closed on Sundays“, not „On Sundays are the shops closed“). "
+    "Keep the value of every number, but write numbers and dates the English way (3,5 becomes 3.5, 1.200 becomes 1,200, 26. Oktober becomes "
+    "26 October). Keep units, names, list dashes and marks like (Quelle 1) exactly as they are. "
     "The name of a shop, pharmacy, restaurant, street, place or organisation is a name: keep it whole and in German, "
     "also its words like Apotheke, Gasthaus or Straße. "
     "Never write in the first person about the topic (no „I descale“, „I recommend“); speak to the reader as „you“ or write impersonally. "
     "No Markdown, no asterisks. Output only the translated lines.")
+BEISPIEL_ANTWORT = [
+    {"role": "user", "content": "1| In Italien ist es üblich, den Espresso an der Bar im Stehen zu trinken (Quelle 1).\n"
+                                "2| Am Tisch zahlst du dafür oft deutlich mehr.\n"
+                                "3| Für einen Lieferwagen bis 3,5 t brauchst du in Österreich den Führerschein der Klasse B.\n"
+                                "4| Der Nationalfeiertag in Österreich ist am 26. Oktober.\n"
+                                "5| Was genau bei dir gilt, fragst du am besten direkt am Gemeindeamt nach.\n"
+                                "6| - 250 ml Milch und 2 Eier verquirlen\n"
+                                "7| Die Apotheke zum Hirschen in der Linzer Straße hat bis 18 Uhr offen.\n"
+                                "8| Ob das heute noch so ist, steht in den Quellen nicht."},
+    {"role": "assistant", "content": "1| In Italy, people usually drink their espresso standing at the bar (Quelle 1).\n"
+                                     "2| If you sit at a table, you often pay quite a bit more.\n"
+                                     "3| In Austria, you need a category B licence to drive a van up to 3.5 t.\n"
+                                     "4| Austria's national holiday is on 26 October.\n"
+                                     "5| It's best to ask your local council directly what applies to you.\n"
+                                     "6| - Whisk 250 ml milk and 2 eggs\n"
+                                     "7| Apotheke zum Hirschen on Linzer Straße is open until 6 pm.\n"
+                                     "8| The sources don't say whether that's still the case today."},
+]
 SYSTEM_ANTWORT_DEUTSCH_GEFRAGT = SYSTEM_ANTWORT.replace(
     " Output only the translated lines.",
     " The reader asked for German words: the German wording that answers the question stays German, exactly as it is, in quotation marks; "
@@ -48,6 +70,7 @@ SYSTEM_ANTWORT_DEUTSCH_GEFRAGT = SYSTEM_ANTWORT.replace(
 _DEUTSCH_GEFRAGT = re.compile(r"\b(?:in|into) (?:Austrian )?German\b|\bGerman (?:word|term|phrase|expression)s? for\b|\bGerman for\b", re.I)
 _BETONT = re.compile(r"(\*{1,2}|_{2})(?=\S)(.+?)(?<=\S)\1")
 _ZEILE = re.compile(r"^\s*(\d+)\s*\|\s?(.*)$")
+_ANFUEHRUNG_DE = re.compile(r"„([^„“”]*)[“”]")
 
 
 def frage_sprache(text: str) -> str:
@@ -186,7 +209,7 @@ def antwort_uebersetzen(frage_fn: FrageFn, text: str, lieferschein: dict, teil_m
                 teil_melden(stueck)
 
     try:
-        fertig = zeilen_uebersetzen(frage_fn, zeilen, weitergeben, system=system)
+        fertig = zeilen_uebersetzen(frage_fn, zeilen, weitergeben, system=system, beispiel=BEISPIEL_ANTWORT)
     except Exception as exc:
         if log:
             log(f"FEHLER uebersetzen: {type(exc).__name__}; die Antwort bleibt deutsch")
@@ -194,7 +217,7 @@ def antwort_uebersetzen(frage_fn: FrageFn, text: str, lieferschein: dict, teil_m
     fehlt = [i for i in range(len(saetze)) if i not in fertig and re.search(r"[A-Za-zÄÖÜäöüß]{3}", zeilen[i])]
     if fehlt:
         try:
-            nach = zeilen_uebersetzen(frage_fn, [zeilen[i] for i in fehlt], system=system)
+            nach = zeilen_uebersetzen(frage_fn, [zeilen[i] for i in fehlt], system=system, beispiel=BEISPIEL_ANTWORT)
             for j, i in enumerate(fehlt):
                 if j in nach:
                     fertig[i] = nach[j]
@@ -203,6 +226,7 @@ def antwort_uebersetzen(frage_fn: FrageFn, text: str, lieferschein: dict, teil_m
         except Exception as exc:
             if log:
                 log(f"FEHLER uebersetzen nach: {type(exc).__name__}")
+    fertig = {i: _ANFUEHRUNG_DE.sub(r"“\1”", z) for i, z in fertig.items()}
     neu = zusammensetzen(fertig, nur_bis_luecke=False)
     for j, k in enumerate(extra):
         if len(saetze) + j in fertig:

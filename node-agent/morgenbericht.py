@@ -18,7 +18,8 @@ MONATE = ("Jänner", "Februar", "März", "April", "Mai", "Juni", "Juli", "August
 STANDARD_ZEIT = "07:00"
 SCHLAGZEILEN = 5
 SEITEN = {"orf.at": "ORF.at", "news.at": "news.at", "ots.at": "OTS.at", "tagesschau.de": "tagesschau.de", "zdfheute.de": "ZDFheute.de",
-          "deutschlandfunk.de": "Deutschlandfunk.de", "dw.com": "DW.com", "srf.ch": "SRF.ch"}
+          "deutschlandfunk.de": "Deutschlandfunk.de", "dw.com": "DW.com", "srf.ch": "SRF.ch",
+          "bbc.co.uk": "BBC.co.uk", "bbc.com": "BBC.com", "news.sky.com": "Sky News", "npr.org": "NPR.org"}
 _LINK = re.compile(r"^\[([^\]\n]{1,160})\]\((https://[^\s)]{1,600})\)$")
 
 
@@ -71,7 +72,42 @@ def _schlagzeilen_zeilen(text: str, n: int = SCHLAGZEILEN) -> list[tuple[str, st
     return out
 
 
-def erstellen(nachschauer: nachschauen.Nachschauer, *, ort: str, jetzt: datetime, land: str = "at") -> tuple[str, list[str]]:
+WOCHENTAGE_EN = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+MONATE_EN = ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
+WETTER_EN = {"klar": "clear", "meist klar": "mostly clear", "teils bewölkt": "partly cloudy", "bedeckt": "overcast", "Nebel": "fog",
+             "Reifnebel": "freezing fog", "leichter Nieselregen": "light drizzle", "Nieselregen": "drizzle", "starker Nieselregen": "heavy drizzle",
+             "gefrierender Nieselregen": "freezing drizzle", "leichter Regen": "light rain", "Regen": "rain", "starker Regen": "heavy rain",
+             "gefrierender Regen": "freezing rain", "leichter Schneefall": "light snow", "Schneefall": "snow", "starker Schneefall": "heavy snow",
+             "Schneegriesel": "snow grains", "leichte Regenschauer": "light showers", "Regenschauer": "showers", "heftige Regenschauer": "heavy showers",
+             "Schneeschauer": "snow showers", "starke Schneeschauer": "heavy snow showers", "Gewitter": "thunderstorms",
+             "Gewitter mit Hagel": "thunderstorms with hail", "Gewitter mit starkem Hagel": "thunderstorms with heavy hail", "wechselnd": "changeable"}
+LAENDER_EN = {"at": "Austria", "de": "Germany", "ch": "Switzerland", "gb": "the UK", "us": "the US"}
+_WETTER_ZEILE = re.compile(r"^\*\*(Heute|Morgen), (\w+) (\d{2})\.(\d{2})\.(\d{4}):\*\* (.+?), Höchsttemperatur (-?\d+) °C, Tiefsttemperatur (-?\d+) °C, "
+                           r"(kein Regen|Regen ([\d,]+) mm)(?: \(Regenwahrscheinlichkeit (\d+) %\))?, Wind bis (\d+) km/h\.$")
+
+
+def wetter_zeile_en(zeile: str) -> str:
+    m = _WETTER_ZEILE.match(zeile)
+    if not m:
+        return zeile
+    wann, tag, d, mo, j, wie, hoch, tief, regen, mm, chance, wind = m.groups()
+    wochentag = WOCHENTAGE_EN[WOCHENTAGE.index(tag)] if tag in WOCHENTAGE else tag
+    regen_en = "no rain" if regen == "kein Regen" else f"rain {mm.replace(',', '.')} mm"
+    return (f"**{'Today' if wann == 'Heute' else 'Tomorrow'}, {wochentag} {int(d)} {MONATE_EN[int(mo) - 1]} {j}:** {WETTER_EN.get(wie, wie)}, "
+            f"high {hoch} °C, low {tief} °C, {regen_en}" + (f" ({chance} % chance of rain)" if chance else "") + f", wind up to {wind} km/h.")
+
+
+def feed_land(land: str, sprache: str) -> str:
+    land = (land or "at").lower()
+    if sprache != "en":
+        return land if land in nachschauen.FEEDS and nachschauen.FEED_SPRACHE.get(land) == "de" else "at"
+    return land if nachschauen.FEED_SPRACHE.get(land) == "en" else "en"
+
+
+def erstellen(nachschauer: nachschauen.Nachschauer, *, ort: str, jetzt: datetime, land: str = "at", sprache: str = "de") -> tuple[str, list[str]]:
+    if sprache == "en":
+        return _erstellen_en(nachschauer, ort=ort, jetzt=jetzt, land=land)
+    land = feed_land(land, "de")
     fehler: list[str] = []
     kopf = f"Guten Morgen. Heute ist {WOCHENTAGE[jetzt.weekday()]}, der {jetzt.day}. {MONATE[jetzt.month - 1]} {jetzt.year}."
     teile = [kopf]
@@ -93,6 +129,32 @@ def erstellen(nachschauer: nachschauen.Nachschauer, *, ort: str, jetzt: datetime
     except Exception as exc:
         fehler.append(f"Schlagzeilen: {getattr(exc, 'detail', None) or type(exc).__name__}")
         teile.append("Schlagzeilen: gerade nicht abrufbar.")
+    return "\n\n".join(teile), fehler
+
+
+def _erstellen_en(nachschauer: nachschauen.Nachschauer, *, ort: str, jetzt: datetime, land: str) -> tuple[str, list[str]]:
+    fehler: list[str] = []
+    teile = [f"Good morning. Today is {WOCHENTAGE_EN[jetzt.weekday()]}, {jetzt.day} {MONATE_EN[jetzt.month - 1]} {jetzt.year}."]
+    if ort:
+        try:
+            w = nachschauer.wetter(nachschauen.Auftrag("wetter", f"Wie wird das Wetter heute in {ort}?", ort=ort, tag=0))
+            zeilen = [wetter_zeile_en(z) for z in _wetter_zeilen(w.text)]
+            teile.append(f"Weather in {ort}:\n\n" + "\n\n".join(zeilen) if zeilen else f"Weather in {ort}: no forecast received.")
+        except Exception as exc:
+            fehler.append(f"Wetter: {getattr(exc, 'detail', None) or type(exc).__name__}")
+            teile.append(f"Weather in {ort}: not available right now.")
+    else:
+        teile.append("Weather: enter a place under Settings and click “Create now” there, and it will show up here.")
+    fl = feed_land(land, "en")
+    try:
+        s = nachschauer.schlagzeilen(nachschauen.Auftrag("schlagzeilen", "Schlagzeilen", land=fl))
+        zeilen = _schlagzeilen_zeilen(s.text)
+        bloecke = [f"**{t}**" + (f"\n[Read more on {seite(l)}]({l})" if l else "") for t, l in zeilen]
+        kopf = f"Headlines from {LAENDER_EN[fl]}:" if fl in LAENDER_EN else "International headlines:"
+        teile.append(kopf + "\n\n" + "\n\n".join(bloecke) if zeilen else "Headlines: the news feed was empty.")
+    except Exception as exc:
+        fehler.append(f"Schlagzeilen: {getattr(exc, 'detail', None) or type(exc).__name__}")
+        teile.append("Headlines: not available right now.")
     return "\n\n".join(teile), fehler
 
 

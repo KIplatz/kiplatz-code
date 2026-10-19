@@ -73,11 +73,18 @@ const DATEI_WORT = "(?:datei|dateien|dokument|dokumente|dokumenten|ordner|unterl
 const BESITZ = `(?:meine?[nmrs]?|unsere?[nmrs]?)\\s+(?:${W}+\\s+){0,2}?${W}*(?:datei|dateien|dokument${W}*|ordner|unterlagen|pdfs?|word${W}*|excel${W}*|fotos?|bilder|scans?|bewerbung${W}*|rechnung${W}*|vertr(?:a|ä)g${W}*|lebenslauf|zeugnis${W}*|bescheid${W}*|befund${W}*)${NACH}`;
 const TUN = /(?:such|find|wo\s+(?:ist|sind|liegt|liegen|hab|habe|finde)|zeig|hol|schick|brauch|gib\s+mir|öffne|oeffne|hast\s+du|gibt\s+es)/u;
 const WIE = new RegExp(`^\\s*(?:wie|warum|wieso|weshalb|was\\s+(?:ist|sind|bedeutet|heißt|heisst|macht)|kann\\s+man|welches?\\s+programm)${NACH}`, "u");
+
+const DATEI_WORT_EN = String.raw`(?:files?|documents?|folders?|paperwork|pdfs?|spreadsheets?|scans?)`;
+const DATEI_BESITZ_EN = String.raw`(?:my|our)\s+(?:\S+\s+){0,2}?(?:files?|documents?|folders?|paperwork|pdfs?|spreadsheets?|photos?|pictures?|scans?|applications?|invoices?|bills?|contracts?|cv|resume|certificates?|payslips?|tax\s+returns?|receipts?|letters?)`;
+const DATEI_TUN_EN = String.raw`(?:find|search|look\s+for|where\s+(?:is|are|did\s+i\s+(?:put|save))|where's|show\s+me|fetch|get\s+me|send\s+me|i\s+need|open|do\s+you\s+have|is\s+there)`;
+const DATEI_WIE_EN = String.raw`\s*(?:how|why|what|which|should|explain|write|can\s+you\s+(?:explain|write|tell))`;
 export function istDateifrage(text) {
   const t = String(text || "").toLowerCase().split(/\s+/).filter(Boolean).join(" ");
-  if (!t || WIE.test(t)) return false;
+  if (!t || WIE.test(t) || new RegExp("^" + DATEI_WIE_EN + NACH, "u").test(t)) return false;
   if (new RegExp(VOR + DATEI_WORT + NACH, "u").test(t) && TUN.test(t)) return true;
-  return new RegExp(VOR + BESITZ, "u").test(t) && TUN.test(t);
+  if (new RegExp(VOR + BESITZ, "u").test(t) && TUN.test(t)) return true;
+  return new RegExp(VOR + DATEI_TUN_EN + NACH, "u").test(t)
+    && (new RegExp(VOR + DATEI_WORT_EN + NACH, "u").test(t) || new RegExp(VOR + DATEI_BESITZ_EN + NACH, "u").test(t));
 }
 
 

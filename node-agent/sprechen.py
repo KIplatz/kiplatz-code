@@ -19,7 +19,7 @@ if str(_HERE) not in sys.path:
 
 import app_core
 import ki_laufzeit
-from modell_katalog import HOEREN, LAUFZEIT, SPRACHE_LAUFZEIT, SPRACHE_MODELL
+from modell_katalog import HOEREN, SPRACHE_LAUFZEIT, SPRACHE_MODELL
 import sprechen_windows
 
 WINDOWS_ERKENNER = sprechen_windows.Erkenner()
@@ -111,9 +111,9 @@ def holen(ordner: SprachOrdner, *, fortschritt: Callable[[str, int, int], None] 
     laden = herunterladen or ki_laufzeit.herunterladen
     ordner.ki.anlegen()
     if not ordner.ki.laufzeit_da():
-        zip_pfad = ordner.ki.downloads_dir / LAUFZEIT.datei
-        if not ki_laufzeit.pruefsumme_ok(zip_pfad, LAUFZEIT):
-            laden(LAUFZEIT, zip_pfad, fortschritt=(lambda d, g: fortschritt("KI-Laufzeit", d, g)) if fortschritt else None)
+        zip_pfad = ordner.ki.downloads_dir / ki_laufzeit.LAUFZEIT.datei
+        if not ki_laufzeit.pruefsumme_ok(zip_pfad, ki_laufzeit.LAUFZEIT):
+            laden(ki_laufzeit.LAUFZEIT, zip_pfad, fortschritt=(lambda d, g: fortschritt("KI-Laufzeit", d, g)) if fortschritt else None)
         ki_laufzeit.laufzeit_entpacken(zip_pfad, ordner.ki.laufzeit_dir)
     if not ordner.ki.modell_da(HOEREN):
         laden(HOEREN, ordner.ki.modell_pfad(HOEREN), fortschritt=(lambda d, g: fortschritt("Hör-Modell", d, g)) if fortschritt else None)

@@ -146,9 +146,9 @@ def test_holen_fetches_runtime_then_hearing_model_and_add_on_with_pinned_package
     def laden(paket, ziel, *, fortschritt=None):
         geholt.append(paket.kennung)
         ziel.parent.mkdir(parents=True, exist_ok=True)
-        if paket is modell_katalog.LAUFZEIT:
+        if paket is ki_laufzeit.LAUFZEIT:
             with zipfile.ZipFile(ziel, "w") as zf:
-                zf.writestr("llama-server.exe", b"MZ")
+                zf.writestr(ki_laufzeit.SERVER_EXE, b"MZ")
         else:
             with open(ziel, "wb") as f:
                 f.seek(paket.groesse - 1)
@@ -328,9 +328,10 @@ def test_steuerung_ends_by_itself_when_the_recording_is_full(tmp_path, monkeypat
     assert d["text"] == "lang geredet"
 
 
-@pytest.mark.skipif(sys.platform != "win32", reason="winmm")
 def test_windows_takes_16k_mono_without_opening_the_microphone():
     assert sprechen.format_moeglich() == sprechen.mikrofon_da()
+    if sys.platform != "win32":
+        assert sprechen.mikrofon_da() is False and sprechen.format_moeglich() is False
 
 
 def test_window_has_the_button_and_no_invitation_code_at_first_start():

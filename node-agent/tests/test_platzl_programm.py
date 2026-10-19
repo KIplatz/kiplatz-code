@@ -86,7 +86,7 @@ def _verbinden(p):
 def test_connect_stores_the_key_protected_and_nothing_readable(p, tmp_path):
     _verbinden(p)
     roh = (tmp_path / pp.DATEI).read_text(encoding="utf-8")
-    assert "k" * 20 not in roh and ("dpapi:" in roh or "klar:" in roh)
+    assert "k" * 20 not in roh and any(f"{p}:" in roh for p in ("dpapi", "bund", "datei"))
     assert p.stand() == {"verbunden": True, "name": "rainer", "wartet": False}
 
 

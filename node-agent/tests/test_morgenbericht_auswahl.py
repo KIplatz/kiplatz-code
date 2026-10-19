@@ -68,7 +68,7 @@ def test_window_settings_and_api_for_the_morning_report(tmp_path, monkeypatch):
     api, _fake, _ = _api(tmp_path)
     monkeypatch.setattr(api, "_nachschauer", _Nachschauer())
     gesprochen = []
-    monkeypatch.setattr(api, "_vorlesen_still", lambda text: gesprochen.append(text))
+    monkeypatch.setattr(api, "_vorlesen_still", lambda text, sprache="de": gesprochen.append(text))
     r = api.morgenbericht_setzen(True, "06:30", "Gmunden", True)
     assert r["ok"] and r["daten"]["an"] and r["daten"]["zeit"] == "06:30" and r["daten"]["ort"] == "Gmunden"
     assert api.zustand()["daten"]["morgenbericht"]["zeit"] == "06:30"

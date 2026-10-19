@@ -93,8 +93,8 @@ def test_die_einleitung_wartet_nie_hinter_einer_belegten_kopie(tmp_path):
     frei, t = _gehalten(db)
     try:
         s = time.monotonic()
-        assert w.einleitung(frage) == []
-        assert time.monotonic() - s < wikipedia.NAMEN_WARTEN_S + 2
+        assert len(w.einleitung(frage)) == 1
+        assert time.monotonic() - s < wikipedia.NAMEN_WARTEN_S
     finally:
         frei.set()
         t.join(5)

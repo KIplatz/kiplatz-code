@@ -99,16 +99,20 @@ def _stufe(name) -> float:
 WOERTLICH_WOERTER = 10
 
 
-FREI_ARTEN = ("seite", "ortswissen", "berichtigung")
+FREI_ARTEN = ("seite", "ortswissen", "berichtigung", "dokument", "pass", "berechnet", "abgefragt")
 
 
 def _fremd(q) -> bool:
     return isinstance(q, dict) and (q.get("art") not in FREI_ARTEN or bool(q.get("privat")))
 
 
+def wortliste(text: str) -> list[str]:
+    return [w for w in re.findall(r"[0-9a-zäöüß]+", str(text or "").lower()) if not w.isdigit()]
+
+
 def woertlich(antwort: str, quelle: str, n: int = WOERTLICH_WOERTER) -> bool:
-    a = re.findall(r"[0-9a-zäöüß]+", str(antwort or "").lower())
-    q = re.findall(r"[0-9a-zäöüß]+", str(quelle or "").lower())
+    a = wortliste(antwort)
+    q = wortliste(quelle)
     if len(a) < n or len(q) < n:
         return False
     stuecke = {tuple(q[i:i + n]) for i in range(len(q) - n + 1)}
@@ -124,7 +128,7 @@ def nachgebessert(lieferschein) -> bool:
     return any(_NACHGEBESSERT.search(str(n)) for n in notizen)
 
 
-MINDEST_BAU = "2026-10-18m"
+MINDEST_BAU = "2026-10-19a"
 
 
 def vor_mindest_bau(lieferschein) -> bool:

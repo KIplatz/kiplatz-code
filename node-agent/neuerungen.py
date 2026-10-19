@@ -11,6 +11,29 @@ def dank(satz: str, wer: str, art: str = "Meldung") -> str:
 
 
 NEUERUNGEN: dict[str, list[str]] = {
+    "2026-10-19d": [],
+    "2026-10-19c": [],
+    "2026-10-19b": [],
+    "2026-10-19a": [
+        "Einleitung und Namensprüfung aus der Wikipedia-Kopie kommen jetzt auch, während das Gerät im Hintergrund an der Kopie arbeitet; vorher fielen sie dabei still aus.",
+        "Das Bedeutungs-Modell für deine Frage wartet nicht mehr, bis ein großer Download der Rechenarbeit fertig ist.",
+        "Fragst du nach einem Termin mit Jahreszahl oder „this year“, antwortet KIplatz aus dem Kalender statt mit „nicht sicher“.",
+    ],
+    "2026-10-18r": [],
+    "2026-10-18q": [
+        "Wann in den USA, in Kanada, Großbritannien, Australien oder Neuseeland die Uhr umgestellt wird, rechnet KIplatz jetzt selbst aus, und fragst du nach einem Termin „heuer“ oder „this year“, bekommst du den Tag dieses Jahres, auch wenn er schon vorbei ist.",
+    ],
+    "2026-10-18p": [
+        "Fällt bei einer Anleitung oder einem Rezept ein Schritt bei der Prüfung weg, gibt KIplatz die Antwort nicht mehr mit einer Lücke aus, sondern schreibt sie neu oder sucht weiter.",
+    ],
+    "2026-10-18o": [
+        "Wer KIplatz auf Englisch nutzt, bekommt jetzt alles auf Englisch: den Morgenbericht mit Schlagzeilen aus dem eigenen Land, die zehn Skill-Vorlagen und das Gedächtnis mit „Remember: …“, und vorgelesen wird mit einer englischen Stimme.",
+        "Englische Antworten klingen jetzt natürlich statt Wort für Wort übersetzt, und bei englischen Fragen zu Ländern außerhalb des deutschen Sprachraums sucht KIplatz auf Englisch und findet so die Seiten der Behörden dort.",
+        "Knöpfe und Hinweise heißen auf Englisch jetzt in Programm, App und Website gleich und klingen natürlich.",
+    ],
+    "2026-10-18n": [
+        "Steht ein Satz fast wörtlich auf einer Seite oder in der Wikipedia, schreibt KIplatz genau diesen Satz in eigenen Worten neu, statt die Antwort zu kürzen, und das jetzt auch bei Antworten auf Englisch.",
+    ],
     "2026-10-18m": [],
     "2026-10-18l": [],
     "2026-10-18k": [
@@ -1055,16 +1078,24 @@ NEUERUNGEN: dict[str, list[str]] = {
 }
 
 ZURUECKGEHALTEN: dict[str, list[str]] = {
+    "2026-10-19d": [
+        "Dein PC kommt jetzt mit deinem KIplatz-Konto zur Community dazu, wie die App: im Programm „Mit KIplatz-Konto dazukommen“ anklicken, im Browser anmelden und „Einen neuen PC verbinden?“ bestätigen. Einen Code vom Admin brauchst du dafür nicht mehr.",
+    ],
     "2026-10-12d": [
         "Neu unter „Meine KI“: ein Frag-Fenster für deinen Betrieb oder Verein. Besucher deiner Website stellen Fragen, und dein PC beantwortet sie aus einem Ordner mit deinen Unterlagen, ohne Cloud.",
     ],
 }
 
 KURZ_JE_TAG: dict[str, list[str]] = {
+    "2026-10-19": [
+        "Antworten aus dem Lexikon am eigenen PC kommen jetzt auch, während das Gerät im Hintergrund daran arbeitet",
+        "Ein großer Download im Hintergrund hält deine eigene Frage nicht mehr auf",
+        "Ein Termin mit Jahreszahl kommt gleich aus dem Kalender, auch auf Englisch",
+    ],
     "2026-10-18": [
         "KIplatz kennt Feiertage weltweit beim Namen und rechnet Termine wie den ersten Advent selbst aus",
         "Bei Einreise, Visum und Ämtern in jedem Land schaut KIplatz jetzt aktuell bei den Behörden nach",
-        "Antworten bleiben öfter ganz, und englische Fragen kommen sauber übersetzt an",
+        "Auf Englisch merkt sich KIplatz jetzt Sätze, liest den Morgenbericht und klingt natürlicher",
     ],
     "2026-10-17": [
         "Fragen wie „Was soll ich tun, wenn …“ bekommen jetzt gleich eine Antwort statt Rückfragen",
@@ -1146,6 +1177,25 @@ KURZ_JE_TAG: dict[str, list[str]] = {
         "Weiß KIplatz etwas nicht, sucht es nach und sagt es ehrlich",
         "Mehr Datenschutz und mehr Sicherheit im Heimnetz",
     ],
+}
+
+
+GESCHICHTE_JE_TAG: dict[str, dict[str, str]] = {
+    "2026-10-19": {
+        "haken": "Frag KIplatz ab heute „Wann ist Ostern 2027?“, und die Antwort kommt gleich aus dem Kalender.",
+        "text": "Wir haben auch dafür gesorgt, dass dein PC aus dem Lexikon antwortet, während er nebenbei für die Community arbeitet. "
+                "Und ein großer Download im Hintergrund hält deine eigene Frage nicht mehr auf.",
+    },
+    "2026-10-18": {
+        "haken": "Frag KIplatz ab heute „Wann ist heuer der erste Advent?“, und es rechnet dir das Datum gleich selbst aus, ohne zu raten.",
+        "text": "Wir haben KIplatz dazu die Feiertage der ganzen Welt beigebracht. Bei Einreise, Visum und Ämtern schaut es jetzt in jedem "
+                "Land aktuell bei den Behörden nach. Auf Englisch merkt es sich Sätze, liest den Morgenbericht und klingt natürlicher.",
+    },
+    "2026-10-17": {
+        "haken": "Frag KIplatz ab heute „Was soll ich tun, wenn der Abfluss verstopft ist?“, und du bekommst gleich eine Antwort statt Gegenfragen.",
+        "text": "Wir haben auch die Antworten auf Alltagsfragen schneller gemacht, weil weniger neu geschrieben wird. "
+                "Und wer auf Englisch wissen will, was Feber heißt, bekommt jetzt ebenfalls eine Antwort.",
+    },
 }
 
 

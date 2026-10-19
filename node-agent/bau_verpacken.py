@@ -8,7 +8,7 @@ import sys
 from importlib._bootstrap_external import _code_to_timestamp_pyc
 from pathlib import Path
 
-START = ("app_web", "sitecustomize")
+START = ("app_web", "sitecustomize", "helfer")
 QUELLE_BLEIBT = ("sitecustomize",)
 STUMMEL = ("app_web", "app_core")
 

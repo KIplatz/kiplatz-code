@@ -481,8 +481,8 @@ class Verteiler:
                       "abschnitte": 0, "geprueft": 0, "abgelehnt": 0, "credits": 0, "zuletzt": _heute()}
         if art:
             g[kennung]["art"] = str(art)[:30]
-        if herkunft == "konto":
-            g[kennung]["herkunft"] = "konto"
+        if herkunft in ("konto", "pc-konto"):
+            g[kennung]["herkunft"] = herkunft
         self._geraete_schreiben(g)
         self._log(f"GERAET {kennung} {name}")
         return kennung, token
@@ -670,6 +670,7 @@ class Verteiler:
         e.pop("konto_name", None)
         e.pop("konto_seit", None)
         e.pop("konto_qr_seit", None)
+        e.pop("konto_benutzer", None)
         self._geraete_schreiben(g)
         self._log(f"KONTO {kennung} gelöst")
         return True
@@ -714,6 +715,17 @@ class Verteiler:
                 self._aktiv_timer.daemon = True
                 self._aktiv_timer.start()
         return vorher
+
+    @_gesperrt
+    def kontoreste_entfernen(self) -> int:
+        g, n = self._geraete(), 0
+        for e in g.values():
+            if isinstance(e, dict) and not e.get("konto_sub") and "konto_benutzer" in e:
+                e.pop("konto_benutzer", None)
+                n += 1
+        if n:
+            self._geraete_schreiben(g)
+        return n
 
     @_gesperrt
     def herkunft_nachtragen(self) -> int:

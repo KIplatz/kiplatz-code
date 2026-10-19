@@ -54,7 +54,7 @@ def test_pairing_with_code_pinned_certificate_streamed_answer_and_removal(tmp_pa
         assert d.kopplung is None
         assert v.daten().host == "127.0.0.1"
         raw = (tmp_path / "laptop" / hn.DIRNAME / "verbindung.json").read_text(encoding="utf-8")
-        assert '"token": "dpapi:' in raw or '"token": "klar:' in raw
+        assert any(f'"token": "{p}:' in raw for p in ("dpapi", "bund", "datei"))
         assert v.hallo()["name"] == "PC-Test"
         got = []
         a = v.frage([{"role": "user", "content": "hi"}], on_token=got.append)
@@ -277,3 +277,20 @@ def test_d_a_paired_device_cannot_make_the_pc_read_pages_in_its_own_network(tmp_
     except wissen.WissenError:
         pass
     assert gelesen == []
+
+
+def test_ein_entferntes_geraet_hoert_nicht_gekoppelt_auch_bei_einer_langen_frage(tmp_path):
+    d = _dienst(tmp_path)
+    try:
+        v = hn.Verbindung(tmp_path / "laptop", geraet_name_eigen="Laptop-Test", loopback_erlaubt=True)
+        v.koppeln("127.0.0.1", d.koppeln_oeffnen(), port=d.port)
+        assert d.geraete.entfernen("Laptop-Test")
+        lang = [{"role": "user", "content": "x" * 19000}] * 13
+        for _ in range(5):
+            try:
+                v.frage(lang)
+                raise AssertionError
+            except hn.HeimnetzError as exc:
+                assert "nicht (mehr) gekoppelt" in exc.detail, exc.detail
+    finally:
+        d.stop()

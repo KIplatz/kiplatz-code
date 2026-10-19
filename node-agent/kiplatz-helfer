@@ -1,0 +1,28 @@
+#!/bin/sh
+# KIplatz-Helfer starten (Linux und macOS). Liegt im Programmordner neben python/ und node-agent/.
+# Nach einem Update zählt dieses Skript die Starts der neuen Fassung; kommt sie zweimal nicht bis zur Bestätigung
+# (update-probe.json bleibt liegen), holt es die vorige Fassung zurück, wie der Starter unter Windows.
+set -u
+ORDNER=$(cd "$(dirname "$0")" && pwd -P)
+PROBE="$ORDNER/update-probe.json"
+ZAEHLER="$ORDNER/update-probe.starts"
+# nur ein echter Start zählt (status, grenzen, an, aus und einrichten nicht)
+START=0
+for a in "$@"; do [ "$a" = "start" ] && START=1; done
+if [ "$START" = 1 ] && [ -f "$PROBE" ] && [ -d "$ORDNER/node-agent.alt" ]; then
+    STARTS=$(cat "$ZAEHLER" 2>/dev/null || echo 0)
+    case "$STARTS" in ''|*[!0-9]*) STARTS=0 ;; esac
+    STARTS=$((STARTS + 1))
+    echo "$STARTS" > "$ZAEHLER"
+    if [ "$STARTS" -gt 2 ]; then
+        BAU=$(sed -n 's/.*"bau": *"\([0-9a-z-]*\)".*/\1/p' "$PROBE" | head -n 1)
+        rm -rf "$ORDNER/node-agent.kaputt"
+        mv "$ORDNER/node-agent" "$ORDNER/node-agent.kaputt" && mv "$ORDNER/node-agent.alt" "$ORDNER/node-agent"
+        printf '{"bau": "%s", "zeit_s": %s}\n' "$BAU" "$(date +%s)" > "$ORDNER/update-rueckweg.json"
+        rm -f "$PROBE" "$ZAEHLER"
+        echo "KIplatz-Helfer: die neue Fassung ist zweimal nicht gestartet, die vorige ist zurück." >&2
+    fi
+elif [ ! -f "$PROBE" ] && [ -f "$ZAEHLER" ]; then
+    rm -f "$ZAEHLER"   # die neue Fassung ist bestätigt
+fi
+exec "$ORDNER/python/bin/python3" -s -E -B "$ORDNER/node-agent/helfer.pyc" "$@"
