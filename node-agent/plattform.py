@@ -18,6 +18,13 @@ def system() -> str:
     return "windows" if sys.platform == "win32" else "linux"
 
 
+def im_container() -> bool:
+    return os.environ.get("KIPLATZ_CONTAINER") == "1"
+
+
+IM_CONTAINER_SATZ = "Im Container startet Docker den Helfer von selbst (docker compose up -d); anhalten mit docker compose stop."
+
+
 def _xdg(name: str, standard: str) -> Path:
     wert = os.environ.get(name, "")
     return Path(wert) if wert and Path(wert).is_absolute() else Path.home() / standard
@@ -112,6 +119,8 @@ def _schreiben(p: Path, text: str) -> None:
 
 def autostart_an(programm: Path | None = None, *, protokoll: Path | None = None, runner=subprocess.run) -> str:
     programm = Path(programm or programm_ordner())
+    if im_container():
+        return IM_CONTAINER_SATZ
     if system() == "macos":
         p = _plist_pfad()
         _schreiben(p, launchd_plist(programm, protokoll or (daten_ordner() / "helfer.log")))
@@ -135,6 +144,8 @@ def autostart_an(programm: Path | None = None, *, protokoll: Path | None = None,
 
 
 def autostart_aus(*, runner=subprocess.run) -> str:
+    if im_container():
+        return IM_CONTAINER_SATZ
     if system() == "macos":
         p = _plist_pfad()
         _ruf(["launchctl", "bootout", f"gui/{os.getuid()}", str(p)], runner)
@@ -149,6 +160,8 @@ def autostart_aus(*, runner=subprocess.run) -> str:
 
 
 def autostart_an_ist() -> bool:
+    if im_container():
+        return True
     return (_plist_pfad() if system() == "macos" else _einheit_pfad()).is_file()
 
 

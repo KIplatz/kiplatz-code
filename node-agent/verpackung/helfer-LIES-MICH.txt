@@ -52,7 +52,10 @@ Was du einstellen kannst
 ------------------------
 Die Befehle liegen im Ordner des Helfers (siehe unten).
 
-  kiplatz-helfer status                     angemeldet, läuft er, Protokoll
+  kiplatz-helfer status                     was er gerade tut: online, Modell,
+                                            beantwortete Fragen, Scheiben,
+                                            Credits, Verbindungen seit dem Start
+  kiplatz-helfer status --json              dasselbe für eigene Werkzeuge
   kiplatz-helfer grenzen --cpu 25 --ram 4   höchstens 25 % des Prozessors
                                             und 4 GB Arbeitsspeicher
   kiplatz-helfer aus                        stoppen, Autostart aus
@@ -83,6 +86,10 @@ Linux: Programm in ~/.local/share/kiplatz/kiplatz-helfer,
        Daten und Modelle in ~/.local/share/kiplatz/daten
 Mac:   Programm in ~/Library/kiplatz/kiplatz-helfer,
        Daten und Modelle in ~/Library/Application Support/KIplatz/Daten
+
+Protokoll: im Datenordner unter diagnose/helfer-protokoll.txt, in klaren
+Sätzen in der Sprache deines Systems (gestartet, verbunden, Fragen
+beantwortet, Credits, Updates).
 
 
 Entfernen

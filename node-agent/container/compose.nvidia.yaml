@@ -1,0 +1,13 @@
+# Erzeugt von node-agent/helfer_container.py. Nicht von Hand ändern: Skript ändern, laufen lassen, committen.
+# NVIDIA: braucht das NVIDIA Container Toolkit am Rechner. docker compose -f compose.yaml -f compose.nvidia.yaml up -d
+services:
+  helfer:
+    environment:
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility,graphics   # graphics: llama.cpp rechnet über Vulkan
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import ipaddress
 import json
 import os
 import signal
@@ -20,16 +21,49 @@ import app_core
 import app_install
 import app_web
 import community
+import datenfluss
 import geheim
 import plattform
+import sicher_schreiben
 import sprachen
 
 UPDATE_BLICK_S = 300
 SCHLUESSEL_PFLEGE_S = 3600
 PROTOKOLL = "protokoll.txt"
+STAND = "helfer-stand.json"
+STAND_S = 60
+STAND_ALT_S = 3 * STAND_S
+ONLINE_S = 360
+LESBAR = "helfer-protokoll.txt"
+LESBAR_MAX = 512 * 1024
+
+
+_MAC_SPRACHE: str | None = None
+
+
+def _mac_sprache() -> str:
+    global _MAC_SPRACHE
+    if _MAC_SPRACHE is None:
+        _MAC_SPRACHE = ""
+        if plattform.system() == "macos":
+            import re
+            import subprocess
+            for schluessel in ("AppleLanguages", "AppleLocale"):
+                try:
+                    r = subprocess.run(["/usr/bin/defaults", "read", "-g", schluessel], capture_output=True, text=True, timeout=3, check=False)
+                except (OSError, subprocess.SubprocessError):
+                    continue
+                m = re.search(r"[A-Za-z]{2}", r.stdout or "") if r.returncode == 0 else None
+                if m:
+                    _MAC_SPRACHE = m.group(0).lower()
+                    break
+    return _MAC_SPRACHE
 
 
 def englisch() -> bool:
+    mac = _mac_sprache()
+    if mac:
+        return mac != "de"
     for name in ("LC_ALL", "LC_MESSAGES", "LANG"):
         wert = os.environ.get(name, "")
         if wert:
@@ -59,6 +93,114 @@ def _sag(text: str) -> None:
 
 def _zahl(x: float) -> str:
     return f"{x:g}" if englisch() else app_core.zahl_de(x)
+
+
+def _zahl_ganz(n: int) -> str:
+    return f"{n:,}" if englisch() else f"{n:,}".replace(",", ".")
+
+
+def _ist_adresse(host: str) -> bool:
+    try:
+        ipaddress.ip_address(str(host).strip("[]"))
+        return True
+    except ValueError:
+        return False
+
+
+def lesbar(core: app_core.AppCore, satz: str) -> None:
+    try:
+        core.ensure_directories()
+        pfad = core.diagnosis_dir / LESBAR
+        if pfad.is_file() and pfad.stat().st_size > LESBAR_MAX:
+            rest = pfad.read_bytes()[-(LESBAR_MAX // 2):]
+            sicher_schreiben.roh(pfad, rest[rest.find(b"\n") + 1:])
+        with open(pfad, "a", encoding="utf-8") as f:
+            f.write(time.strftime("%Y-%m-%d %H:%M") + "  " + _t(satz) + "\n")
+    except OSError:
+        pass
+
+
+def stand_erheben(api: app_web.Api) -> dict:
+    ki = api._ki.zustand()
+    r = api._rechen.zustand()
+    s = api._halter.stand()
+    c = api._credits_dict()
+    eigener = datenfluss.host_von(api._community.adresse)
+    verbindungen, andere = [], {"host": "", "anfragen": 0, "raus": 0, "rein": 0}
+    kontakt = ""
+    for h in datenfluss.stand()["hosts"]:
+        if h["host"] == eigener:
+            kontakt = h.get("zuletzt") or ""
+        if _ist_adresse(h["host"]) and h["host"] != eigener:
+            for k in ("anfragen", "raus", "rein"):
+                andere[k] += int(h.get(k) or 0)
+        else:
+            verbindungen.append({k: h.get(k) for k in ("host", "anfragen", "raus", "rein")})
+    if andere["anfragen"]:
+        verbindungen.append(andere)
+    return {"version": 1, "zeit": time.time(), "bau": app_core.APP_BUILD, "server": eigener, "kontakt": kontakt,
+            "modell": ki.get("modell") if ki.get("laeuft") else None, "modell_auf": ki.get("geraet"),
+            "antwortet": bool(api._kann_fuer_andere_antworten()), "phase": r.get("phase"), "arbeit": str(r.get("text") or "").split("\n")[0],
+            "gesamt": {k: int((r.get("gesamt") or {}).get(k) or 0) for k in ("antworten", "abschnitte", "credits")},
+            "scheiben": {"anzahl": int(s.get("anzahl") or 0), "mb": float(s.get("mb") or 0), "geliefert": int(s.get("geliefert") or 0)},
+            "guthaben": c.get("guthaben"), "verbindungen": verbindungen}
+
+
+def _kontakt_zeit(stand: dict) -> float | None:
+    import calendar
+    try:
+        return float(calendar.timegm(time.strptime(str(stand.get("kontakt") or ""), "%Y-%m-%dT%H:%M:%SZ")))
+    except (ValueError, OverflowError):
+        return None
+
+
+def online(stand: dict, jetzt: float | None = None) -> bool:
+    t = _kontakt_zeit(stand)
+    return t is not None and (jetzt if jetzt is not None else time.time()) - t <= ONLINE_S
+
+
+def _mehrzahl(n: int, eins: str, viele: str) -> str:
+    return eins if n == 1 else viele.format(_zahl_ganz(n))
+
+
+def stand_vergleichen(vorher: dict | None, jetzt: dict) -> list[str]:
+    saetze = []
+    war_online = online(vorher, vorher["zeit"]) if vorher else None
+    ist_online = online(jetzt, jetzt["zeit"])
+    if ist_online != war_online:
+        saetze.append(f"Verbunden mit {jetzt['server']}." if ist_online else f"Keine Verbindung zu {jetzt['server']}. Der Helfer versucht es weiter.")
+    if (vorher or {}).get("modell") != jetzt["modell"] and (vorher or jetzt["modell"]):
+        saetze.append(f"Modell für Antworten: {jetzt['modell']} auf {_t(str(jetzt['modell_auf']))}." if jetzt["modell"] else "Kein Modell für Antworten geladen.")
+    alt = (vorher or {}).get("gesamt") or {}
+    neu = jetzt["gesamt"]
+    d = neu["antworten"] - int(alt.get("antworten", neu["antworten"]))
+    if d > 0:
+        saetze.append(_mehrzahl(d, "1 Frage der Community beantwortet.", "{0} Fragen der Community beantwortet."))
+    d = neu["abschnitte"] - int(alt.get("abschnitte", neu["abschnitte"]))
+    if d > 0:
+        saetze.append(_mehrzahl(d, "1 Abschnitt für die Suche aufbereitet.", "{0} Abschnitte für die Suche aufbereitet."))
+    d = neu["credits"] - int(alt.get("credits", neu["credits"]))
+    if d > 0:
+        saetze.append(_mehrzahl(d, "1 Credit verdient.", "{0} Credits verdient."))
+    s_alt, s_neu = (vorher or {}).get("scheiben") or {}, jetzt["scheiben"]
+    if vorher and s_neu["anzahl"] != s_alt.get("anzahl"):
+        saetze.append(f"Scheiben des gemeinsamen Wissens auf diesem Gerät: {s_neu['anzahl']} ({_zahl(s_neu['mb'])} MB).")
+    d = s_neu["geliefert"] - int(s_alt.get("geliefert", s_neu["geliefert"]))
+    if d > 0:
+        saetze.append(_mehrzahl(d, "1 Scheibe für eine Stichprobe geliefert.", "{0} Scheiben für Stichproben geliefert."))
+    return saetze
+
+
+def _stand_schreiben(api: app_web.Api, core: app_core.AppCore, vorher: dict | None) -> dict | None:
+    try:
+        jetzt = stand_erheben(api)
+        sicher_schreiben.json_datei(core.base_dir / STAND, jetzt)
+        for satz in stand_vergleichen(vorher, jetzt):
+            lesbar(core, satz)
+        return jetzt
+    except Exception as exc:
+        _melden(core, f"FEHLER stand: {type(exc).__name__}", auch_zeigen=False)
+        return vorher
 
 
 def daten_ordner(args) -> Path:
@@ -150,7 +292,9 @@ def einrichten(args) -> int:
             _sag(f"Dieses Gerät ist schon angemeldet, die Anmeldung ist gerade nicht lesbar: {grund}. Nichts wurde geändert.")
             return 3
         if zustand == "fehlt":
-            if args.mit_code:
+            if args.mit_code or args.spielwiese:
+                if args.spielwiese and not args.mit_code:
+                    _sag("Auf der Spielwiese trittst du mit dem Code „spielwiese“ bei.")
                 r = api.community_beitreten(getpass.getpass(_t("Code vom Admin:") + " "))
             else:
                 r = mit_konto(api)
@@ -192,12 +336,16 @@ def _update_pruefen(api: app_web.Api, core: app_core.AppCore, programm: Path) ->
         was, text = app_install.update_quelle_holen(api._community.adresse, programm, eigener_bau=app_core.APP_BUILD, oeffner=api._community._oeffner)
     except app_core.AppError as exc:
         _melden(core, f"ABGELEHNT update: {exc.code}: {exc.detail}")
+        lesbar(core, f"Update auf Bau {neu} abgelehnt: {_t(exc.detail)}")
         return False
     if was == "grundlage":
         _GRUNDLAGE_BAU = neu
         _melden(core, f"HINWEIS update: Bau {neu} braucht Python {text}; der Helfer holt sein ganzes Paket neu (kiplatz.at/helfer)")
+        lesbar(core, f"Bau {neu} braucht ein neues Helfer-Paket (Python {text}). Bitte das Paket neu holen.")
         return False
     _melden(core, f"OK update {was}: {text}")
+    if was == "aktualisiert":
+        lesbar(core, f"Update auf Bau {neu} eingesetzt. Der Helfer startet neu.")
     return was == "aktualisiert"
 
 
@@ -229,13 +377,21 @@ def starten(args) -> int:
     for sig in (signal.SIGTERM, signal.SIGINT):
         signal.signal(sig, lambda *_a: stopp.set())
     _melden(core, f"OK start Bau {app_core.APP_BUILD} auf {plattform.system()}, Daten in {core.base_dir}")
+    lesbar(core, f"Der Helfer ist gestartet (Bau {app_core.APP_BUILD}).")
     neu_starten = False
     try:
         api.vorbereiten(selbst_einrichten=False, ki_auto=True)
         if api.prep_error:
             _melden(core, f"FEHLER vorbereiten: {api.prep_error}")
-        seit_pflege = 0.0
-        while not stopp.wait(UPDATE_BLICK_S):
+            lesbar(core, f"Beim Start ging etwas nicht: {_t(str(api.prep_error))}")
+        vorher = _stand_schreiben(api, core, None)
+        seit_update = seit_pflege = 0.0
+        while not stopp.wait(STAND_S):
+            vorher = _stand_schreiben(api, core, vorher)
+            seit_update += STAND_S
+            if seit_update < UPDATE_BLICK_S:
+                continue
+            seit_update = 0.0
             try:
                 if _update_pruefen(api, core, programm):
                     neu_starten = True
@@ -250,10 +406,17 @@ def starten(args) -> int:
         api.herunterfahren()
         sperre.freigeben()
         _melden(core, "OK beendet" + (", Neustart mit der neuen Fassung" if neu_starten else ""))
+        if not neu_starten:
+            lesbar(core, "Der Helfer ist beendet.")
     if neu_starten:
         starter = programm / plattform.STARTER
         os.execv(str(starter), [str(starter), "start", *(["--daten", args.daten] if args.daten else []), *(["--spielwiese"] if args.spielwiese else [])])
     return 0
+
+
+def _stand_lesen(core: app_core.AppCore) -> dict:
+    d = sicher_schreiben.json_laden(core.base_dir / STAND, {}, art=dict)
+    return d if isinstance(d, dict) and d.get("version") == 1 else {}
 
 
 def status(args) -> int:
@@ -261,6 +424,30 @@ def status(args) -> int:
     api = _api(core)
     try:
         zustand, g = anmeldung(api)
+        sperre = plattform.Sperre(core.base_dir)
+        laeuft = not sperre.holen()
+        sperre.freigeben()
+        st = _stand_lesen(core)
+        frisch = laeuft and st and time.time() - float(st.get("zeit") or 0) <= STAND_ALT_S
+        r = api._rechen.zustand()
+        heute, gesamt = r.get("heute") or {}, r.get("gesamt") or {}
+        s = api._halter.stand()
+        c = api._credits_dict()
+        f = core.load_freigabe()
+        if getattr(args, "json", False):
+            print(json.dumps({"angemeldet": zustand == "da", "laeuft": laeuft, "online": bool(frisch and online(st)), "bau": app_core.APP_BUILD,
+                              "modell": st.get("modell") if frisch else None, "modell_auf": st.get("modell_auf") if frisch else None,
+                              "antwortet": st.get("antwortet") if frisch else None, "phase": st.get("phase") if frisch else None,
+                              "fragen": {"heute": int(heute.get("antworten") or 0), "gesamt": int(gesamt.get("antworten") or 0)},
+                              "abschnitte": {"heute": int(heute.get("abschnitte") or 0), "gesamt": int(gesamt.get("abschnitte") or 0)},
+                              "scheiben": {"anzahl": int(s.get("anzahl") or 0), "mb": float(s.get("mb") or 0),
+                                           "geliefert": int((st.get("scheiben") or {}).get("geliefert") or 0) if frisch else None},
+                              "credits": {"guthaben": c.get("guthaben"), "heute": int(heute.get("credits") or 0)},
+                              "verbindungen": st.get("verbindungen") if frisch else None,
+                              "grenzen": {"cpu_prozent": f.cpu_prozent, "ram_gib": f.ram_gib},
+                              "autostart": plattform.autostart_an_ist(),
+                              "protokoll": str(core.diagnosis_dir / LESBAR)}, ensure_ascii=False, indent=2))
+            return 0
         if zustand == "da":
             _sag(f"Angemeldet als „{g['name']}“ bei {api._community.adresse}.")
         elif zustand == "unlesbar":
@@ -270,15 +457,40 @@ def status(args) -> int:
         konto = api._konto_dict()
         if konto:
             _sag(f"KIplatz-Konto: {konto['name']}")
-        _sag("Arbeit für die Community: an" if core.run_state() is app_core.node_local_state.RunState.ACTIVE else "Arbeit für die Community: aus")
-        _sag("Autostart: an" if plattform.autostart_an_ist() else "Autostart: aus")
-        sperre = plattform.Sperre(core.base_dir)
-        laeuft = not sperre.holen()
-        sperre.freigeben()
         _sag("Der Helfer läuft gerade." if laeuft else "Der Helfer läuft gerade nicht.")
-        f = core.load_freigabe()
+        if frisch:
+            server = st.get("server") or ""
+            _sag(f"Online: ja, {server} hat zuletzt um {time.strftime('%H:%M', time.localtime(_kontakt_zeit(st)))} geantwortet." if online(st)
+                 else f"Online: nein, {server} hat seit {ONLINE_S // 60} Minuten nicht geantwortet. Der Helfer versucht es weiter.")
+            if st.get("modell"):
+                _sag(f"Modell für Antworten: {st['modell']} auf {_t(str(st.get('modell_auf') or '?'))}.")
+            elif st.get("antwortet"):
+                _sag("Modell für Antworten: wird gerade geladen.")
+            else:
+                _sag("Fragen der Community beantworten Geräte mit Grafikkarte (am Mac der Apple-Chip) und 16 GB Arbeitsspeicher. Dieses Gerät erledigt Hintergrundarbeit für das gemeinsame Wissen.")
+            if st.get("arbeit"):
+                _sag(f"Gerade: {_t(st['arbeit'])}")
+        elif laeuft:
+            _sag("Der Helfer startet gerade; in einer Minute steht hier mehr.")
+        _sag(f"Beantwortete Fragen: {_zahl_ganz(int(heute.get('antworten') or 0))} heute, {_zahl_ganz(int(gesamt.get('antworten') or 0))} insgesamt.")
+        _sag(f"Für die Suche aufbereitet: {_zahl_ganz(int(heute.get('abschnitte') or 0))} Abschnitte heute, {_zahl_ganz(int(gesamt.get('abschnitte') or 0))} insgesamt.")
+        geliefert = int((st.get("scheiben") or {}).get("geliefert") or 0) if frisch else 0
+        anzahl, mb = int(s.get("anzahl") or 0), _zahl(float(s.get("mb") or 0))
+        _sag(f"Scheiben des gemeinsamen Wissens: {anzahl} ({mb} MB), seit dem Start {geliefert} für Stichproben geliefert." if geliefert
+             else f"Scheiben des gemeinsamen Wissens: {anzahl} ({mb} MB).")
+        if c.get("guthaben") is not None:
+            _sag(f"Credits: {_zahl_ganz(int(c['guthaben']))}, heute {_zahl_ganz(int(heute.get('credits') or 0))} verdient.")
+        _sag("Arbeit für die Community: an" if core.run_state() is app_core.node_local_state.RunState.ACTIVE else "Arbeit für die Community: aus")
+        _sag("Autostart: über Docker" if plattform.im_container() else "Autostart: an" if plattform.autostart_an_ist() else "Autostart: aus")
         _sag(f"Grenzen: {f.cpu_prozent} % Prozessor, {_zahl(f.ram_gib)} GB Arbeitsspeicher. Bau {app_core.APP_BUILD}.")
-        p = core.diagnosis_dir / PROTOKOLL
+        if frisch and st.get("verbindungen"):
+            _sag("Verbindungen seit dem Start (nur Gegenstelle, Anzahl und Menge, nie ein Inhalt):")
+            for v in st["verbindungen"]:
+                wer = v.get("host") or _t("andere PCs der Community (Modelle von PC zu PC)")
+                zeile = (f"{wer}: {_zahl_ganz(int(v.get('anfragen') or 0))} Anfragen, {_zahl(round(int(v.get('raus') or 0) / 1e6, 1))} MB hinaus und "
+                         f"{_zahl(round(int(v.get('rein') or 0) / 1e6, 1))} MB herein")
+                print("  " + _t(zeile), flush=True)
+        p = core.diagnosis_dir / LESBAR
         if p.is_file():
             _sag(f"Protokoll ({p}), die letzten Zeilen:")
             for zeile in p.read_text(encoding="utf-8", errors="replace").splitlines()[-8:]:
@@ -317,7 +529,8 @@ def main(argv: list[str] | None = None) -> int:
     e.add_argument("--ram", type=float, default=None)
     e.add_argument("--ohne-autostart", action="store_true")
     unter.add_parser("start", help=_t("den Helfer im Vordergrund laufen lassen (so startet ihn der Dienst)"))
-    unter.add_parser("status", help=_t("zeigen, ob er angemeldet ist und läuft"))
+    s = unter.add_parser("status", help=_t("zeigen, was der Helfer gerade tut"))
+    s.add_argument("--json", action="store_true", help=_t("derselbe Stand als JSON, für eigene Werkzeuge"))
     unter.add_parser("an", help=_t("Autostart und Dienst einschalten"))
     unter.add_parser("aus", help=_t("Autostart und Dienst ausschalten; die Daten bleiben"))
     g = unter.add_parser("grenzen", help=_t("Prozessor- und Arbeitsspeicher-Grenze setzen"))

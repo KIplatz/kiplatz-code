@@ -1,0 +1,9 @@
+# Erzeugt von node-agent/helfer_container.py. Nicht von Hand ändern: Skript ändern, laufen lassen, committen.
+# AMD und Intel über Vulkan: docker compose -f compose.yaml -f compose.dri.yaml up -d
+# RENDER_GID ist die Nummer der Gruppe render am Rechner: getent group render | cut -d: -f3
+services:
+  helfer:
+    devices:
+      - /dev/dri:/dev/dri
+    group_add:
+      - "${RENDER_GID:?RENDER_GID fehlt: getent group render | cut -d: -f3}"

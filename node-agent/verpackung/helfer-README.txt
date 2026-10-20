@@ -52,7 +52,10 @@ What you can set
 ----------------
 The commands are in the helper's folder (see below).
 
-  kiplatz-helfer status                     signed in, running, log
+  kiplatz-helfer status                     what it is doing: online, model,
+                                            answered questions, slices,
+                                            credits, connections since start
+  kiplatz-helfer status --json              the same for your own tools
   kiplatz-helfer grenzen --cpu 25 --ram 4   at most 25 % of the processor
                                             and 4 GB of memory
   kiplatz-helfer aus                        stop, autostart off
@@ -83,6 +86,10 @@ Linux: program in ~/.local/share/kiplatz/kiplatz-helfer,
        data and models in ~/.local/share/kiplatz/daten
 Mac:   program in ~/Library/kiplatz/kiplatz-helfer,
        data and models in ~/Library/Application Support/KIplatz/Daten
+
+Log: in the data folder under diagnose/helfer-protokoll.txt, in plain
+sentences in your system's language (started, connected, questions
+answered, credits, updates).
 
 
 Removing it

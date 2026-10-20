@@ -114,7 +114,7 @@ def holen(ordner: SprachOrdner, *, fortschritt: Callable[[str, int, int], None] 
         zip_pfad = ordner.ki.downloads_dir / ki_laufzeit.LAUFZEIT.datei
         if not ki_laufzeit.pruefsumme_ok(zip_pfad, ki_laufzeit.LAUFZEIT):
             laden(ki_laufzeit.LAUFZEIT, zip_pfad, fortschritt=(lambda d, g: fortschritt("KI-Laufzeit", d, g)) if fortschritt else None)
-        ki_laufzeit.laufzeit_entpacken(zip_pfad, ordner.ki.laufzeit_dir)
+        ki_laufzeit.laufzeit_entpacken(zip_pfad, ordner.ki.laufzeit_dir, schon_da=ordner.ki.laufzeit_da)
     if not ordner.ki.modell_da(HOEREN):
         laden(HOEREN, ordner.ki.modell_pfad(HOEREN), fortschritt=(lambda d, g: fortschritt("Hör-Modell", d, g)) if fortschritt else None)
     if not ordner.ki.bilder_da(HOEREN):

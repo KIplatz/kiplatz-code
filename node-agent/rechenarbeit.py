@@ -582,7 +582,7 @@ class Rechenarbeit:
             zip_pfad = self.ordner.downloads_dir / ki_laufzeit.LAUFZEIT.datei
             if not ki_laufzeit.pruefsumme_ok(zip_pfad, ki_laufzeit.LAUFZEIT):
                 self._herunterladen(ki_laufzeit.LAUFZEIT, zip_pfad)
-            ki_laufzeit.laufzeit_entpacken(zip_pfad, self.ordner.laufzeit_dir)
+            ki_laufzeit.laufzeit_entpacken(zip_pfad, self.ordner.laufzeit_dir, schon_da=self.ordner.laufzeit_da)
         if not self.ordner.modell_da(ki_laufzeit.EMBEDDING):
             self._herunterladen(ki_laufzeit.EMBEDDING, self.ordner.modell_pfad(ki_laufzeit.EMBEDDING))
         wahl = ki_laufzeit.waehlen_rechen(self._geraete_ermitteln(self.ordner.server_exe))
@@ -880,7 +880,7 @@ class Rechenarbeit:
         if self._ki_von_uns and self._ki_stoppen is not None:
             try:
                 self._ki_stoppen()
-                self._log("OK rechenarbeit modell entladen (Person zurück)")
+                self._log("OK rechenarbeit modell entladen")
             except Exception as exc:
                 self._log(f"FEHLER rechenarbeit entladen: {type(exc).__name__}")
         self._ki_von_uns = False

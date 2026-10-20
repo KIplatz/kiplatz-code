@@ -130,8 +130,73 @@ def bauen(plattform: str, node_agent: Path, dist: Path) -> Path:
     return ziel
 
 
+def hier_plattform(system: str | None = None, cpu: str | None = None) -> str | None:
+    import platform
+    system = (system or platform.system()).lower()
+    cpu = {"x86_64": "x64", "amd64": "x64", "arm64": "arm64", "aarch64": "arm64"}.get((cpu or platform.machine()).lower(), "")
+    p = {"linux": "linux", "darwin": "macos"}.get(system, "") + "-" + cpu
+    return p if p in PYTHON else None
+
+
+def python_version() -> str:
+    return PYTHON["linux-x64"][0].split("-")[1].split("+")[0]
+
+
+def quelle_vorbereiten(arbeit: Path, *, runner=subprocess.run) -> None:
+    arbeit.mkdir(parents=True, exist_ok=True)
+    for p in sorted(HIER.glob("*.py")):
+        shutil.copy2(p, arbeit / p.name)
+    r = runner([sys.executable, str(HIER / "sauber_ausliefern.py"), str(HIER / "webapp"), str(arbeit / "webapp")], check=False)
+    if r.returncode != 0:
+        raise SystemExit("sauber_ausliefern.py: das Fenster ließ sich nicht reinigen (esbuild fehlt? „npm ci --ignore-scripts“ in app/)")
+    shutil.copytree(HIER / "skills_vorlagen", arbeit / "skills_vorlagen")
+    for n in ("requirements.txt", "neuerungen_en.json"):
+        shutil.copy2(HIER / n, arbeit / n)
+    shutil.copy2(HIER.parent / "SCHNITTSTELLE.md", arbeit / "SCHNITTSTELLE.md")
+
+
+def aus_quelle(dist: Path) -> list[Path]:
+    hier = hier_plattform()
+    if hier is None:
+        raise SystemExit("Helfer-Pakete aus der Quelle baut dieser Weg auf Linux x64 und auf dem Mac mit Apple-Chip; unter Windows: build_app_zip.ps1")
+    dist.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="helfer-quelle-") as tmp:
+        tmp = Path(tmp)
+        arbeit = tmp / "node-agent"
+        quelle_vorbereiten(arbeit)
+        with tarfile.open(python_holen(hier, dist), "r:gz") as py:
+            py.extractall(tmp, filter="data")
+        exe = tmp / "python" / "bin" / "python3"
+        r = subprocess.run([str(exe), "-I", str(HIER / "bau_verpacken.py"), str(arbeit)], check=False)
+        if r.returncode != 0:
+            raise SystemExit("bau_verpacken.py ist rot, nichts wird gebaut")
+        for d in arbeit.rglob("__pycache__"):
+            shutil.rmtree(d, ignore_errors=True)
+        r = subprocess.run([sys.executable, str(HIER / "sauber_ausliefern.py"), "--pruefen", str(arbeit)], check=False)
+        if r.returncode != 0:
+            raise SystemExit("Im Paket steht noch etwas Persönliches (siehe oben); nichts wird gebaut.")
+        site = tmp / "site"
+        pakete_holen(hier, site)
+        (arbeit / "pakete.txt").write_text("# site-packages dieses Baus\n" + "".join(f"{n}\n" for n in sorted(p.name for p in site.iterdir())),
+                                           encoding="utf-8", newline="\n")
+        (arbeit / "laufzeit.txt").write_text(python_version() + "\n", encoding="utf-8", newline="\n")
+        fertig = [bauen(p, arbeit, dist) for p in PYTHON]
+        probe = tmp / "probe"
+        probe.mkdir()
+        with tarfile.open(dist / archivname(hier), "r:gz") as tar:
+            tar.extractall(probe, filter="data")
+        r = subprocess.run([str(probe / OBEN / "kiplatz-helfer"), "--daten", str(tmp / "daten"), "status"], capture_output=True, text=True, check=False)
+        if r.returncode != 0:
+            raise SystemExit(f"Selbsttest des Pakets rot ({r.returncode}): {(r.stderr or r.stdout)[-800:]}")
+    return fertig
+
+
 def main(argv: list[str] | None = None) -> int:
     args = sys.argv[1:] if argv is None else argv
+    if len(args) == 2 and args[0] == "--aus-quelle":
+        for z in aus_quelle(Path(args[1])):
+            print(f"{z.name}: {z.stat().st_size / 2**20:.1f} MB, SHA-256 {_sha256(z)} (ohne Unterschrift)")
+        return 0
     if len(args) != 2:
         print(__doc__)
         return 2

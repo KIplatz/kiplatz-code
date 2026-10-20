@@ -1193,6 +1193,8 @@ window.addEventListener("unhandledrejection", (e) => __fehlerZeigen(String(e.rea
     $("#profil").textContent = z.app.profil; $("#profil").style.display = z.app.profil ? "" : "none";
     $("#spielwiese-hinweis").style.display = z.app.spielwiese ? "" : "none";
     if (z.app.spielwiese) $("#beitritt-code-weg").open = true;
+    beitrittNurCode = !!z.app.spielwiese;
+    $("#beitritt-konto-knopf").style.display = beitrittNurCode ? "none" : "";
     $("#geraet").textContent = z.app.geraet_name;
     $("#chip").textContent = z.credits.admin ? "Admin" : (z.credits.guthaben ?? "?") + " Credits";
     $("#dot").className = "dot " + z.lauf.zustand;
@@ -1343,10 +1345,10 @@ window.addEventListener("unhandledrejection", (e) => __fehlerZeigen(String(e.rea
 
   $("#btn-anmelde-band").addEventListener("click", () => { zeige("community", "Konto und Geräte"); setTimeout(() => { const k = $("#btn-beitreten-konto"); if (k) { k.scrollIntoView({ block: "center" }); k.focus(); } }, 50); });
 
-  let beitrittTimer = null;
+  let beitrittTimer = null, beitrittNurCode = false;
   function beitrittZeichnen(s) {
     const laeuft = !!(s && s.laeuft);
-    $("#beitritt-konto-knopf").style.display = laeuft ? "none" : "";
+    $("#beitritt-konto-knopf").style.display = laeuft || beitrittNurCode ? "none" : "";
     $("#beitritt-konto-laeuft").style.display = laeuft ? "" : "none";
     $("#beitritt-konto-adresse").textContent = laeuft ? s.adresse : "";
   }

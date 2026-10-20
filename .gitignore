@@ -1,0 +1,4 @@
+.venv/
+__pycache__/
+node-agent/dist/
+app/node_modules/

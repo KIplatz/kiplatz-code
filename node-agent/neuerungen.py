@@ -11,6 +11,7 @@ def dank(satz: str, wer: str, art: str = "Meldung") -> str:
 
 
 NEUERUNGEN: dict[str, list[str]] = {
+    "2026-10-19e": [],
     "2026-10-19d": [],
     "2026-10-19c": [],
     "2026-10-19b": [],
@@ -1078,6 +1079,9 @@ NEUERUNGEN: dict[str, list[str]] = {
 }
 
 ZURUECKGEHALTEN: dict[str, list[str]] = {
+    "2026-10-19e": [
+        "Am Linux-Rechner oder Mac zeigt „kiplatz-helfer status“ jetzt, was der Helfer gerade tut: ob er online ist, welches Modell läuft, wie viele Fragen er beantwortet hat, seine Scheiben und Credits und mit wem er seit dem Start verbunden war. Dazu schreibt er ein Protokoll in klaren Sätzen.",
+    ],
     "2026-10-19d": [
         "Dein PC kommt jetzt mit deinem KIplatz-Konto zur Community dazu, wie die App: im Programm „Mit KIplatz-Konto dazukommen“ anklicken, im Browser anmelden und „Einen neuen PC verbinden?“ bestätigen. Einen Code vom Admin brauchst du dafür nicht mehr.",
     ],

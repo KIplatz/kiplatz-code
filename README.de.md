@@ -1,8 +1,11 @@
 # KIplatz: das Programm und die App, quelloffen
 
+[![Tests unter Linux](https://github.com/KIplatz/kiplatz-code/actions/workflows/tests-linux.yml/badge.svg)](https://github.com/KIplatz/kiplatz-code/actions/workflows/tests-linux.yml) [![Tests unter Windows](https://github.com/KIplatz/kiplatz-code/actions/workflows/tests-windows.yml/badge.svg)](https://github.com/KIplatz/kiplatz-code/actions/workflows/tests-windows.yml) [![Lizenz: AGPL 3.0 oder später](.github/abzeichen/lizenz.svg)](LICENSE) [![Neuester Bau](.github/abzeichen/bau.svg)](https://github.com/KIplatz/kiplatz-code/tags)
+
 **KIplatz ist eine kostenlose KI aus Österreich, die auf den PCs ihrer Community läuft statt in einem Rechenzentrum.** In diesem Repository liegt der Quelltext der zwei Dinge, die Mitglieder installieren: das Windows-Programm (`node-agent/`) und die App für Handy und Browser (`app/`). Beides ist freie Software unter der [GNU AGPL 3.0 oder später](LICENSE).
 
 [English](README.md) · Deutsch
+
 
 [kiplatz.at](https://kiplatz.at/) · [Programm holen](https://kiplatz.at/rechenkraft-teilen/) · [Die App](https://kiplatz.at/app/) · [Platzl (Forum)](https://forum.kiplatz.at/) · [Werkstatt](https://werkstatt.kiplatz.at/KIplatz/mitbauen) · [Was nie passiert](https://kiplatz.at/was-nie-passiert/)
 
@@ -41,6 +44,7 @@ powershell -ExecutionPolicy Bypass -File node-agent\build_app_zip.ps1 -OhneUnter
 
 Das Ergebnis ist `node-agent\dist\CommunityAI.zip`. „Ohne Unterschrift“ heißt: dein Paket läuft als eigenes Programm; Updates kommen unterschrieben von kiplatz.at. Die Prüfsummen unserer Pakete stehen neben jedem Download, damit du ein selbst gebautes Paket mit dem von uns vergleichen kannst.
 
+
 Aus dem Quelltext starten, ohne zu bauen:
 
 ```powershell
@@ -62,13 +66,19 @@ npm run entwickeln
 
 Die Hüllen für Android und iOS kommen von Capacitor (`npm run sync`, dann Android Studio oder Xcode). `app/werkzeuge/android_paket.ps1` liest die Schlüssel für die Stores aus Umgebungsvariablen.
 
-## Tests
+## In 10 Minuten startklar: Linux, Mac oder Windows
 
-```powershell
-python -m pytest node-agent\tests -q
+Eine Datei hält jeden Befehl, den du brauchst, auf jedem System: `node-agent/entwickeln.py` (jeder Befehl hat auch einen englischen Namen).
+
+```bash
+git clone https://github.com/KIplatz/kiplatz-code && cd kiplatz-code
+python3 node-agent/entwickeln.py einrichten   # .venv, die Pakete, esbuild für die Tests (braucht Python 3.12+, Node.js für npm)
+python3 node-agent/entwickeln.py tests        # die Tests, parallel; weitere Angaben gehen an pytest
+python3 node-agent/entwickeln.py bauen        # Windows: das Programm-ZIP ohne unsere Unterschrift
+python3 node-agent/entwickeln.py pruefen      # was vor einem Pull Request grün sein muss
 ```
 
-Die Tests hier laufen mit dem Programm allein, ohne Server. Es sind dieselben Tests, die wir vor jeder Auslieferung laufen lassen.
+Die Tests laufen mit dem Programm allein, ohne Server, auf Ubuntu und auf Windows (siehe die Abzeichen oben). Es sind dieselben Tests, die wir vor jeder Auslieferung laufen lassen.
 
 ## Mitbauen
 

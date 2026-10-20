@@ -458,6 +458,13 @@ class KiSteuerung:
             return f"{self.fern_name()} im Heimnetz"
         return self.wahl.geraet_name_de() if self.wahl else "?"
 
+    def eingerichtet(self) -> bool:
+        if self.quelle() != "lokal" or not self.ordner.server_exe.is_file():
+            return False
+        if self.wahl is not None:
+            return self.ordner.modell_da(self.wahl.modell)
+        return any(self.ordner.modell_da(m) for m in ki_laufzeit.MODELLE.values())
+
     def bereit(self) -> bool:
         if self.quelle() == "heimnetz":
             return self.phase == "bereit"
@@ -525,7 +532,7 @@ class KiSteuerung:
                     self._herunterladen(ki_laufzeit.LAUFZEIT, zip_pfad, fortschritt=lambda d, g: self._melden("KI-Laufzeit wird geholt", d, g),
                                         warten=lambda text: self._melden(text, 0, 0))
                 self._melden("KI-Laufzeit wird ausgepackt", 0, 0)
-                ki_laufzeit.laufzeit_entpacken(zip_pfad, self.ordner.laufzeit_dir)
+                ki_laufzeit.laufzeit_entpacken(zip_pfad, self.ordner.laufzeit_dir, schon_da=self.ordner.laufzeit_da)
             self._melden("Grafikkarte wird gewählt", 0, 0)
             first = self._core.load_first_start()
             geraete = self._geraete_ermitteln(self.ordner.server_exe)
@@ -2477,7 +2484,7 @@ class Api:
                 _log(self._core, f"LANGSAM unbekannte namen: {time.time() - t:.1f} s")
 
     def _kann_fuer_andere_antworten(self) -> bool:
-        return self._ki.quelle() == "lokal" and not self._schwach()
+        return self._ki.quelle() == "lokal" and not self._schwach() and self._ki.eingerichtet()
 
     def _warm_darf(self) -> bool:
         if self._core.run_state() is not node_local_state.RunState.ACTIVE or not self._kann_fuer_andere_antworten():
@@ -2664,6 +2671,8 @@ class Api:
         def go():
             if self._community.geraet() is not None:
                 raise app_core.AppError("KONTO_SCHON", "dieses Gerät gehört schon zur Community")
+            if self._community.adresse.rstrip("/") == SPIELWIESE_ADRESSE:
+                raise app_core.AppError("KONTO_SPIELWIESE", "Auf der Spielwiese trittst du mit dem Code „spielwiese“ bei; das KIplatz-Konto gilt für die echte Community.")
             lauf = self._beitritt
             if lauf is not None and lauf["laeuft"]:
                 return self._beitritt_stand()

@@ -72,8 +72,9 @@ def _stummel(name: str, quelle: str) -> str:
 
 
 def verpacken(ordner: Path) -> tuple[list[str], list[str]]:
-    reihe = f"python{sys.version_info[0]}{sys.version_info[1]}.dll"
-    if not (Path(ordner).resolve().parent / "python" / reihe).is_file():
+    reihe = (f"python{sys.version_info[0]}{sys.version_info[1]}.dll" if sys.platform == "win32"
+             else f"lib/python{sys.version_info[0]}.{sys.version_info[1]}")
+    if not (Path(ordner).resolve().parent / "python" / reihe).exists():
         raise SystemExit(f"falsches Python {sys.version.split()[0]}: der Bytecode muss zum Python im Bauordner passen ({reihe} fehlt dort)")
     brauch = gebraucht(ordner)
     weg, uebersetzt = [], []

@@ -694,7 +694,20 @@ def laufzeit_wie_im_archiv(exe: Path, archiv: Path, paket: Paket) -> bool:
     return ok
 
 
-def laufzeit_entpacken(zip_pfad: Path, ziel_dir: Path) -> Path:
+_entpacken_locks: dict[str, threading.Lock] = {}
+_entpacken_locks_riegel = threading.Lock()
+
+
+def laufzeit_entpacken(zip_pfad: Path, ziel_dir: Path, *, schon_da: Callable[[], bool] | None = None) -> Path:
+    with _entpacken_locks_riegel:
+        sperre = _entpacken_locks.setdefault(str(Path(ziel_dir).resolve()), threading.Lock())
+    with sperre:
+        if schon_da is not None and schon_da():
+            return Path(ziel_dir).resolve() / SERVER_EXE
+        return _laufzeit_entpacken(zip_pfad, ziel_dir)
+
+
+def _laufzeit_entpacken(zip_pfad: Path, ziel_dir: Path) -> Path:
     app_core.ensure_plain_directory(ziel_dir)
     root = ziel_dir.resolve()
     if not zipfile.is_zipfile(zip_pfad):

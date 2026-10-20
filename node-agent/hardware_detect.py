@@ -51,7 +51,10 @@ class HardwareReport:
 
 
 def detect_cpu() -> CpuInfo:
-    freq = psutil.cpu_freq()
+    try:
+        freq = psutil.cpu_freq()
+    except (RuntimeError, OSError, NotImplementedError, AttributeError, ValueError):
+        freq = None
     return CpuInfo(
         physical_cores=psutil.cpu_count(logical=False),
         logical_cores=psutil.cpu_count(logical=True),

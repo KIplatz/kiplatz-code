@@ -1,0 +1,27 @@
+# Erzeugt von node-agent/helfer_container.py. Nicht von Hand ändern: Skript ändern, laufen lassen, committen.
+# Der KIplatz-Helfer mit Docker Compose (Linux x64):
+#   docker compose build                       das Abbild bei dir bauen (prüft unsere Unterschrift)
+#   docker compose run --rm helfer einrichten  mit dem KIplatz-Konto beitreten (die Adresse am Handy öffnen)
+#   docker compose up -d                       starten; startet nach jedem Neustart des Rechners von selbst
+#   docker compose exec helfer kiplatz-helfer status
+# Mit Grafikkarte: zusätzlich -f compose.nvidia.yaml (NVIDIA) oder -f compose.dri.yaml (AMD, Intel).
+name: kiplatz
+services:
+  helfer:
+    build: .
+    image: kiplatz-helfer:lokal
+    platform: linux/amd64
+    restart: unless-stopped
+    init: true
+    environment:
+      LANG: ${LANG:-C.UTF-8}   # Deutsch, wenn dein System Deutsch spricht
+    volumes:
+      - daten:/daten
+      # wie ohne Container: Hintergrundarbeit ruht, solange jemand an diesem Rechner angemeldet ist. Gelesen wird nur, ob eine
+      # Sitzung aktiv ist (logind), nie ein Name. Ohne systemd bleibt der Ordner leer, und der Helfer arbeitet wie auf einem Server.
+      - /run/systemd/sessions:/run/systemd/sessions:ro
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    stop_grace_period: 30s
+volumes:
+  daten:
