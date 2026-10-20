@@ -136,15 +136,49 @@ def vor_mindest_bau(lieferschein) -> bool:
     return str(ls.get("bau") or "") < MINDEST_BAU
 
 
-def ausliefern_ok(lieferschein) -> bool:
-    return not nachgebessert(lieferschein) and not vor_mindest_bau(lieferschein)
+_SCHLUSS_ANGEBOT = re.compile(
+    r"^(?:"
+    r"(?:gibt es|hast du|haben sie)\b[^?]*\b(?:noch|sonst|weitere)\b[^?]*\?"
+    r"|(?:möchtest|willst|brauchst) du\b[^?]*\b(?:noch|mehr|weitere|genauer|details?)\b[^?]*\?"
+    r"|(?:kann|darf) ich (?:dir |ihnen )?(?:noch|sonst|weiter)\b[^?]*\?"
+    r"|(?:lass mich wissen|sag (?:mir )?bescheid|frag (?:gern|ruhig))\b[^.!?]*[.!?]"
+    r"|(?:is there|do you have|have you got)\b[^?]*\b(?:else|other|more|further)\b[^?]*\?"
+    r"|(?:would|do) you (?:like|want)\b[^?]*\b(?:more|else|further|details?)\b[^?]*\?"
+    r"|(?:can|may) i (?:help|assist)\b[^?]*\belse\b[^?]*\?"
+    r"|anything else\b[^?]*\?"
+    r"|(?:let me know|feel free to ask)\b[^.!?]*[.!?]"
+    r")$", re.I)
+_SATZ_GRENZE = re.compile(r"(?<=[.!?])\s+")
+
+
+def ohne_schlussangebot(text: str) -> str:
+    if not isinstance(text, str):
+        return text
+    absaetze = text.rstrip().split("\n")
+    saetze = _SATZ_GRENZE.split(absaetze[-1].strip())
+    if not _SCHLUSS_ANGEBOT.match(saetze[-1].strip()):
+        return text
+    rest = " ".join(saetze[:-1]).strip()
+    neu = "\n".join(absaetze[:-1] + ([rest] if rest else [])).rstrip()
+    return neu if neu.strip() else text
+
+
+AUSLIEFERN_STAND = f"2026-10-20 schlussangebot, {MINDEST_BAU}"
+
+
+def schlussangebot(text) -> bool:
+    return isinstance(text, str) and ohne_schlussangebot(text) != text
+
+
+def ausliefern_ok(lieferschein, text=None) -> bool:
+    return not nachgebessert(lieferschein) and not vor_mindest_bau(lieferschein) and not schlussangebot(text)
 
 
 def antwort_taugt(text: str, lieferschein) -> bool:
     ls = lieferschein if isinstance(lieferschein, dict) else {}
     if not isinstance(text, str) or not MIN_ANTWORT <= len(text.strip()) <= MAX_ANTWORT or _WEISS_NICHT.search(text):
         return False
-    if not ausliefern_ok(ls):
+    if not ausliefern_ok(ls, text):
         return False
     if ls.get("gemacht") not in ("geantwortet", "nachgeschaut und geantwortet") or ls.get("skill") or ls.get("kleineres_modell") or ls.get("aus_speicher"):
         return False

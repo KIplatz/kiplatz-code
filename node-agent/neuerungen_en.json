@@ -1,4 +1,6 @@
 {
+ "Endet eine Antwort mit einer Frage wie „Gibt es noch etwas dazu?“, nimmt KIplatz sie jetzt weg. Eine Rückfrage, weil etwas fehlt, bleibt stehen.": "If an answer ends with a question like “Is there anything else you'd like to know?”, KIplatz now takes it out. A question asked because something is missing stays.",
+ "In der App führt Zurückwischen jetzt immer ins vorherige Menü, nicht mehr auf die Startseite, und „Meine KI“ steht nicht mehr über der Fragezeile.": "In the app, swiping back now always takes you to the previous menu instead of the start page, and “My AI” no longer sits above the question line.",
  "Die ersten 100 PCs, die für andere mithelfen, sind Gründungsmitglieder: Die Nummer steht in der Bestenliste, in deiner Geräteliste und als Abzeichen im Platzl, und sie bleibt.": "The first 100 PCs that help others are founding members: the number shows in the leaderboard, in your device list and as a badge in the Platzl, and it stays.",
  "Die ersten 100 PCs, die mithelfen, sind Gründungsmitglieder, mit einer Nummer, die bleibt": "The first 100 PCs that help are founding members, with a number that stays",
  "Die Nummer steht in der Bestenliste, in deiner Geräteliste und als Abzeichen im Platzl": "The number shows in the leaderboard, in your device list and as a badge in the Platzl",

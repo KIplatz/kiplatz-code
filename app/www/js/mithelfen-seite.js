@@ -9,6 +9,8 @@ function el(tag, attrs = {}, ...kinder) {
   for (const k of kinder) if (k != null) e.append(k);
   return e;
 }
+import * as verlauf from "./verlauf.js";
+
 const URTEILE = [["stimmt", "Stimmt"], ["stimmt_nicht", "Stimmt nicht"], ["unsicher", "Unsicher"]];
 export const EMPFEHLUNG = "Ich nutze KIplatz, die KI aus Österreich, die von ihrer Community lebt: mit Quellen unter jeder Antwort und ohne Rechenzentrum. Probier es aus: https://kiplatz.at/";
 
@@ -93,23 +95,17 @@ export function mithelfenSeite({ holen, geraet, platzlAuf }) {
   }
 
 
-  let imVerlauf = false;
-  addEventListener("popstate", () => { if (imVerlauf && offen) { imVerlauf = false; schliessen(); } });
   function schliessen() { offen = false; $("#mithelfen").hidden = true; }
   function auf() {
-    if (!offen) { offen = true; $("#mithelfen").hidden = false; history.pushState({ mithelfen: 1 }, ""); imVerlauf = true; }
+    if (!offen) { offen = true; $("#mithelfen").hidden = false; verlauf.auf("mithelfen", schliessen); }
     inhalt().replaceChildren(el("p", { class: "leise mitte", text: "Einen Moment …" }));
     $("#mithelfen-titel").focus({ preventScroll: true });
     laden();
   }
-  function zu() { if (imVerlauf) { imVerlauf = false; history.back(); } schliessen(); }
+  function zu() { if (!verlauf.schliessen("mithelfen")) schliessen(); }
 
-  function platzlStatt() {
-    schliessen();
-    if (imVerlauf) { imVerlauf = false; addEventListener("popstate", () => platzlAuf(), { once: true }); history.back(); }
-    else platzlAuf();
-  }
-  function zurueck() { if (imVerlauf) history.back(); else schliessen(); }
+  function platzlStatt() { zu(); platzlAuf(); }
+  function zurueck() { if (!verlauf.zurueck("mithelfen")) schliessen(); }
 
   $("#btn-mithelfen").onclick = auf;
   $("#btn-mithelfen-zurueck").onclick = zurueck;

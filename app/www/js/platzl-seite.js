@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import * as pl from "./platzl.js";
+import * as verlauf from "./verlauf.js";
 
 const $ = (s) => document.querySelector(s);
 function el(tag, attrs = {}, ...kinder) {
@@ -229,20 +230,16 @@ ${e.text}` : e.text;
   }
 
 
-  let tiefe = 0, ueberspringen = 0;
-  function schritt() { tiefe++; history.pushState({ platzl: tiefe }, ""); }
-  function einenZurueck() { if (s.stapel.pop()) zeigen(); else { clearTimeout(s.warten); $("#platzl").hidden = true; } }
-  addEventListener("popstate", () => {
-    if (ueberspringen) { ueberspringen--; return; }
-    if (tiefe > 0 && !$("#platzl").hidden) { tiefe--; einenZurueck(); }
-  });
-  function auf() { s.stapel = []; if ($("#platzl").hidden) { $("#platzl").hidden = false; schritt(); } zeigen(); $("#platzl-titel").focus({ preventScroll: true }); }
-  function zu() {
-    clearTimeout(s.warten);
-    if (tiefe > 0) { ueberspringen++; history.go(-tiefe); tiefe = 0; }
-    $("#platzl").hidden = true;
+  function schritt() { verlauf.auf("platzl", stufeZu); }
+
+  function stufeZu(letzter = true) {
+    if (s.stapel.pop()) { if (letzter) zeigen(); }
+    else { clearTimeout(s.warten); $("#platzl").hidden = true; }
   }
-  function zurueck() { if (tiefe > 0) history.back(); else einenZurueck(); }
+  function auf() { verlauf.bis("platzl"); s.stapel = []; if ($("#platzl").hidden) { $("#platzl").hidden = false; schritt(); } zeigen(); $("#platzl-titel").focus({ preventScroll: true }); }
+
+  function zu() { s.stapel = []; if (!verlauf.schliessen("platzl")) stufeZu(); }
+  function zurueck() { if (!verlauf.zurueck("platzl")) stufeZu(); }
 
   async function einstellungenZeigen() {
     const p = await pl.verbunden();
@@ -256,7 +253,7 @@ ${e.text}` : e.text;
   $("#btn-platzl").onclick = auf;
   $("#btn-platzl-zurueck").onclick = zurueck;
   $("#btn-platzl-verbinden").onclick = () => { auf(); verbinden(); };
-  $("#btn-platzl-oeffnen").onclick = () => { $("#einstellungen").hidden = true; auf(); };
+  $("#btn-platzl-oeffnen").onclick = auf;
   $("#btn-platzl-trennen").onclick = async () => {
     if (!confirm("Die Verbindung zum Platzl auf diesem Gerät trennen?")) return;
     await pl.trennen(); s.kats = null; einstellungenZeigen(); status?.("Vom Platzl getrennt.");

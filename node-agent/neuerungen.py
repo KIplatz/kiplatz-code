@@ -11,6 +11,10 @@ def dank(satz: str, wer: str, art: str = "Meldung") -> str:
 
 
 NEUERUNGEN: dict[str, list[str]] = {
+    "2026-10-20c": [
+        "Endet eine Antwort mit einer Frage wie „Gibt es noch etwas dazu?“, nimmt KIplatz sie jetzt weg. Eine Rückfrage, weil etwas fehlt, bleibt stehen.",
+        "In der App führt Zurückwischen jetzt immer ins vorherige Menü, nicht mehr auf die Startseite, und „Meine KI“ steht nicht mehr über der Fragezeile.",
+    ],
     "2026-10-20b": [
         "Auf Linux und am Mac mit Apple-Chip gibt es jetzt den Helfer: ohne Fenster arbeitet dein Rechner still für die Community mit.",
         "Der Helfer läuft als Dienst deines Benutzers, nie mit erhöhten Rechten, und bekommt dieselben unterschriebenen Updates wie das Programm.",

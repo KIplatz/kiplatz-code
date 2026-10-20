@@ -58,6 +58,7 @@ import konto_basis
 import kalender_dach
 import kalender_welt
 import region
+import antwortspeicher_basis
 import belege
 import stellen
 import wikipedia
@@ -131,7 +132,7 @@ WARTEN_UNGENOMMEN_BESCHAEFTIGT_S = 70
 WARTEN_ANTWORT_S = 150
 
 
-LIZENZEN = ("KIplatz (Community AI Network). "
+LIZENZEN = ("KIplatz: freie Software unter der GNU AGPL 3.0 oder später (Programm und App). "
             "KI-Laufzeit: llama.cpp und ggml (MIT, © The ggml authors), unverändert aus Ollama (MIT, © Ollama), unterschrieben von Ollama Inc.; "
             "Spracherkennung: whisper.cpp (MIT, © The ggml authors). "
             "Modelle: Ministral 3 von Mistral AI (Apache-2.0); Qwen3-Embedding 0.6B, Qwen3-Reranker 0.6B und Qwen3-ASR 0.6B von Qwen, Alibaba Cloud (Apache-2.0). "
@@ -158,7 +159,7 @@ def sprache_einbauen(html: str) -> str:
 
 
 def build_core(argv: list[str] | None = None) -> tuple[app_core.AppCore, argparse.Namespace]:
-    parser = argparse.ArgumentParser(prog="community-ai", description="Community AI Network - die eine Anwendung")
+    parser = argparse.ArgumentParser(prog="community-ai", description="KIplatz: das Programm")
     parser.add_argument("--basis", type=Path, default=None, help="anderer Datenordner (Tests, Proben)")
     parser.add_argument("--autostart", action="store_true", help="wird von Windows beim Anmelden übergeben; startet minimiert")
     parser.add_argument("--selbsttest", action="store_true", help="alle Aktionen ohne Fenster ausführen und berichten")
@@ -2218,8 +2219,7 @@ class Api:
             return None
         if e is None or not hausordnung.pruefen(e["text"]).ok:
             return None
-        import antwortspeicher_basis
-        if not antwortspeicher_basis.ausliefern_ok(e.get("lieferschein")):
+        if not antwortspeicher_basis.ausliefern_ok(e.get("lieferschein"), e.get("text")):
             return None
         ls = dict(e["lieferschein"])
         ls["aus_speicher"] = {"erarbeitet": time.strftime("%Y-%m-%d", time.localtime(e["angelegt"])) if e["angelegt"] else "", "von": e["von"]}
@@ -5941,7 +5941,6 @@ def _fach_vorziehen(sortiert: "bewertung.Sortierung", fachgebiete: list[str]) ->
 
 
 def _woertlich_markieren(antwort: str, quellen: list[dict], lieferschein: dict) -> None:
-    import antwortspeicher_basis
     fremd = [str(q.get("text") or "") for q in quellen if isinstance(q, dict) and (q.get("art") not in antwortspeicher_basis.FREI_ARTEN or q.get("privat"))]
     if any(t and antwortspeicher_basis.woertlich(antwort or "", t) for t in fremd):
         lieferschein["woertlich"] = True
@@ -6208,6 +6207,7 @@ _AUSZUG_KLAMMER = re.compile(r"\s*\([^()]*(?:Auszüg|Auszug\b|Wissensspeicher|\b
 
 def ohne_auszuege(text: str | None) -> str:
     t = re.sub(r"\n{3,}", "\n\n", _QUELLEN_ZEILE.sub("", text or "")).strip()
+    t = antwortspeicher_basis.ohne_schlussangebot(t)
     t = _AUSZUG_KLAMMER.sub(" ", t)
     t = re.sub(r"([.!?])\s*\.", r"\1", re.sub(r"\s+([.,;:!?])", r"\1", re.sub(r"[ \t]{2,}", " ", t))).strip()
     if not _AUSZUG.search(t):

@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import * as verlauf from "./verlauf.js";
+
 const $ = (s) => document.querySelector(s);
 function el(tag, attrs = {}, ...kinder) {
   const e = document.createElement(tag);
@@ -123,17 +125,15 @@ export function bestenlisteSeite({ holen, geraet, status }) {
   }
 
 
-  let imVerlauf = false;
-  addEventListener("popstate", () => { if (imVerlauf && offen) { imVerlauf = false; schliessen(); } });
   function schliessen() { offen = false; $("#bestenliste").hidden = true; }
   function auf() {
-    if (!offen) { offen = true; $("#bestenliste").hidden = false; history.pushState({ bestenliste: 1 }, ""); imVerlauf = true; }
+    if (!offen) { offen = true; $("#bestenliste").hidden = false; verlauf.auf("bestenliste", schliessen); }
     inhalt().replaceChildren(el("p", { class: "leise mitte", text: "Einen Moment …" }));
     $("#bestenliste-titel").focus({ preventScroll: true });
     laden();
   }
-  function zu() { if (imVerlauf) { imVerlauf = false; history.back(); } schliessen(); }
-  function zurueck() { if (imVerlauf) history.back(); else schliessen(); }
+  function zu() { if (!verlauf.schliessen("bestenliste")) schliessen(); }
+  function zurueck() { if (!verlauf.zurueck("bestenliste")) schliessen(); }
 
   $("#btn-bestenliste").onclick = auf;
   $("#btn-bestenliste-zurueck").onclick = zurueck;

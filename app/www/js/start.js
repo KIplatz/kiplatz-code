@@ -14,6 +14,7 @@ import { platzlSeite } from "./platzl-seite.js";
 import { bestenlisteSeite } from "./bestenliste-seite.js";
 import { wikiSeite } from "./wiki-seite.js";
 import { mithelfenSeite } from "./mithelfen-seite.js";
+import * as verlauf from "./verlauf.js";
 import * as skillAblage from "./skills.js";
 import * as meineKi from "./meine-ki.js";
 import { trennen as platzlTrennen, entwicklungSetzen as platzlEntwicklung, skillHolen, FORUM as platzlForum, verbunden as platzlVerbunden } from "./platzl.js";
@@ -1167,8 +1168,6 @@ function einstellungenAuf() {
   $("#e-standort").checked = !!z.einst.standort;
   lernenZeichnen();
   $("#meine-daten").hidden = true;
-
-  unterseitenZu();
   $("#k-konten-name").textContent = z.geraet ? (z.geraet.konto || z.geraet.name) : "Nicht angemeldet";
   $("#avatar-einst").textContent = $("#avatar-kopf").textContent;
   $("#k-aussehen-info").textContent = { system: "Wie das Gerät", hell: "Hell", dunkel: "Dunkel" }[z.einst.aussehen] || "";
@@ -1182,27 +1181,39 @@ function einstellungenAuf() {
   $("#e-version").textContent = `KIplatz-App ${APP_VERSION}`;
 
   $("#e-quelltext-text").textContent = "Der Quelltext von Programm und App ist offen (Lizenz GNU AGPL 3):";
-  leisteZu(); meineKiZu();
+  leisteZu();
   meineKiZeile();
-  $("#einstellungen").hidden = false;
+
+  if (verlauf.offen("einstellungen")) verlauf.bis("einstellungen");
+  else { verlauf.alleZu(); $("#einstellungen").hidden = false; verlauf.auf("einstellungen", einstellungenWeg); }
   $("#einstellungen").scrollTop = 0;
 
 
   $("#einstellungen-titel").focus({ preventScroll: true });
 }
-function einstellungenZu() { $("#einstellungen").hidden = true; }
+
+function einstellungenWeg() { $("#einstellungen").hidden = true; }
+function einstellungenZu() { if (!verlauf.zurueck("einstellungen")) einstellungenWeg(); }
 
 
-function unterseiteAuf(id) { const s = $("#" + id); if (!s) return; s.hidden = false; s.scrollTop = 0; s.querySelector("h2")?.focus({ preventScroll: true }); }
-function unterseiteZu(id) { const s = $("#" + id); if (s) s.hidden = true; $("#einstellungen-titel").focus({ preventScroll: true }); }
-function unterseitenZu() { for (const s of document.querySelectorAll("#einstellungen .unterseite")) s.hidden = true; }
-const unterseiteOffen = () => document.querySelector("#einstellungen .unterseite:not([hidden])");
+function unterseiteAuf(id) {
+  const s = $("#" + id); if (!s) return;
+  verlauf.bis("einstellungen");
+  if (s.hidden) { s.hidden = false; verlauf.auf(id, () => unterseiteWeg(id)); }
+  s.scrollTop = 0; s.querySelector("h2")?.focus({ preventScroll: true });
+}
+function unterseiteWeg(id) { const s = $("#" + id); if (s) s.hidden = true; $("#einstellungen-titel").focus({ preventScroll: true }); }
+function unterseiteZu(id) { if (!verlauf.zurueck(id)) unterseiteWeg(id); }
 
 
 function meineKiAuf() {
   $("#e-anrede").value = z.einst.anrede || ""; $("#e-wohnort").value = z.einst.wohnort || ""; $("#e-ueber-dich-ok").textContent = "";
-  meineKiZeichnen(); $("#meineki").hidden = false; $("#meineki-titel").focus({ preventScroll: true }); }
-function meineKiZu() { $("#meineki").hidden = true; }
+  meineKiZeichnen();
+  if (!verlauf.offen("meineki")) { verlauf.bis("einstellungen"); $("#meineki").hidden = false; verlauf.auf("meineki", meineKiWeg); }
+  $("#meineki-titel").focus({ preventScroll: true });
+}
+function meineKiWeg() { $("#meineki").hidden = true; }
+function meineKiZu() { if (!verlauf.zurueck("meineki")) meineKiWeg(); }
 
 
 function zuhauseZeichnen() {
@@ -1683,7 +1694,7 @@ function zugangVerloren() {
 
   if (!z.geraet) return;
   platzlTrennen().then(() => z.platzl?.einstellungenZeigen());
-  tresor.loeschen("geraet"); tresor.loeschen("abgleich"); tresor.loeschen("zuhause"); z.zuhause = []; localStorage.removeItem("kiplatz." + konten.name("abgleich-zuordnung")); z.geraet = null; einstellungenZu(); z.platzl?.zu();
+  tresor.loeschen("geraet"); tresor.loeschen("abgleich"); tresor.loeschen("zuhause"); z.zuhause = []; localStorage.removeItem("kiplatz." + konten.name("abgleich-zuordnung")); z.geraet = null; verlauf.alleZu();
   konten.vergessen();
   anzeigen();
   anmeldeInfo(abmeldeGrund || "Du bist auf diesem Gerät abgemeldet worden, von einem anderen Gerät aus oder weil es 90 Tage nicht benutzt wurde. Melde dich einfach neu an.");
@@ -1693,8 +1704,9 @@ function zugangVerloren() {
 const skillTitel = (s) => s?.titel || s?.name || "";
 function skillSchild(g) {
 
+
   const s = g?.skill ? skillAblage.holen(g.skill) : null;
-  const alle = g ? skillAblage.fuerGespraech(g.skill || "").mit : [];
+  const alle = (g ? skillAblage.fuerGespraech(g.skill || "").mit : []).filter((x) => x.name !== meineKi.NAME || x.name === g.skill);
   $("#skill-schild").hidden = !alle.length;
   $("#btn-skill-weg").hidden = !s;
   if (alle.length) $("#skill-schild-text").textContent = skillTitel(alle[0]) + (alle.length > 1 ? ` + ${alle.length - 1}` : "");
@@ -1752,7 +1764,7 @@ function skillsVerdrahten() {
     if (!s || !dlg.returnValue) return;
     const wie = skillAblage.merken(s);
     if (dlg.returnValue === "neu") {
-      z.platzl?.zu(); einstellungenZu();
+      verlauf.alleZu();
       z.gespraeche.neu(); skillFuer(z.gespraeche.aktuell, s.name); zeichneListe();
       status(`Skill „${skillTitel(s)}“ ist bereit. Stell deine Frage.`); $("#eingabe").focus();
     } else if (dlg.returnValue === "hier") {
@@ -2238,7 +2250,7 @@ function verdrahten() {
   $("#btn-zuhause-kamera").onclick = () => { $("#e-zuhause").classList.remove("gut"); qrScannen(); };
   $("#qr-abbrechen").onclick = () => qrStoppen();
 
-  $("#btn-pc-qr").onclick = () => { einstellungenZu(); if (kamera) qrScannen("pc"); else status("Dieses Handy bietet keine Kamera an. Melde den PC dort mit „Mit KIplatz-Konto anmelden“ an."); };
+  $("#btn-pc-qr").onclick = () => { verlauf.alleZu(); if (kamera) qrScannen("pc"); else status("Dieses Handy bietet keine Kamera an. Melde den PC dort mit „Mit KIplatz-Konto anmelden“ an."); };
   $("#qr-dialog").addEventListener("close", () => qrStoppen());
   document.addEventListener("visibilitychange", () => { if (document.hidden) qrStoppen(); });
   $("#e-zuhause-code").addEventListener("input", () => { $("#e-zuhause").textContent = ""; $("#e-zuhause").classList.remove("gut"); });
@@ -2268,7 +2280,7 @@ function verdrahten() {
   };
   $("#btn-alle-loeschen").onclick = () => {
     if (!confirm("Alle Gespräche auf diesem Gerät löschen? Das lässt sich nicht rückgängig machen.")) return;
-    z.gespraeche = new Gespraeche(); speichern(); zeichneListe(); zeichneVerlauf(); einstellungenZu();
+    z.gespraeche = new Gespraeche(); speichern(); zeichneListe(); zeichneVerlauf(); verlauf.alleZu();
   };
   $("#btn-ueberall-abmelden").onclick = async () => {
     if (!confirm("Auf allen anderen Geräten abmelden? Dort musst du dich danach neu anmelden; PCs arbeiten weiter für die Community, aber nicht mehr für dein Konto.")) return;
@@ -2276,7 +2288,7 @@ function verdrahten() {
     catch (e) { $("#geraete-meldung").textContent = e.message; }
   };
 
-  $("#btn-konto-loeschen-start").onclick = () => { einstellungenZu(); loeschenStart(); };
+  $("#btn-konto-loeschen-start").onclick = () => { verlauf.alleZu(); loeschenStart(); };
   $("#ld-weiter").onclick = () => { $("#ld-meldung").textContent = "Einen Moment …"; kontoAnmelden("loeschen", "", "", anmeldeFenster()); };
 
   $("#ld-wort").oninput = (e) => { $("#ld-loeschen").disabled = !["löschen", "delete"].includes(e.target.value.trim().toLowerCase()); };
@@ -2297,7 +2309,7 @@ function verdrahten() {
     konten.vergessen();
     const weiter = konten.andere()[0];
     if (weiter) { konten.wechseln(weiter.fach, `Abgemeldet. Du bist jetzt bei ${konten.anzeige(weiter)}.`); return; }
-    einstellungenZu(); meineKiZu(); z.platzl?.zu(); z.bestenliste?.zu(); z.wiki?.zu(); z.mithelfen?.zu(); anzeigen();
+    verlauf.alleZu(); anzeigen();
   };
 
 
@@ -2305,7 +2317,7 @@ function verdrahten() {
     const mod = e.metaKey || e.ctrlKey;
     if (mod && e.key.toLowerCase() === "k") { e.preventDefault(); if (schmal()) leisteAuf(); sucheAuf(); }
     else if (mod && e.shiftKey && e.key.toLowerCase() === "o") { e.preventDefault(); $("#btn-neu").click(); }
-    else if (e.key === "Escape") { if (z.platzl?.offen()) z.platzl.zurueck(); else if (z.bestenliste?.offen()) z.bestenliste.zurueck(); else if (z.wiki?.offen()) z.wiki.zurueck(); else if (z.mithelfen?.offen()) z.mithelfen.zurueck(); else if (!$("#einstellungen").hidden) einstellungenZu(); else if (!$("#meineki").hidden) meineKiZu(); else leisteZu(); }
+    else if (e.key === "Escape") { if (!verlauf.zurueck()) leisteZu(); }
   });
   addEventListener("resize", () => { if (!schmal()) $("#schleier").hidden = true; $("#leiste").inert = schmal() && !document.body.classList.contains("leiste-offen"); });
   $("#leiste").inert = schmal();
@@ -2326,6 +2338,7 @@ function wischenVerdrahten() {
     w = null;
     if (e.touches.length !== 1 || !schmal() || !z.geraet || e.target.closest?.("input, textarea, pre, table, dialog, .seite")) return;
     const t = e.touches[0];
+    if (amBrowserRand(t.clientX)) return;
     w = { x0: t.clientX, y0: t.clientY, start: offen() ? 1 : 0, breite: leiste.getBoundingClientRect().width || 300, zieht: false, punkte: [[e.timeStamp, t.clientX]] };
   }, { passive: true });
 
@@ -2380,6 +2393,9 @@ function sichtbarMessen() {
 }
 
 
+const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const RAND_DES_BROWSERS = 28;
+const amBrowserRand = (x) => !nativ && IOS && x < RAND_DES_BROWSERS;
 function seiteWischen(seite, schliessen) {
   let w = null;
   seite.addEventListener("touchstart", (e) => {
@@ -2390,6 +2406,7 @@ function seiteWischen(seite, schliessen) {
 
     const u = e.target.closest?.(".unterseite"); if (u && u !== seite) return;
     const t = e.touches[0];
+    if (amBrowserRand(t.clientX)) return;
     w = { x0: t.clientX, y0: t.clientY, zieht: false, punkte: [[e.timeStamp, t.clientX]] };
   }, { passive: true });
   seite.addEventListener("touchmove", (e) => {
@@ -2482,7 +2499,7 @@ async function start() {
   $("#btn-platzl").addEventListener("click", () => leisteZu());
   z.bestenliste = bestenlisteSeite({ holen, geraet: () => z.geraet, status });
   z.wiki = wikiSeite({ holen, geraet: () => z.geraet, status });
-  z.mithelfen = mithelfenSeite({ holen, geraet: () => z.geraet, platzlAuf: () => { $("#einstellungen").hidden = true; z.platzl.auf(); } });
+  z.mithelfen = mithelfenSeite({ holen, geraet: () => z.geraet, platzlAuf: () => z.platzl.auf() });
 
 
   const rueckkehr = await kontoRueckkehr();
@@ -2494,18 +2511,12 @@ async function start() {
   if (!rueckkehr && /[?&]code=|#c=|#zuhause=|#pc=/.test(location.href)) { const url = location.href; history.replaceState(null, "", location.pathname); await linkVonAussen(url); }
   nativ?.beiLink(linkVonAussen);
 
-  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  if (!nativ && ios && !navigator.standalone && !matchMedia("(display-mode: standalone)").matches) $("#ios-tipp").hidden = false;
+  if (!nativ && IOS && !navigator.standalone && !matchMedia("(display-mode: standalone)").matches) $("#ios-tipp").hidden = false;
   nativ?.beiRueckkehr(() => { appStand(); stand(); pruefStand(); });
   nativ?.beiZurueck?.(() => {
     const dlg = $("#gespraech-menue");
     if (dlg.open) { dlg.close(); return true; }
-    if (z.platzl?.offen()) { z.platzl.zurueck(); return true; }
-    if (z.bestenliste?.offen()) { z.bestenliste.zurueck(); return true; }
-    if (z.wiki?.offen()) { z.wiki.zurueck(); return true; }
-    if (z.mithelfen?.offen()) { z.mithelfen.zurueck(); return true; }
-    if (!$("#einstellungen").hidden) { const u = unterseiteOffen(); if (u) unterseiteZu(u.id); else einstellungenZu(); return true; }
-    if (!$("#meineki").hidden) { meineKiZu(); return true; }
+    if (verlauf.zurueck()) return true;
     if (document.body.classList.contains("leiste-offen")) { leisteZu(); return true; }
     return false;
   });

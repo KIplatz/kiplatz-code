@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import * as verlauf from "./verlauf.js";
+
 const $ = (s) => document.querySelector(s);
 
 const stuecke = (teile) => teile.flatMap((t, i) => [i ? " · " : null, el("span", { text: t })]);
@@ -129,18 +131,16 @@ export function wikiSeite({ holen, geraet, status }) {
   }
 
 
-  let imVerlauf = false;
-  addEventListener("popstate", () => { if (imVerlauf && offen) { imVerlauf = false; schliessen(); } });
   function schliessen() { offen = false; $("#wiki").hidden = true; }
   function auf(frage = "") {
     vorbelegt = typeof frage === "string" ? frage.replace(/^Live nachprüfen:\s*/i, "").slice(0, 200) : "";
-    if (!offen) { offen = true; $("#wiki").hidden = false; history.pushState({ wiki: 1 }, ""); imVerlauf = true; }
+    if (!offen) { offen = true; $("#wiki").hidden = false; verlauf.auf("wiki", schliessen); }
     inhalt().replaceChildren(el("p", { class: "leise mitte", text: "Einen Moment …" }));
     $("#wiki-titel").focus({ preventScroll: true });
     laden();
   }
-  function zu() { if (imVerlauf) { imVerlauf = false; history.back(); } schliessen(); }
-  function zurueck() { if (imVerlauf) history.back(); else schliessen(); }
+  function zu() { if (!verlauf.schliessen("wiki")) schliessen(); }
+  function zurueck() { if (!verlauf.zurueck("wiki")) schliessen(); }
 
   $("#btn-wiki").onclick = () => auf();
   $("#btn-wiki-zurueck").onclick = zurueck;
