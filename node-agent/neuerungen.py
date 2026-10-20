@@ -11,6 +11,13 @@ def dank(satz: str, wer: str, art: str = "Meldung") -> str:
 
 
 NEUERUNGEN: dict[str, list[str]] = {
+    "2026-10-20b": [
+        "Auf Linux und am Mac mit Apple-Chip gibt es jetzt den Helfer: ohne Fenster arbeitet dein Rechner still für die Community mit.",
+        "Der Helfer läuft als Dienst deines Benutzers, nie mit erhöhten Rechten, und bekommt dieselben unterschriebenen Updates wie das Programm.",
+        "Der Quelltext des Helfers ist offen wie der von Programm und App, und die Anleitung mit allen Befehlen steht auf kiplatz.at/linux-und-mac.",
+        "Dein PC kommt jetzt mit deinem KIplatz-Konto zur Community dazu, wie die App: im Programm „Mit KIplatz-Konto dazukommen“ anklicken, im Browser anmelden und „Einen neuen PC verbinden?“ bestätigen. Einen Code brauchst du dafür nicht mehr.",
+        "Am Linux-Rechner oder Mac zeigt „kiplatz-helfer status“ jetzt, was der Helfer gerade tut: ob er online ist, welches Modell läuft, wie viele Fragen er beantwortet hat, seine Credits und mit wem er seit dem Start verbunden war. Dazu schreibt er ein Protokoll in klaren Sätzen.",
+    ],
     "2026-10-20a": [
         "Unter jeder Antwort steht jetzt richtig, wo nachgeschlagen wurde. Hat ein anderer PC der Community geantwortet, sagt KIplatz das, statt „auf diesem Gerät“.",
         "Die englische Oberfläche ist vollständiger: Fehlermeldungen und Hinweise zum Stand des Programms kommen jetzt auf Englisch, große Zahlen mit Komma statt Punkt.",
@@ -1084,12 +1091,6 @@ NEUERUNGEN: dict[str, list[str]] = {
 }
 
 ZURUECKGEHALTEN: dict[str, list[str]] = {
-    "2026-10-19e": [
-        "Am Linux-Rechner oder Mac zeigt „kiplatz-helfer status“ jetzt, was der Helfer gerade tut: ob er online ist, welches Modell läuft, wie viele Fragen er beantwortet hat, seine Scheiben und Credits und mit wem er seit dem Start verbunden war. Dazu schreibt er ein Protokoll in klaren Sätzen.",
-    ],
-    "2026-10-19d": [
-        "Dein PC kommt jetzt mit deinem KIplatz-Konto zur Community dazu, wie die App: im Programm „Mit KIplatz-Konto dazukommen“ anklicken, im Browser anmelden und „Einen neuen PC verbinden?“ bestätigen. Einen Code vom Admin brauchst du dafür nicht mehr.",
-    ],
     "2026-10-12d": [
         "Neu unter „Meine KI“: ein Frag-Fenster für deinen Betrieb oder Verein. Besucher deiner Website stellen Fragen, und dein PC beantwortet sie aus einem Ordner mit deinen Unterlagen, ohne Cloud.",
     ],
@@ -1097,9 +1098,9 @@ ZURUECKGEHALTEN: dict[str, list[str]] = {
 
 KURZ_JE_TAG: dict[str, list[str]] = {
     "2026-10-20": [
+        "KIplatz läuft jetzt auch auf Linux und am Mac mit Apple-Chip, als Helfer ohne Fenster",
+        "Dein PC tritt jetzt mit deinem KIplatz-Konto bei, ganz ohne Code",
         "Unter jeder Antwort steht jetzt, auf welchem PC wirklich nachgeschlagen wurde",
-        "Eine Frage geht nicht mehr verloren, wenn der einzige freie PC gerade ein Update macht",
-        "Fehlermeldungen und Zustände kommen in der englischen Oberfläche jetzt auf Englisch",
     ],
     "2026-10-19": [
         "Antworten aus dem Lexikon am eigenen PC kommen jetzt auch, während das Gerät im Hintergrund daran arbeitet",
@@ -1197,7 +1198,7 @@ KURZ_JE_TAG: dict[str, list[str]] = {
 GESCHICHTE_JE_TAG: dict[str, dict[str, str]] = {
     "2026-10-20": {
         "haken": "Frag KIplatz ab heute „What is the capital of Australia?“, und auch alles rund um die Antwort kommt auf Englisch.",
-        "text": "Wir haben dafür gesorgt, dass unter jeder Antwort steht, auf welchem PC wirklich nachgeschlagen wurde. Und eine Frage geht nicht mehr verloren, wenn der einzige freie PC gerade ein Update macht.",
+        "text": "Wir haben den Helfer für Linux und Macs mit Apple-Chip fertig: drei Befehle im Terminal, und dein Rechner arbeitet ohne Fenster für die Community mit. Dein PC tritt jetzt mit deinem KIplatz-Konto bei, ganz ohne Code. Und unter jeder Antwort steht, auf welchem PC wirklich nachgeschlagen wurde.",
     },
     "2026-10-19": {
         "haken": "Frag KIplatz ab heute „Wann ist Ostern 2027?“, und die Antwort kommt gleich aus dem Kalender.",

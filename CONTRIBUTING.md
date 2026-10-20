@@ -30,7 +30,7 @@ python3 node-agent/entwickeln.py setup
 python3 node-agent/entwickeln.py test
 ```
 
-On Windows the same with `python` instead of `python3`. `setup` creates `.venv` next to `node-agent/`, installs the packages from `node-agent/requirements-dev.txt` and, if Node.js is there, esbuild for the tests (`npm ci --ignore-scripts` in `app/`). Nothing is installed system-wide and nothing needs administrator rights. `build` makes the program zip on Windows without our signature; `check` runs what has to be green before a pull request.
+On Windows the same with `python` instead of `python3`. `setup` creates `.venv` next to `node-agent/`, installs the packages from `node-agent/requirements-dev.txt` and, if Node.js is there, esbuild for the tests (`npm ci --ignore-scripts` in `app/`). Nothing is installed system-wide and nothing needs administrator rights. `build` makes the helper packages from source on Linux and Mac and the program zip on Windows, all without our signature; `check` runs what has to be green before a pull request.
 
 ## How we treat each other
 
@@ -62,6 +62,6 @@ python3 node-agent/entwickeln.py einrichten
 python3 node-agent/entwickeln.py tests
 ```
 
-`einrichten` legt `.venv` neben `node-agent/` an, holt die Pakete aus `node-agent/requirements-dev.txt` und, wenn Node.js da ist, esbuild für die Tests (`npm ci --ignore-scripts` in `app/`). Nichts wird für das ganze System installiert, nichts braucht Administratorrechte. `bauen` macht unter Windows das Programm-ZIP ohne unsere Unterschrift; `pruefen` lässt laufen, was vor einem Pull Request grün sein muss.
+`einrichten` legt `.venv` neben `node-agent/` an, holt die Pakete aus `node-agent/requirements-dev.txt` und, wenn Node.js da ist, esbuild für die Tests (`npm ci --ignore-scripts` in `app/`). Nichts wird für das ganze System installiert, nichts braucht Administratorrechte. `bauen` macht unter Linux und am Mac die Helfer-Pakete aus dem Quelltext und unter Windows das Programm-ZIP, alles ohne unsere Unterschrift; `pruefen` lässt laufen, was vor einem Pull Request grün sein muss.
 
 Wie wir miteinander umgehen, steht in der [Platzordnung](https://kiplatz.at/hausordnung/).

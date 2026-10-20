@@ -2,18 +2,27 @@
 
 [![Tests on Linux](https://github.com/KIplatz/kiplatz-code/actions/workflows/tests-linux.yml/badge.svg)](https://github.com/KIplatz/kiplatz-code/actions/workflows/tests-linux.yml) [![Tests on Windows](https://github.com/KIplatz/kiplatz-code/actions/workflows/tests-windows.yml/badge.svg)](https://github.com/KIplatz/kiplatz-code/actions/workflows/tests-windows.yml) [![Licence: AGPL 3.0 or later](.github/abzeichen/licence.svg)](LICENSE) [![Latest build](.github/abzeichen/build.svg)](https://github.com/KIplatz/kiplatz-code/tags)
 
-**KIplatz is a free AI from Austria that runs on its community's PCs instead of in a data centre.** This repository holds the source code of the two things members install: the Windows program (`node-agent/`) and the app for phones and browsers (`app/`). Both are free software under the [GNU AGPL 3.0 or later](LICENSE).
+**KIplatz is a free AI from Austria that runs on its community's PCs instead of in a data centre.** This repository holds the source code of what members install: the Windows program and the helper for Linux and Mac (`node-agent/`), and the app for phones and browsers (`app/`). All of it is free software under the [GNU AGPL 3.0 or later](LICENSE).
 
 English · [Deutsch](README.de.md)
 
+**Run the helper on Linux** (x64; on a Mac with Apple silicon use `macos-arm64` and `~/Library/kiplatz`):
+
+```bash
+curl -fL --remote-name-all https://kiplatz.at/download/KIplatz-Helfer-linux-x64.tar.gz{,.sha256} && sha256sum -c KIplatz-Helfer-linux-x64.tar.gz.sha256
+mkdir -p ~/.local/share/kiplatz && tar -xzf KIplatz-Helfer-linux-x64.tar.gz -C ~/.local/share/kiplatz
+~/.local/share/kiplatz/kiplatz-helfer/kiplatz-helfer einrichten
+```
+
+The last line asks you to sign in with your KIplatz account in a browser (your phone is fine) and then starts the helper for your user only, never as root. It sends kiplatz.at the answers it works out and a few numbers such as its load, and fetches updates and models from there or from other PCs of the community. It never sends your files or your conversations. The full list: [What never happens](https://kiplatz.com/what-never-happens/).
 
 [kiplatz.com](https://kiplatz.com/) · [Get the program](https://kiplatz.com/share-computing/) · [The app](https://kiplatz.at/app/) · [Forum (Platzl)](https://forum.kiplatz.at/?tl=en) · [Workshop](https://werkstatt.kiplatz.at/KIplatz/mitbauen?lang=en-US) · [What never happens](https://kiplatz.com/what-never-happens/)
 
 **Try it without installing anything:** ask a question on [kiplatz.com](https://kiplatz.com/).
 
-## Windows 11, or the app in the browser
+## Windows, Linux, Mac and the app
 
-The program runs on Windows 11. On a Mac, on Linux or on a phone you use the app in the browser at [kiplatz.at/app](https://kiplatz.at/app/). The program picks the model that fits your PC: Ministral 3 with 14B, 8B or 3B parameters, the biggest one that fits into the free memory of your graphics card. Without a suitable graphics card the processor does the work (the 8B model from 16 GB of memory, otherwise the 3B), and if your PC is too weak for that, a free PC of the community answers.
+The program with its window runs on Windows 11. On Linux (x64) and on a Mac with Apple silicon the helper does the same work without a window: with a graphics card (on a Mac the Apple chip) and 16 GB of memory it answers questions of the community, and it always holds part of the shared knowledge; `kiplatz-helfer status` shows what it is doing. On a phone you use the app, in the browser at [kiplatz.at/app](https://kiplatz.at/app/). The program picks the model that fits your PC: Ministral 3 with 14B, 8B or 3B parameters, the biggest one that fits into the free memory of your graphics card. Without a suitable graphics card the processor does the work (the 8B model from 16 GB of memory, otherwise the 3B), and if your PC is too weak for that, a free PC of the community answers.
 
 ## What is in here
 
@@ -44,6 +53,7 @@ powershell -ExecutionPolicy Bypass -File node-agent\build_app_zip.ps1 -OhneUnter
 
 The result is `node-agent\dist\CommunityAI.zip`. `-OhneUnterschrift` means "without signature": your package runs as a program of its own; updates come signed from kiplatz.at. The checksums of our packages are published next to every download, so you can compare a package you built with the one we ship.
 
+On Linux and on a Mac, `python3 node-agent/entwickeln.py build` builds both helper packages from source instead (Python 3.14.7 and every package checked against a fixed SHA-256, then the package starts `status` once as a self-test).
 
 To run from source instead of building:
 
@@ -74,7 +84,7 @@ One file holds every command you need, on every system: `node-agent/entwickeln.p
 git clone https://github.com/KIplatz/kiplatz-code && cd kiplatz-code
 python3 node-agent/entwickeln.py setup    # .venv, the packages, esbuild for the tests (needs Python 3.12+, Node.js for npm)
 python3 node-agent/entwickeln.py test     # the tests, in parallel; more arguments go to pytest
-python3 node-agent/entwickeln.py build    # Windows: the program zip without our signature
+python3 node-agent/entwickeln.py build    # Linux and Mac: both helper packages from source; Windows: the program zip
 python3 node-agent/entwickeln.py check    # what has to be green before a pull request
 ```
 

@@ -2,18 +2,27 @@
 
 [![Tests unter Linux](https://github.com/KIplatz/kiplatz-code/actions/workflows/tests-linux.yml/badge.svg)](https://github.com/KIplatz/kiplatz-code/actions/workflows/tests-linux.yml) [![Tests unter Windows](https://github.com/KIplatz/kiplatz-code/actions/workflows/tests-windows.yml/badge.svg)](https://github.com/KIplatz/kiplatz-code/actions/workflows/tests-windows.yml) [![Lizenz: AGPL 3.0 oder später](.github/abzeichen/lizenz.svg)](LICENSE) [![Neuester Bau](.github/abzeichen/bau.svg)](https://github.com/KIplatz/kiplatz-code/tags)
 
-**KIplatz ist eine kostenlose KI aus Österreich, die auf den PCs ihrer Community läuft statt in einem Rechenzentrum.** In diesem Repository liegt der Quelltext der zwei Dinge, die Mitglieder installieren: das Windows-Programm (`node-agent/`) und die App für Handy und Browser (`app/`). Beides ist freie Software unter der [GNU AGPL 3.0 oder später](LICENSE).
+**KIplatz ist eine kostenlose KI aus Österreich, die auf den PCs ihrer Community läuft statt in einem Rechenzentrum.** In diesem Repository liegt der Quelltext von allem, was Mitglieder installieren: das Windows-Programm und der Helfer für Linux und Mac (`node-agent/`) und die App für Handy und Browser (`app/`). Alles davon ist freie Software unter der [GNU AGPL 3.0 oder später](LICENSE).
 
 [English](README.md) · Deutsch
 
+**Den Helfer unter Linux starten** (x64; am Mac mit Apple-Chip `macos-arm64` und `~/Library/kiplatz`):
+
+```bash
+curl -fL --remote-name-all https://kiplatz.at/download/KIplatz-Helfer-linux-x64.tar.gz{,.sha256} && sha256sum -c KIplatz-Helfer-linux-x64.tar.gz.sha256
+mkdir -p ~/.local/share/kiplatz && tar -xzf KIplatz-Helfer-linux-x64.tar.gz -C ~/.local/share/kiplatz
+~/.local/share/kiplatz/kiplatz-helfer/kiplatz-helfer einrichten
+```
+
+Die letzte Zeile bittet dich, dich im Browser mit deinem KIplatz-Konto anzumelden (am Handy geht auch), und startet den Helfer dann nur für deinen Benutzer, nie als root. Er schickt kiplatz.at die Antworten, die er erarbeitet, und ein paar Messwerte wie seine Auslastung, und er holt Updates und Modelle von dort oder von anderen PCs der Community. Deine Dateien und deine Gespräche schickt er nie. Die ganze Liste: [Was nie passiert](https://kiplatz.at/was-nie-passiert/).
 
 [kiplatz.at](https://kiplatz.at/) · [Programm holen](https://kiplatz.at/rechenkraft-teilen/) · [Die App](https://kiplatz.at/app/) · [Platzl (Forum)](https://forum.kiplatz.at/) · [Werkstatt](https://werkstatt.kiplatz.at/KIplatz/mitbauen) · [Was nie passiert](https://kiplatz.at/was-nie-passiert/)
 
 **Ohne Installation ausprobieren:** Stell auf [kiplatz.at](https://kiplatz.at/) eine Frage.
 
-## Windows 11 oder die App im Browser
+## Windows, Linux, Mac und die App
 
-Das Programm läuft auf Windows 11. Auf dem Mac, unter Linux oder am Handy nimmst du die App im Browser unter [kiplatz.at/app](https://kiplatz.at/app/). Das Programm nimmt das Modell, das zu deinem PC passt. Das ist Ministral 3 mit 14, 8 oder 3 Milliarden Parametern, jeweils das größte, das in den freien Speicher der Grafikkarte passt. Ohne passende Grafikkarte arbeitet der Prozessor (ab 16 GB Arbeitsspeicher das 8B-Modell, sonst das 3B). Ist der PC dafür zu schwach, antwortet ein freier PC der Community.
+Das Programm mit Fenster läuft auf Windows 11. Unter Linux (x64) und am Mac mit Apple-Chip macht der Helfer dieselbe Arbeit ohne Fenster: Mit Grafikkarte (am Mac der Apple-Chip) und 16 GB Arbeitsspeicher beantwortet er Fragen der Community, und immer hält er einen Teil des gemeinsamen Wissens; `kiplatz-helfer status` zeigt, was er gerade tut. Am Handy nimmst du die App, im Browser unter [kiplatz.at/app](https://kiplatz.at/app/). Das Programm nimmt das Modell, das zu deinem PC passt. Das ist Ministral 3 mit 14, 8 oder 3 Milliarden Parametern, jeweils das größte, das in den freien Speicher der Grafikkarte passt. Ohne passende Grafikkarte arbeitet der Prozessor (ab 16 GB Arbeitsspeicher das 8B-Modell, sonst das 3B). Ist der PC dafür zu schwach, antwortet ein freier PC der Community.
 
 ## Was hier liegt
 
@@ -44,6 +53,7 @@ powershell -ExecutionPolicy Bypass -File node-agent\build_app_zip.ps1 -OhneUnter
 
 Das Ergebnis ist `node-agent\dist\CommunityAI.zip`. „Ohne Unterschrift“ heißt: dein Paket läuft als eigenes Programm; Updates kommen unterschrieben von kiplatz.at. Die Prüfsummen unserer Pakete stehen neben jedem Download, damit du ein selbst gebautes Paket mit dem von uns vergleichen kannst.
 
+Unter Linux und am Mac baut `python3 node-agent/entwickeln.py bauen` stattdessen beide Helfer-Pakete aus dem Quelltext (Python 3.14.7 und jedes Paket gegen eine feste SHA-256 geprüft, danach startet das Paket einmal `status` als Selbsttest).
 
 Aus dem Quelltext starten, ohne zu bauen:
 
@@ -74,7 +84,7 @@ Eine Datei hält jeden Befehl, den du brauchst, auf jedem System: `node-agent/en
 git clone https://github.com/KIplatz/kiplatz-code && cd kiplatz-code
 python3 node-agent/entwickeln.py einrichten   # .venv, die Pakete, esbuild für die Tests (braucht Python 3.12+, Node.js für npm)
 python3 node-agent/entwickeln.py tests        # die Tests, parallel; weitere Angaben gehen an pytest
-python3 node-agent/entwickeln.py bauen        # Windows: das Programm-ZIP ohne unsere Unterschrift
+python3 node-agent/entwickeln.py bauen        # Linux und Mac: beide Helfer-Pakete aus dem Quelltext; Windows: das Programm-ZIP
 python3 node-agent/entwickeln.py pruefen      # was vor einem Pull Request grün sein muss
 ```
 
