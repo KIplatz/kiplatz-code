@@ -803,14 +803,30 @@ def geraete_ermitteln(server_exe: Path, *, runner=subprocess.run) -> tuple[Gerae
     return geraete_parsen((res.stdout or "") + "\n" + (res.stderr or ""))
 
 
+PROZESSOR_OHNE_KARTE, PROZESSOR_KARTE_VOLL, PROZESSOR_KARTE_VERSAGT = "ohne_karte", "karte_voll", "karte_versagt"
+PROZESSOR_NAME_DE = {PROZESSOR_OHNE_KARTE: "Prozessor (keine passende Grafikkarte)",
+                     PROZESSOR_KARTE_VOLL: "Prozessor (kein freier Grafikspeicher)",
+                     PROZESSOR_KARTE_VERSAGT: "Prozessor (die Grafikkarte hat versagt)"}
+
+
 @dataclass(frozen=True)
 class Wahl:
     geraet: Geraet | None
     modell: Modell
     grund: str
+    prozessor: str = PROZESSOR_OHNE_KARTE
+
+    def __post_init__(self) -> None:
+        if self.prozessor not in PROZESSOR_NAME_DE:
+            raise ValueError(f"unbekannter Grund für den Prozessor: {self.prozessor}")
 
     def geraet_name_de(self) -> str:
-        return self.geraet.name if self.geraet else "Prozessor (keine passende Grafikkarte)"
+        return self.geraet.name if self.geraet else PROZESSOR_NAME_DE[self.prozessor]
+
+
+def _prozessor_grund(geraete: list[Geraet], braucht_mib: int) -> str:
+    passt_leer = any(g.eigenstaendig and g.gesamt_mib >= braucht_mib for g in geraete)
+    return PROZESSOR_KARTE_VOLL if passt_leer else PROZESSOR_OHNE_KARTE
 
 
 KARTE_RESERVE_MIB = 300
@@ -921,6 +937,10 @@ def waehlen(geraete: Iterable[Geraet], memory_gib: float) -> Wahl:
                 fremd = fremd_mib(g)
                 return Wahl(g, m, f"{m.name} passt in die {frei_mib(g)} MiB freien Grafikspeicher von {g.name}"
                                   + (f" (andere Programme belegen gerade {fremd} MiB darauf)" if fremd >= 256 else ""))
+    if _prozessor_grund(karten, min(m.braucht_mib for m in MODELLE.values())) == PROZESSOR_KARTE_VOLL:
+        if memory_gib >= 15.5:
+            return Wahl(None, MODELLE["8B"], "kein freier Grafikspeicher, aber genug Arbeitsspeicher für das 8B-Modell", PROZESSOR_KARTE_VOLL)
+        return Wahl(None, MODELLE["3B"], "kein freier Grafikspeicher, deshalb das kleine 3B-Modell", PROZESSOR_KARTE_VOLL)
     if memory_gib >= 15.5:
         return Wahl(None, MODELLE["8B"], "keine passende Grafikkarte, aber genug Arbeitsspeicher für das 8B-Modell")
     return Wahl(None, MODELLE["3B"], "keine passende Grafikkarte, deshalb das kleine 3B-Modell")
@@ -931,7 +951,9 @@ def waehlen_rechen(geraete: Iterable[Geraet]) -> Wahl:
     for g in karten:
         if g.eigenstaendig and EMBEDDING.braucht_mib + RESERVE_MIB <= frei_mib(g):
             return Wahl(g, EMBEDDING, f"{EMBEDDING.name} passt in die {frei_mib(g)} MiB freien Grafikspeicher von {g.name}")
-    return Wahl(None, EMBEDDING, "kein freier Grafikspeicher, deshalb rechnet der Prozessor")
+    if _prozessor_grund(karten, EMBEDDING.braucht_mib + RESERVE_MIB) == PROZESSOR_KARTE_VOLL:
+        return Wahl(None, EMBEDDING, "kein freier Grafikspeicher, deshalb rechnet der Prozessor", PROZESSOR_KARTE_VOLL)
+    return Wahl(None, EMBEDDING, "keine passende Grafikkarte, deshalb rechnet der Prozessor")
 
 
 RESERVE_MIB = 512
@@ -951,7 +973,9 @@ def waehlen_hoeren(geraete: Iterable[Geraet]) -> Wahl:
     for g in karten:
         if g.eigenstaendig and HOEREN.braucht_mib + RESERVE_MIB <= frei_mib(g):
             return Wahl(g, HOEREN, f"{HOEREN.name} passt in die {frei_mib(g)} MiB freien Grafikspeicher von {g.name}")
-    return Wahl(None, HOEREN, "kein freier Grafikspeicher, deshalb hört der Prozessor zu")
+    if _prozessor_grund(karten, HOEREN.braucht_mib + RESERVE_MIB) == PROZESSOR_KARTE_VOLL:
+        return Wahl(None, HOEREN, "kein freier Grafikspeicher, deshalb hört der Prozessor zu", PROZESSOR_KARTE_VOLL)
+    return Wahl(None, HOEREN, "keine passende Grafikkarte, deshalb hört der Prozessor zu")
 
 
 HOEREN_MARKE = "<asr_text>"

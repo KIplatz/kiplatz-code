@@ -11,6 +11,11 @@ def dank(satz: str, wer: str, art: str = "Meldung") -> str:
 
 
 NEUERUNGEN: dict[str, list[str]] = {
+    "2026-10-20a": [
+        "Unter jeder Antwort steht jetzt richtig, wo nachgeschlagen wurde. Hat ein anderer PC der Community geantwortet, sagt KIplatz das, statt „auf diesem Gerät“.",
+        "Die englische Oberfläche ist vollständiger: Fehlermeldungen und Hinweise zum Stand des Programms kommen jetzt auf Englisch, große Zahlen mit Komma statt Punkt.",
+        "Deine Daten liegen jetzt im Ordner KIplatz unter AppData. Das Programm zieht sie beim Update einmal selbst dorthin um, nichts geht verloren.",
+    ],
     "2026-10-19e": [],
     "2026-10-19d": [],
     "2026-10-19c": [],
@@ -1091,6 +1096,11 @@ ZURUECKGEHALTEN: dict[str, list[str]] = {
 }
 
 KURZ_JE_TAG: dict[str, list[str]] = {
+    "2026-10-20": [
+        "Unter jeder Antwort steht jetzt, auf welchem PC wirklich nachgeschlagen wurde",
+        "Eine Frage geht nicht mehr verloren, wenn der einzige freie PC gerade ein Update macht",
+        "Fehlermeldungen und Zustände kommen in der englischen Oberfläche jetzt auf Englisch",
+    ],
     "2026-10-19": [
         "Antworten aus dem Lexikon am eigenen PC kommen jetzt auch, während das Gerät im Hintergrund daran arbeitet",
         "Ein großer Download im Hintergrund hält deine eigene Frage nicht mehr auf",
@@ -1185,6 +1195,10 @@ KURZ_JE_TAG: dict[str, list[str]] = {
 
 
 GESCHICHTE_JE_TAG: dict[str, dict[str, str]] = {
+    "2026-10-20": {
+        "haken": "Frag KIplatz ab heute „What is the capital of Australia?“, und auch alles rund um die Antwort kommt auf Englisch.",
+        "text": "Wir haben dafür gesorgt, dass unter jeder Antwort steht, auf welchem PC wirklich nachgeschlagen wurde. Und eine Frage geht nicht mehr verloren, wenn der einzige freie PC gerade ein Update macht.",
+    },
     "2026-10-19": {
         "haken": "Frag KIplatz ab heute „Wann ist Ostern 2027?“, und die Antwort kommt gleich aus dem Kalender.",
         "text": "Wir haben auch dafür gesorgt, dass dein PC aus dem Lexikon antwortet, während er nebenbei für die Community arbeitet. "

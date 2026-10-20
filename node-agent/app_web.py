@@ -159,8 +159,7 @@ def sprache_einbauen(html: str) -> str:
 
 def build_core(argv: list[str] | None = None) -> tuple[app_core.AppCore, argparse.Namespace]:
     parser = argparse.ArgumentParser(prog="community-ai", description="Community AI Network - die eine Anwendung")
-    parser.add_argument("--produktiv", action="store_true", help="Produktivbetrieb statt Testbetrieb")
-    parser.add_argument("--basis", type=Path, default=None, help="Basisordner (nur für den Testbetrieb)")
+    parser.add_argument("--basis", type=Path, default=None, help="anderer Datenordner (Tests, Proben)")
     parser.add_argument("--autostart", action="store_true", help="wird von Windows beim Anmelden übergeben; startet minimiert")
     parser.add_argument("--selbsttest", action="store_true", help="alle Aktionen ohne Fenster ausführen und berichten")
     parser.add_argument("--ki-holen", action="store_true", help="KI-Laufzeit und Modell ohne Fenster holen und prüfen")
@@ -168,14 +167,16 @@ def build_core(argv: list[str] | None = None) -> tuple[app_core.AppCore, argpars
     parser.add_argument("--spielwiese", action="store_true", help="Spielwiese für Mitbauende: eigener Datenordner, eigener Server (Wegwerfdaten)")
     parser.add_argument("--entfernen", action="store_true", help="wird von Windows (Einstellungen → Apps) aufgerufen: Programm ohne Fenster entfernen, Daten bleiben")
     args = parser.parse_args(argv)
-    profile = app_core.Profile.PRODUKTIV if args.produktiv else app_core.Profile.TEST
-    if args.basis is not None and profile is not app_core.Profile.TEST:
-        parser.error("--basis gibt es nur im Testbetrieb")
+    umzug = None
     if args.spielwiese:
-        if args.produktiv:
-            parser.error("--spielwiese gibt es nur im Testbetrieb")
         args.basis = spielwiese_vorbereiten(args.basis or Path.home() / SPIELWIESE_DIRNAME)
-    return app_core.AppCore(profile, base_dir=args.basis), args
+    elif args.basis is None:
+        umzug = app_core.daten_umziehen(fenster_offen=einmal.belegt)
+        args.basis = umzug.ordner
+    core = app_core.AppCore(base_dir=args.basis)
+    if umzug is not None and umzug.satz:
+        _log(core, umzug.satz)
+    return core, args
 
 
 SPIELWIESE_DIRNAME = "CommunityAI-Spielwiese"
@@ -191,8 +192,12 @@ def spielwiese_vorbereiten(basis: Path, *, ki_von: Path | None = None) -> Path:
         d["adresse"] = SPIELWIESE_ADRESSE
         sicher_schreiben.json_datei(c, d)
     verweis = basis / ki_laufzeit.KI_VERWEIS
-    ki_von = ki_von if ki_von is not None else app_core.default_base_dir(app_core.Profile.TEST) / ki_laufzeit.KI_DIRNAME
-    if not verweis.exists() and ki_von.is_dir() and not app_core._is_reparse(ki_von):
+    if ki_von is None:
+        ki_von = app_core.default_base_dir() / ki_laufzeit.KI_DIRNAME
+        if not ki_von.is_dir():
+            ki_von = app_core.alter_daten_dir() / ki_laufzeit.KI_DIRNAME
+    alt = verweis.read_text(encoding="utf-8").strip() if verweis.is_file() else ""
+    if (not alt or not Path(alt).is_dir()) and ki_von.is_dir() and not app_core._is_reparse(ki_von):
         sicher_schreiben.text(verweis, str(ki_von))
     return basis
 
@@ -538,7 +543,8 @@ class KiSteuerung:
             geraete = self._geraete_ermitteln(self.ordner.server_exe)
             if self.nur_prozessor:
                 wahl = ki_laufzeit.waehlen((), first.memory_gib if first else 0.0)
-                wahl = ki_laufzeit.Wahl(None, wahl.modell, "die Grafikkarte hat bei der letzten Antwort versagt, deshalb der Prozessor")
+                wahl = ki_laufzeit.Wahl(None, wahl.modell, "die Grafikkarte hat bei der letzten Antwort versagt, deshalb der Prozessor",
+                                        ki_laufzeit.PROZESSOR_KARTE_VERSAGT)
             else:
                 wahl = ki_laufzeit.waehlen(geraete, first.memory_gib if first else 0.0)
             self.wahl = wahl
@@ -625,12 +631,12 @@ def anmelde_sicherung(base_dir: Path) -> Path | None:
         return plattform.sicherungs_ordner() if helfer and not os.environ.get("PYTEST_CURRENT_TEST") else None
     lokal = os.environ.get("LOCALAPPDATA")
     try:
-        normal = Path(base_dir).resolve() in {app_core.default_base_dir(p).resolve() for p in app_core.Profile}
+        normal = Path(base_dir).resolve() in {app_core.default_base_dir().resolve(), app_core.alter_daten_dir().resolve()}
     except OSError:
         normal = False
     if not lokal or not normal or os.environ.get("PYTEST_CURRENT_TEST"):
         return None
-    return Path(lokal) / "KIplatz" / "sicherung"
+    return app_core.kiplatz_dir() / "sicherung"
 
 
 def speicher_pfad(ort: str) -> Path | None:
@@ -843,7 +849,13 @@ class Api:
             except app_core.AppError:
                 lokal = []
             zusatz, quellen = wissen.kontext_bauen(lokal)
-            return zusatz, quellen, len(lokal), "Frage nach einer eigenen Datei: nur auf diesem Gerät gesucht, nicht im Internet und nicht in der Community."
+            if privat_erlaubt is True:
+                hinweis = "Frage nach einer eigenen Datei: nur auf diesem Gerät gesucht, nicht im Internet und nicht in der Community."
+            elif privat_erlaubt:
+                hinweis = "Frage nach einer eigenen Datei: nur auf deinem PC daheim gesucht, nicht im Internet und nicht in der Community."
+            else:
+                hinweis = "Frage nach einer eigenen Datei: der PC, der geantwortet hat, sieht deine Dateien nicht; gesucht wurde nichts."
+            return zusatz, quellen, len(lokal), hinweis
         server: list[wissen.Treffer] = []
         server_n, hinweis = 0, ""
         vektor = self._bedeutung.frage_vektor(frage)
@@ -852,8 +864,13 @@ class Api:
             try:
                 if self._spiegel.bereit():
                     server, server_n = self._spiegel.suchen(frage, vektor=vektor, fachgebiete=fachgebiete)
-                    hinweis = ("Im Gemeinschaftswissen auf diesem Gerät nach Bedeutung und Wörtern gesucht." if self._spiegel.letzte_suche.startswith("bedeutung+wort")
-                               else "Im Gemeinschaftswissen auf diesem Gerät nach Wörtern gesucht.")
+                    bedeutung_wort = self._spiegel.letzte_suche.startswith("bedeutung+wort")
+                    if privat_erlaubt is True:
+                        hinweis = ("Im Gemeinschaftswissen auf diesem Gerät nach Bedeutung und Wörtern gesucht." if bedeutung_wort
+                                   else "Im Gemeinschaftswissen auf diesem Gerät nach Wörtern gesucht.")
+                    else:
+                        hinweis = ("Im Gemeinschaftswissen auf dem PC, der geantwortet hat, nach Bedeutung und Wörtern gesucht." if bedeutung_wort
+                                   else "Im Gemeinschaftswissen auf dem PC, der geantwortet hat, nach Wörtern gesucht.")
             except Exception as exc_spiegel:
                 _log(self._core, f"FEHLER gemeinschaftswissen suchen: {type(exc_spiegel).__name__}")
                 server, server_n, hinweis = [], 0, ""
@@ -864,7 +881,8 @@ class Api:
                 hinweis = ("Am Server nach Bedeutung und Wörtern gesucht." if self._community.letzte_suche == "bedeutung+wort"
                            else ("Am Server nur nach Wörtern gesucht (noch keine Vektoren im Index)." if vektor else "Am Server nur nach Wörtern gesucht (Bedeutungs-Modell nicht bereit)."))
         except app_core.AppError as exc:
-            hinweis = f"Community-Server nicht erreichbar ({exc.detail}); nur dieses Gerät durchsucht."
+            hinweis = (f"Community-Server nicht erreichbar ({exc.detail}); nur dieses Gerät durchsucht." if privat_erlaubt is True
+                       else f"Community-Server nicht erreichbar ({exc.detail}); nur der PC, der geantwortet hat, wurde durchsucht.")
             self._community_stand = (time.time(), community.Stand(False, 0, "Community", exc.detail))
         try:
             lokal = self._wissen.suchen(frage, privat_erlaubt=privat_erlaubt)
@@ -968,7 +986,8 @@ class Api:
             except Exception as exc:
                 _log(self._core, f"FEHLER openstreetmap suchen: {type(exc).__name__}")
             if orte:
-                hinweis = "In den Orten aus OpenStreetMap auf diesem Gerät nachgeschlagen. " + hinweis
+                hinweis = ("In den Orten aus OpenStreetMap auf diesem Gerät nachgeschlagen. " if privat_erlaubt is True
+                           else "In den Orten aus OpenStreetMap auf dem PC, der geantwortet hat, nachgeschlagen. ") + hinweis
         vorab = None
         ohne_wiki = not selbst and not frisch and nachschauen.nicht_im_lexikon(frage)
         namen = [] if (selbst or live or orte or frisch or ohne_wiki) else self._unbekannte_namen(frage)
@@ -1021,7 +1040,8 @@ class Api:
                     hinweis = f"{vorher_w - len(wiki)} Stellen aus Ortsteil-Artikeln weggelassen. " + hinweis
             if wiki:
                 a_ = self._wiki.ausgabe()
-                hinweis = f"In der Wikipedia-Kopie auf diesem Gerät nachgeschlagen (Stand {a_[6:8]}.{a_[4:6]}.{a_[:4]}). " + hinweis
+                hinweis = (f"In der Wikipedia-Kopie auf diesem Gerät nachgeschlagen (Stand {a_[6:8]}.{a_[4:6]}.{a_[:4]}). " if privat_erlaubt is True
+                           else f"In der Wikipedia-Kopie auf dem PC, der geantwortet hat, nachgeschlagen (Stand {a_[6:8]}.{a_[4:6]}.{a_[:4]}). ") + hinweis
         sortiert: bewertung.Sortierung | None = None
         if bewerten and not selbst:
             kandidaten = server + lokal + ([] if zeitgebunden else wiki + wiki_titel)
@@ -2188,7 +2208,7 @@ class Api:
             _ABSICHT.wert = None
             _FACH.wert = None
 
-    def _fertig_aus_kopie(self, nachrichten: list[dict]) -> tuple[str, dict] | None:
+    def _fertig_aus_kopie(self, nachrichten: list[dict], *, fuer_andere: bool = False) -> tuple[str, dict] | None:
         if self._spiegel is None:
             return None
         try:
@@ -2205,8 +2225,11 @@ class Api:
         ls["aus_speicher"] = {"erarbeitet": time.strftime("%Y-%m-%d", time.localtime(e["angelegt"])) if e["angelegt"] else "", "von": e["von"]}
         ls["speicher_id"] = e["kennung"]
         ls["dauer_s"] = 0.0
-        ls["quellen"] = (str(ls.get("quellen") or "").rstrip() + " Diese Antwort hat ein PC der Community schon einmal geprüft erarbeitet; "
-                         "sie kam fertig aus dem Antwort-Speicher, aus der Kopie auf diesem PC.").strip()
+        ls["quellen"] = (str(ls.get("quellen") or "").rstrip() + " " + (
+            "Diese Antwort hat ein PC der Community schon einmal geprüft erarbeitet; sie kam fertig aus dem Antwort-Speicher, aus der Kopie "
+            "auf dem PC, der geantwortet hat." if fuer_andere else
+            "Diese Antwort hat ein PC der Community schon einmal geprüft erarbeitet; sie kam fertig aus dem Antwort-Speicher, aus der Kopie "
+            "auf diesem PC.")).strip()
         _log(self._core, "OK antwort aus der Kopie des Antwort-Speichers, ohne Modell")
         return e["text"], ls
 
@@ -2236,7 +2259,7 @@ class Api:
                                    "quellen": "keine Quelle nötig, das Programm fragt nach.", "quellen_liste": [], "gemacht": "nachgefragt", "erfunden": "nichts, es wurde nur nachgefragt",
                                    "pruefung": pruefung.pruefen("", []).kurz()}
         if not (frisch or skill or privat):
-            fertig = self._fertig_aus_kopie(nachrichten)
+            fertig = self._fertig_aus_kopie(nachrichten, fuer_andere=True)
             if fertig is not None:
                 fertig[1]["geraet"] = f"{self._geraet_name} (Community) für {fuer}, aus dem Antwort-Speicher"
                 return fertig
@@ -2866,10 +2889,10 @@ class Api:
                         _log(self._core, f"OK startmenue {app_install.ensure_shortcut(Path(cmd[0]), sm, args=f'\"{cmd[1]}\"', arbeitsordner=info.exe_path.parent)}")
                     _log(self._core, f"OK apps_eintrag {app_install.apps_eintrag_setzen(info.exe_path.parent, app_core.APP_VERSION, app_core.APP_BUILD)}")
                     if what == "eingerichtet" and not app_install.autostart_enabled(registry=self._registry):
-                        self._registry.set(app_install.RUN_VALUE_NAME, app_install.autostart_command_portable(info.exe_path.parent, produktiv=self._core.profile is app_core.Profile.PRODUKTIV))
+                        self._registry.set(app_install.RUN_VALUE_NAME, app_install.autostart_command_portable(info.exe_path.parent))
                         _log(self._core, "OK autostart eingerichtet")
                         self.start_meldung += " Es startet ab jetzt mit Windows, still ins Symbol bei der Uhr; unter Einstellungen lässt sich das abschalten."
-                    elif app_install.autostart_erneuern(info.exe_path.parent, produktiv=self._core.profile is app_core.Profile.PRODUKTIV, registry=self._registry):
+                    elif app_install.autostart_erneuern(info.exe_path.parent, registry=self._registry):
                         _log(self._core, "OK autostart erneuert (der Eintrag zeigte auf eine Datei, die es nicht mehr gibt)")
         else:
             self.start_meldung = r["text"]
@@ -2918,7 +2941,7 @@ class Api:
         empf = app_core.recommended_freigabe(first)
         info = app_install.installed_info(self._install_dir)
         d = {
-            "app": {"name": app_core.APP_NAME, "version": app_core.APP_VERSION, "profil": " · ".join(t for t in (app_core.PROFILE_LABELS_DE[self._core.profile], "Spielwiese" if self.spielwiese else "") if t), "testbetrieb": self._core.profile is app_core.Profile.TEST,
+            "app": {"name": app_core.APP_NAME, "version": app_core.APP_VERSION, "profil": "Spielwiese" if self.spielwiese else "",
                     "spielwiese": self.spielwiese, "spielwiese_code": community_dienst_spielwiese_code() if self.spielwiese else "",
                     "quelle": app_install.running_exe() is None and app_install.portable_root() is None, "start_meldung": self.start_meldung, "prep_error": self.prep_error, "geraet_name": self._geraet_name},
             "lauf": {"zustand": state, "ueberschrift": {"ACTIVE": "Eingeschaltet", "PAUSED": "Pausiert", "STOPPED": "Gestoppt"}[state],
@@ -5359,11 +5382,10 @@ class Api:
             if an:
                 if info is None:
                     raise app_core.AppError("AUTOSTART_QUELLE", "geht nur mit der eingerichteten Programmdatei, nicht aus der Quelle")
-                produktiv = self._core.profile is app_core.Profile.PRODUKTIV
                 if info.exe_path.name in (app_install.START_NAME,) + app_install.ALTE_STARTER:
-                    self._registry.set(app_install.RUN_VALUE_NAME, app_install.autostart_command_portable(info.exe_path.parent, produktiv=produktiv))
+                    self._registry.set(app_install.RUN_VALUE_NAME, app_install.autostart_command_portable(info.exe_path.parent))
                 else:
-                    app_install.autostart_enable(info.exe_path, produktiv=produktiv, registry=self._registry)
+                    app_install.autostart_enable(info.exe_path, registry=self._registry)
             else:
                 app_install.autostart_disable(registry=self._registry)
             return app_install.autostart_enabled(registry=self._registry)
@@ -6661,7 +6683,7 @@ def run_window(core: app_core.AppCore, *, start_minimized: bool = False, registr
         pass
     _taskleisten_kennung_setzen()
     window = webview.create_window(
-        " - ".join(t for t in (app_core.APP_NAME, app_core.PROFILE_LABELS_DE[core.profile], "Spielwiese" if api.spielwiese else "") if t), html=html, js_api=api,
+        " - ".join(t for t in (app_core.APP_NAME, "Spielwiese" if api.spielwiese else "") if t), html=html, js_api=api,
         width=breite, height=hoehe, min_size=(960, 600), hidden=start_minimized, background_color=GROUND, text_select=True,
     )
     api._window = window
@@ -6889,7 +6911,7 @@ def selftest(core: app_core.AppCore) -> int:
             tmp = Path(tempfile.mkdtemp(prefix="communityai-selbsttest-"))
             info = app_install.install(exe, tmp / "CommunityAI")
             reg = app_install.MemoryRegistry()
-            app_install.autostart_enable(info.exe_path, produktiv=False, registry=reg)
+            app_install.autostart_enable(info.exe_path, registry=reg)
             removed = app_install.uninstall(tmp / "CommunityAI", registry=reg)
             results.append(f"OK   install/autostart/uninstall (Probe in {tmp.name}, {len(removed)} Objekte entfernt)")
         except Exception as exc:

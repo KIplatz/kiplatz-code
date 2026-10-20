@@ -22,7 +22,7 @@ import sicher_schreiben
 
 APP_NAME = "KIplatz"
 APP_VERSION = "0.4.0-community"
-APP_BUILD = "2026-10-19e"
+APP_BUILD = "2026-10-20a"
 
 FIRST_START_FILENAME = "erststart.json"
 FREIGABE_FILENAME = "freigabe.json"
@@ -43,19 +43,108 @@ NODE_AGENT_DIRNAME = "node-agent"
 MAX_FIRST_START_SIZE_BYTES = 64 * 1024
 
 
-class Profile(str, Enum):
-    TEST = "test"
-    PRODUKTIV = "produktiv"
+KIPLATZ_DIRNAME = "KIplatz"
+DATEN_DIRNAME = "daten"
+ALT_DATEN_DIRNAME = "CommunityAI-Test"
+ALT_NETZ_DIRNAME = "CommunityAINetwork"
 
 
-PROFILE_LABELS_DE = {Profile.TEST: "", Profile.PRODUKTIV: "Produktivbetrieb"}
+def lokal_dir() -> Path:
+    lokal = os.environ.get("LOCALAPPDATA")
+    return Path(lokal) if lokal and Path(lokal).is_absolute() else Path.home() / "AppData" / "Local"
 
 
-def default_base_dir(profile: Profile) -> Path:
-    home = Path.home()
-    if profile is Profile.TEST:
-        return home / "CommunityAI-Test"
-    return home / "AppData" / "Local" / "CommunityAINetwork"
+def kiplatz_dir() -> Path:
+    return lokal_dir() / KIPLATZ_DIRNAME
+
+
+def default_base_dir() -> Path:
+    return kiplatz_dir() / DATEN_DIRNAME
+
+
+def alter_daten_dir() -> Path:
+    return Path.home() / ALT_DATEN_DIRNAME
+
+
+def alter_netz_dir() -> Path:
+    return lokal_dir() / ALT_NETZ_DIRNAME
+
+
+@dataclass(frozen=True)
+class Umzug:
+    ordner: Path
+    satz: str
+
+
+UMZUG_WARTEN_S = 60.0
+UMZUG_TAKT_S = 0.5
+
+
+def _andere_programme() -> list[int]:
+    try:
+        import psutil
+    except ImportError:
+        return []
+    ausgenommen = {os.getpid()}
+    gefunden = []
+    for proc in psutil.process_iter(["pid", "cmdline"]):
+        try:
+            if proc.info["pid"] in ausgenommen:
+                continue
+            befehl = [str(t) for t in (proc.info.get("cmdline") or [])]
+            if "--spielwiese" in befehl or "--basis" in befehl:
+                continue
+            if any(t.lower().endswith(".py") and Path(t).parent.name.lower() == NODE_AGENT_DIRNAME for t in befehl):
+                gefunden.append(int(proc.info["pid"]))
+        except Exception:
+            continue
+    return gefunden
+
+
+def daten_ordner_jetzt(alt: Path | None = None, neu: Path | None = None) -> Path:
+    alt = Path(alt) if alt is not None else alter_daten_dir()
+    neu = Path(neu) if neu is not None else default_base_dir()
+    return neu if neu.is_dir() or not alt.is_dir() else alt
+
+
+def daten_umziehen(alt: Path | None = None, neu: Path | None = None, *, andere=None, fenster_offen=None, warten_s: float = UMZUG_WARTEN_S,
+                   schlafen=None, uhr=None) -> Umzug:
+    alt = Path(alt) if alt is not None else alter_daten_dir()
+    neu = Path(neu) if neu is not None else default_base_dir()
+    andere = andere if andere is not None else _andere_programme
+    if schlafen is None or uhr is None:
+        import time
+        schlafen = schlafen or time.sleep
+        uhr = uhr or time.monotonic
+    alt_da = alt.is_dir()
+    if neu.exists() or _is_reparse(neu):
+        if not neu.is_dir() or _is_reparse(neu):
+            return Umzug(alt if alt_da else neu, f"WARNUNG daten: {neu.parent.name}\\{neu.name} ist kein gewöhnlicher Ordner; "
+                                                 + ("weiter im alten Ordner" if alt_da else "bitte nachsehen"))
+        return Umzug(neu, f"WARNUNG daten: der alte Ordner {alt.name} liegt noch neben dem neuen und bleibt unberührt" if alt_da else "")
+    if not alt_da:
+        return Umzug(neu, "")
+    if _is_reparse(alt):
+        return Umzug(neu, f"WARNUNG daten: der alte Ordner {alt.name} ist eine Verknüpfung und zieht nicht um; der neue beginnt leer")
+    if fenster_offen is not None and fenster_offen(alt):
+        return Umzug(alt, f"HINWEIS daten: Umzug nach {neu.parent.name}\\{neu.name} wartet, es läuft noch ein KIplatz; "
+                          "weiter im alten Ordner, nächster Versuch beim nächsten Start")
+    beginn = uhr()
+    while andere():
+        if uhr() - beginn >= warten_s:
+            return Umzug(alt, f"HINWEIS daten: Umzug nach {neu.parent.name}\\{neu.name} wartet, es läuft noch ein KIplatz; "
+                              "weiter im alten Ordner, nächster Versuch beim nächsten Start")
+        schlafen(UMZUG_TAKT_S)
+    try:
+        ensure_plain_directory(neu.parent)
+        os.rename(alt, neu)
+    except (OSError, AppError) as exc:
+        if neu.is_dir() and not alt.exists():
+            return Umzug(neu, "")
+        grund = exc.code if isinstance(exc, AppError) else type(exc).__name__
+        return Umzug(alt, f"HINWEIS daten: Umzug nach {neu.parent.name}\\{neu.name} geht gerade nicht ({grund}); "
+                          "weiter im alten Ordner, nächster Versuch beim nächsten Start")
+    return Umzug(neu, f"OK daten: Ordner {alt.name} nach {neu.parent.name}\\{neu.name} umgezogen")
 
 
 class AppError(Exception):
@@ -287,15 +376,14 @@ def freigabe_folgen_de(freigabe: Freigabe, first: "FirstStartResult | None") -> 
 
 class AppCore:
 
-    def __init__(self, profile: Profile, *, base_dir: Path | None = None) -> None:
-        self.profile = profile
-        self.base_dir = Path(base_dir) if base_dir is not None else default_base_dir(profile)
+    def __init__(self, *, base_dir: Path | None = None) -> None:
+        self.base_dir = Path(base_dir) if base_dir is not None else default_base_dir()
         if not self.base_dir.is_absolute():
             raise AppError("ORDNER_UNSICHER", "Basisordner muss absolut sein")
-        other = default_base_dir(Profile.PRODUKTIV if profile is Profile.TEST else Profile.TEST)
+        netz = alter_netz_dir()
         try:
-            if self.base_dir.resolve() == other.resolve() or other.resolve() in self.base_dir.resolve().parents:
-                raise AppError("PROFIL_VERMISCHT", "der Basisordner gehört zum anderen Profil")
+            if self.base_dir.resolve() == netz.resolve() or netz.resolve() in self.base_dir.resolve().parents:
+                raise AppError("ORDNER_FREMD", "das ist der Ordner des alten Netzwerk-Programms, nicht der Datenordner von KIplatz")
         except OSError:
             pass
         self.node_agent_dir = self.base_dir / NODE_AGENT_DIRNAME
@@ -416,6 +504,17 @@ class AppCore:
         return f"{wort}. {line}\nGerät: {role}\nFreigabe: {self.load_freigabe().text_de()}"
 
 
+    def datenordner_art(self) -> str:
+        try:
+            hier = self.base_dir.resolve()
+            if hier == default_base_dir().resolve():
+                return "normal (KIplatz, daten)"
+            if hier == alter_daten_dir().resolve():
+                return "noch der alte (CommunityAI-Test), Umzug offen"
+        except OSError:
+            pass
+        return "ein anderer"
+
     def write_diagnosis_report(self) -> Path:
         self.ensure_directories()
         first = self.load_first_start()
@@ -423,7 +522,8 @@ class AppCore:
             f"{APP_NAME} - Diagnosebericht",
             f"Erstellt: {datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}",
             f"Version: {APP_VERSION}",
-            f"Profil: {self.profile.value}",
+            f"Bau: {APP_BUILD}",
+            f"Datenordner: {self.datenordner_art()}",
             f"Zustand: {self.run_state().value}",
             f"Windows: {platform.system()} {platform.release()} ({platform.version()})",
             f"Ausführung: {'EXE' if getattr(sys, 'frozen', False) else 'Python-Quelle'}",
@@ -465,4 +565,4 @@ def is_smart_app_control_on() -> bool | None:
         return None
 
 
-__all__ = ["AppCore", "AppError", "Profile", "Role", "FirstStartResult", "Freigabe", "recommended_freigabe", "ram_choices_for", "freigabe_folgen_de", "freigabe_folgen_saetze", "suggest_role", "ensure_plain_directory", "default_base_dir", "is_smart_app_control_on"]
+__all__ = ["AppCore", "AppError", "Umzug", "daten_umziehen", "daten_ordner_jetzt", "kiplatz_dir", "Role", "FirstStartResult", "Freigabe", "recommended_freigabe", "ram_choices_for", "freigabe_folgen_de", "freigabe_folgen_saetze", "suggest_role", "ensure_plain_directory", "default_base_dir", "is_smart_app_control_on"]

@@ -97,7 +97,7 @@ def test_folder_reading_takes_only_text_files_of_that_folder(tmp_path):
     assert w.benutzte_quellen("Das steht so drin (Quelle 2).", quellen) == [q for q in quellen if q["nummer"] == 2]
     drei = [{"nummer": n, "titel": "news.ORF.at", "adresse": "https://orf.at", "datum": "2026-09-17T07:46:54Z"} for n in (2, 3, 4)]
     assert [q["nummer"] for q in w.benutzte_quellen("A (Quelle 2). B (Quelle 3). C (Quelle 4).", drei)] == [2]
-    assert w.quellen_text_de("A (Quelle 2). B (Quelle 3). C (Quelle 4).", drei, 5) == "news.ORF.at (https://orf.at), gelesen 2026-09-17"
+    assert w.quellen_text_de("A (Quelle 2). B (Quelle 3). C (Quelle 4).", drei, 5) == "news.ORF.at (https://orf.at), gelesen am 17.09.2026."
     assert "passte nichts" in w.quellen_text_de("x", [], 3) and "noch leer" in w.quellen_text_de("x", [], 0)
     assert "nicht benutzt" in w.quellen_text_de("ohne Verweis", quellen, 3)
     assert w.quellen_text_de("(Quelle 1)", quellen, 3).startswith("Beispiel-Seite")

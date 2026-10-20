@@ -95,7 +95,7 @@ def test_portable_setup_copies_once_updates_sources_and_uninstall_removes_only_i
     cmd = app_install.shortcut_command(ziel / "python" / "pythonw.exe", tmp_path / "Desktop" / "KIplatz.lnk", args=f'"{ziel / "node-agent" / "app_web.py"}"', arbeitsordner=ziel)
     script = cmd[-1]
     assert "pythonw.exe" in script and "$s.Arguments = '\"" in script and "app_web.py" in script and f"WorkingDirectory = '{ziel}'" in script
-    auto = app_install.autostart_command_portable(ziel, produktiv=False)
+    auto = app_install.autostart_command_portable(ziel)
     assert auto.startswith(f'"{ziel / "python" / "pythonw.exe"}" "{ziel / "node-agent" / "app_web.py"}" --autostart')
     (ziel / "meine-notiz.txt").write_text("bleibt", encoding="utf-8")
     entfernt = app_install.uninstall(ziel, registry=app_install.MemoryRegistry())

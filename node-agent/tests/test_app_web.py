@@ -12,7 +12,7 @@ import ki_laufzeit as kl
 
 
 def _core(tmp_path):
-    core = app_core.AppCore(app_core.Profile.TEST, base_dir=tmp_path / "basis")
+    core = app_core.AppCore(base_dir=tmp_path / "basis")
     core.ensure_directories()
     return core
 

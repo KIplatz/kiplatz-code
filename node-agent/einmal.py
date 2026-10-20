@@ -37,6 +37,22 @@ def sperre_holen(base_dir: Path) -> bool:
     return True
 
 
+def belegt(base_dir: Path) -> bool:
+    if sys.platform != "win32":
+        return False
+    try:
+        import win32api
+        import win32event
+        import winerror
+    except ImportError:
+        return False
+    h = win32event.CreateMutex(None, False, _name(base_dir))
+    try:
+        return win32api.GetLastError() == winerror.ERROR_ALREADY_EXISTS
+    finally:
+        win32api.CloseHandle(h)
+
+
 def freigeben() -> None:
     while _HANDLES:
         h = _HANDLES.pop()

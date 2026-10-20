@@ -911,17 +911,19 @@ class OrteKopie:
         return {"phase": self.phase, "meldung": self.meldung, "laender": self.laender_fertig(), "belegt_mb": self.belegt_mb(), "text": self.text_de()}
 
     def text_de(self) -> str:
-        fertig = self.laender_fertig()
         st = self._stand()
+        kuerzel = {name: kurz.upper() for kurz, _, name in self._laender}
+        fertig = [kurz.upper() for kurz, _, _ in self._laender if st.get(f"fertig_{kurz}")]
         n = sum(int(st.get(f"eintraege_{k}", 0)) for k, _, _ in self._laender if st.get(f"fertig_{k}"))
-        zahl = f"{n:,}".replace(",", ".")
-        bereit = f"{zahl} Stellen aus {', '.join(fertig)}" if fertig else ""
+        zahl, laender, land = f"{n:,}".replace(",", "."), ", ".join(fertig), kuerzel.get(self.meldung, self.meldung)
         if self.phase == "zieht_um":
             return "Orte (OpenStreetMap): ziehen auf das gewählte Laufwerk um."
         if self.phase == "laedt":
-            return f"Orte (OpenStreetMap): lädt {self.meldung}." + (f" Bereit: {bereit}." if bereit else "")
+            return (f"Orte (OpenStreetMap): lädt {land}. Bereit: {zahl} Stellen aus {laender}." if fertig
+                    else f"Orte (OpenStreetMap): lädt {land}.")
         if self.phase == "liest":
-            return f"Orte (OpenStreetMap): bereitet {self.meldung} auf." + (f" Bereit: {bereit}." if bereit else "")
+            return (f"Orte (OpenStreetMap): bereitet {land} auf. Bereit: {zahl} Stellen aus {laender}." if fertig
+                    else f"Orte (OpenStreetMap): bereitet {land} auf.")
         if self.phase == "nicht_vorgesehen":
             return ""
         if self.phase == "zu_wenig_platz":
@@ -930,7 +932,7 @@ class OrteKopie:
             return f"Orte (OpenStreetMap): gerade geht es nicht ({self.meldung}), nächster Versuch später."
         if self.phase == "pause" and not fertig:
             return "Orte (OpenStreetMap): wartet, bis das Gerät arbeiten darf."
-        return f"Orte (OpenStreetMap): {bereit}, fertig aufbereitet." if bereit else ""
+        return f"Orte (OpenStreetMap): {zahl} Stellen aus {laender}, fertig aufbereitet." if fertig else ""
 
 
 __all__ = ["OrteKopie", "land_einlesen", "suchen_in", "frage_art", "Laenderdatei", "KATEGORIEN", "LAENDER", "NENNUNG", "MIN_FREIGABE_MB"]

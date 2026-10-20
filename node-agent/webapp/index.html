@@ -3288,7 +3288,11 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
 
   function zeichneQuellen(q) {
     if (!q) return;
-    $("#quellen-liste").innerHTML = (q.zeilen || []).map((z) => { const fehlt = z.startsWith("FEHLT"); return `<div class="geraet-zeile" style="display:block;padding:4px 0${fehlt ? ";color:var(--accent-dark)" : ""}">${fehlt ? "<b>" : ""}${esc(z)}${fehlt ? "</b>" : ""}</div>`; }).join("");
+
+    $("#quellen-liste").innerHTML = (q.zeilen || []).map((z) => {
+      const fehlt = z.startsWith("FEHLT"), i = z.indexOf(": "), vorne = i > 0 ? z.slice(0, i) : "", satz = i > 0 ? z.slice(i + 2) : z;
+      return `<div class="geraet-zeile" style="display:block;padding:4px 0${fehlt ? ";color:var(--accent-dark)" : ""}">${fehlt ? "<b>" : ""}${vorne ? `<span>${esc(vorne)}</span>: ` : ""}<span>${esc(satz)}</span>${fehlt ? "</b>" : ""}</div>`;
+    }).join("");
     const still = q.still || [];
     const geraete = q.geraete || [];
     $("#quellen-geraete").textContent = (still.length ? `Länger als eine Stunde ohne Quelle: ${still.map((s) => `${s.name || s.geraet}: ${s.text}`).join(" · ")}. ` : "")

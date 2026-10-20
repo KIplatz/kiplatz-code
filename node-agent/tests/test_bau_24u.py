@@ -11,7 +11,7 @@ import app_web
 
 
 def _core(tmp_path):
-    core = app_core.AppCore(app_core.Profile.TEST, base_dir=tmp_path / "b")
+    core = app_core.AppCore(base_dir=tmp_path / "b")
     core.ensure_directories()
     return core
 

@@ -1099,7 +1099,10 @@ def quellen_text_de(antwort: str, quellen: list[dict], anzahl_im_speicher: int, 
     benutzt = benutzte_quellen(antwort, quellen, auch_nummern)
     if not benutzt:
         return "aus dem Wissen des Modells. Der Wissensspeicher hatte " + ", ".join(f"{q['titel']}" for q in ohne_doppelte(quellen)) + ", das Modell hat sie nicht benutzt."
-    return "; ".join(f"{q['titel']}" + (f" ({q['adresse']})" if q["adresse"] else "") + f", gelesen {q['datum'][:10]}" for q in benutzt)
+    def gelesen(datum: str) -> str:
+        d = str(datum or "")[:10]
+        return f", gelesen am {d[8:10]}.{d[5:7]}.{d[:4]}" if re.fullmatch(r"\d{4}-\d{2}-\d{2}", d) else ""
+    return " ".join(f"{q['titel']}" + (f" ({q['adresse']})" if q["adresse"] else "") + gelesen(q["datum"]) + "." for q in benutzt)
 
 
 __all__ = ["DIRNAME", "Wissensspeicher", "Quelle", "Treffer", "WissenError", "woerter", "abschnitte", "html_zu_text", "seite_holen",

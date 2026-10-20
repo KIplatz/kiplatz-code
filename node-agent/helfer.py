@@ -211,7 +211,7 @@ def daten_ordner(args) -> Path:
 
 
 def _core(args) -> app_core.AppCore:
-    core = app_core.AppCore(app_core.Profile.TEST, base_dir=daten_ordner(args))
+    core = app_core.AppCore(base_dir=daten_ordner(args))
     core.ensure_directories()
     return core
 

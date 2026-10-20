@@ -179,7 +179,7 @@ def test_the_copy_loads_checks_reads_and_searches_country_by_country(tmp_path):
     assert "See-Apotheke" in k.suchen("Apotheke in Gmunden")[0].text
     assert k.schritt() == 0 and k.laender_fertig() == ["Liechtenstein", "Österreich"]
     assert k.schritt() == 3600 and k.phase == "fertig"
-    assert "Stellen aus Liechtenstein, Österreich" in k.text_de()
+    assert "Stellen aus T1, T2, fertig" in k.text_de()
     assert all(u.startswith("https://download.geofabrik.de/europe/") for u in geholt)
     darf["ja"] = False
     assert k.schritt() == 30 and k.phase == "pause"

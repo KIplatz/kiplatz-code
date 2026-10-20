@@ -55,7 +55,8 @@ def _wikipedia(wiki) -> dict:
             return _eintrag(False, f"Wikipedia: die Kopie ist gerade belegt ({phase}); Einleitungen und Namensprüfung fallen aus, bis sie frei ist.", stand=ausgabe, zahl=artikel)
         if phase == "fehler":
             return _eintrag(False, f"Wikipedia: gerade geht es nicht ({z.get('meldung') or ''}).", stand=ausgabe, zahl=artikel)
-        return _eintrag(True, f"Wikipedia: {artikel:,} Artikel, Stand {_datum(ausgabe)}.".replace(",", "."), stand=ausgabe, zahl=artikel)
+        zahl = f"{artikel:,}".replace(",", ".")
+        return _eintrag(True, f"Wikipedia: {zahl} Artikel, Stand {_datum(ausgabe)}.", stand=ausgabe, zahl=artikel)
     except Exception as exc:
         return _eintrag(False, f"Wikipedia: Zustand nicht lesbar ({type(exc).__name__}).")
 
@@ -68,14 +69,21 @@ def _orte(osm) -> dict:
             return _eintrag(False, "Orte: dieses Gerät bereitet die Orte nicht auf.", gilt=False)
         st = osm._stand()
         offen = [k for k, _, _ in osm._laender]
-        fertig = [deutsch for kurz, _, deutsch in osm._laender if st.get(f"fertig_{kurz}") and kurz in osm._dateien]
-        fehlt = [deutsch for kurz, _, deutsch in osm._laender if not (st.get(f"fertig_{kurz}") and kurz in osm._dateien)]
+        da = {kurz: bool(st.get(f"fertig_{kurz}") and kurz in osm._dateien) for kurz, _, _ in osm._laender}
+        fertig = [kurz.upper() for kurz, _, _ in osm._laender if da[kurz]]
+        fehlt = [deutsch for kurz, _, deutsch in osm._laender if not da[kurz]]
+        fehlt_kurz = [kurz.upper() for kurz, _, _ in osm._laender if not da[kurz]]
         tage = sorted(str(st.get(f"fertig_{k}", "")) for k in offen if st.get(f"fertig_{k}"))
         stand = tage[0] if tage else ""
         n = sum(int(st.get(f"eintraege_{k}", 0) or 0) for k in offen if st.get(f"fertig_{k}"))
         if fehlt:
-            grund = f" ({osm.meldung})" if osm.phase == "fehler" and osm.meldung else (f" ({osm.phase})" if osm.phase else "")
-            return _eintrag(False, f"Orte: {', '.join(fehlt)} fehlt{grund}.", stand=stand, zahl=n, fehlt=fehlt)
+            grund = osm.meldung if osm.phase == "fehler" and osm.meldung else osm.phase
+            laender = ", ".join(fehlt_kurz)
+            if len(fehlt_kurz) == 1:
+                text = f"Orte: {laender} fehlt ({grund})." if grund else f"Orte: {laender} fehlt."
+            else:
+                text = f"Orte: {laender} fehlen ({grund})." if grund else f"Orte: {laender} fehlen."
+            return _eintrag(False, text, stand=stand, zahl=n, fehlt=fehlt)
         return _eintrag(True, f"Orte: {', '.join(fertig)} bereit, ältester Stand {_datum(stand)}.", stand=stand, zahl=n)
     except Exception as exc:
         return _eintrag(False, f"Orte: Zustand nicht lesbar ({type(exc).__name__}).")
@@ -87,7 +95,8 @@ def _woerterbuch() -> dict:
         n = len(woerterbuch_at.WOERTER)
         probe = woerterbuch_at.treffer("Was sind Paradeiser?")
         ok = n >= WOERTERBUCH_MINDESTENS and bool(probe)
-        return _eintrag(ok, f"Wörterbuch: {n} österreichische Wörter{'' if ok else ', die Probe „Paradeiser“ fand nichts'}.", zahl=n)
+        text = f"Wörterbuch: {n} österreichische Wörter." if ok else f"Wörterbuch: {n} österreichische Wörter, die Probe „Paradeiser“ fand nichts."
+        return _eintrag(ok, text, zahl=n)
     except Exception as exc:
         return _eintrag(False, f"Wörterbuch: nicht ladbar ({type(exc).__name__}).")
 
@@ -106,19 +115,38 @@ def _kalender(heute: date | None = None) -> dict:
         return _eintrag(False, f"Kalender: rechnet nicht ({type(exc).__name__}).")
 
 
-def _modell(ki, name: str = "Chat-Modell") -> dict:
+MODELL_TEXTE = {
+    "modell": {"nicht": "Chat-Modell: nicht eingerichtet.", "aus": "Chat-Modell: ausgeschaltet.", "laeuft": "Chat-Modell: läuft ({wo}).",
+               "laeuft_ohne": "Chat-Modell: läuft.", "laden": "Chat-Modell: wird gerade geholt oder geladen.",
+               "starten": "Chat-Modell: startet gerade.", "fehler": "Chat-Modell: läuft nicht ({wie}).",
+               "nicht_bereit": "Chat-Modell: läuft gerade nicht.", "unlesbar": "Chat-Modell: Zustand nicht lesbar ({fehler})."},
+    "bedeutung": {"nicht": "Bedeutungs-Modell: nicht eingerichtet.", "aus": "Bedeutungs-Modell: ausgeschaltet.",
+                  "laeuft": "Bedeutungs-Modell: läuft ({wo}).", "laeuft_ohne": "Bedeutungs-Modell: läuft.",
+                  "laden": "Bedeutungs-Modell: wird gerade geholt oder geladen.", "starten": "Bedeutungs-Modell: startet gerade.",
+                  "fehler": "Bedeutungs-Modell: läuft nicht ({wie}).", "nicht_bereit": "Bedeutungs-Modell: läuft gerade nicht.",
+                  "unlesbar": "Bedeutungs-Modell: Zustand nicht lesbar ({fehler})."},
+}
+
+
+def _modell(ki, art: str = "modell") -> dict:
+    t = MODELL_TEXTE[art]
     if ki is None:
-        return _eintrag(False, f"{name}: nicht eingerichtet.", gilt=False)
+        return _eintrag(False, t["nicht"], gilt=False)
     try:
         z = ki.zustand()
         phase, laeuft, modell = str(z.get("phase") or ""), bool(z.get("laeuft")), str(z.get("modell") or z.get("geraet") or "")
         if phase == "aus":
-            return _eintrag(False, f"{name}: ausgeschaltet.", gilt=False)
+            return _eintrag(False, t["aus"], gilt=False)
         if laeuft:
-            return _eintrag(True, f"{name}: läuft ({modell}).".replace(" ().", "."), stand=modell)
-        return _eintrag(False, f"{name}: {phase}{(' (' + str(z.get('meldung') or '') + ')') if z.get('meldung') else ''}.", stand=modell)
+            return _eintrag(True, t["laeuft"].format(wo=modell) if modell else t["laeuft_ohne"], stand=modell)
+        meldung = str(z.get("meldung") or "")
+        if phase in ("laden", "starten"):
+            return _eintrag(False, t[phase], stand=modell)
+        if phase == "fehler" and meldung:
+            return _eintrag(False, t["fehler"].format(wie=meldung), stand=modell)
+        return _eintrag(False, t["nicht_bereit"], stand=modell)
     except Exception as exc:
-        return _eintrag(False, f"{name}: Zustand nicht lesbar ({type(exc).__name__}).")
+        return _eintrag(False, t["unlesbar"].format(fehler=type(exc).__name__))
 
 
 def _suche(suche: dict | None) -> dict:
@@ -135,7 +163,7 @@ def _suche(suche: dict | None) -> dict:
 
 def sammeln(*, wiki=None, osm=None, ki=None, bedeutung=None, suche: dict | None = None, heute: date | None = None) -> dict:
     return {"wikipedia": _wikipedia(wiki), "orte": _orte(osm), "woerterbuch": _woerterbuch(), "kalender": _kalender(heute),
-            "modell": _modell(ki), "bedeutung": _modell(bedeutung, "Bedeutungs-Modell"), "suche": _suche(suche)}
+            "modell": _modell(ki), "bedeutung": _modell(bedeutung, "bedeutung"), "suche": _suche(suche)}
 
 
 def zeilen(quellen: dict) -> list[str]:

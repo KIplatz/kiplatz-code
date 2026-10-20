@@ -286,14 +286,16 @@ UPDATE_PUBKEYS_B64 = ("Mq0a5sAEHp9ba/kUL/F69I67SooKawCBS7p1mtmKWNw=", "OF758lOi5
 
 def _gespeicherte_adresse():
     import json
-    try:
-        basis = os.environ.get("LOCALAPPDATA") or os.path.join(os.path.expanduser("~"), "AppData", "Local")
-        with open(os.path.join(basis, "CommunityAINetwork", "community", "einstellung.json"), encoding="utf-8") as f:
-            a = json.load(f).get("adresse")
+    lokal = os.environ.get("LOCALAPPDATA") or os.path.join(os.path.expanduser("~"), "AppData", "Local")
+    for basis in (os.path.join(lokal, "KIplatz", "daten"), os.path.join(os.path.expanduser("~"), "CommunityAI-Test")):
+        try:
+            with open(os.path.join(basis, "community", "einstellung.json"), encoding="utf-8") as f:
+                a = json.load(f).get("adresse")
+        except (OSError, ValueError, AttributeError):
+            continue
         a = str(a).rstrip("/") if a else ""
         return a if a.lower().startswith("https://") else STANDARD_ADRESSE
-    except (OSError, ValueError, AttributeError):
-        return STANDARD_ADRESSE
+    return STANDARD_ADRESSE
 
 
 def _signatur_gueltig(daten, signatur_b64):

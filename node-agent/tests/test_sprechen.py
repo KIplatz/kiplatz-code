@@ -347,7 +347,7 @@ def test_texts_no_longer_say_mitrechnen_or_wegwerfdaten_to_members():
     treffer = [m.group(0) for m in re.finditer(r"[^\n]{0,40}mitrechnen[^\n]{0,40}", sichtbar, flags=re.I)]
     treffer = [t for t in treffer if "page-mitrechnen" not in t and 'mitrechnen"' not in t and "mitrechnen:" not in t]
     assert treffer == [], treffer
-    assert app_core.PROFILE_LABELS_DE[app_core.Profile.TEST] == ""
+    assert not hasattr(app_core, "Profile") and not hasattr(app_core, "PROFILE_LABELS_DE")
     import credits
     assert "mitrechnen" not in credits.REGEL_DE
 

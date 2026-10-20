@@ -868,6 +868,7 @@ class WikiKopie:
             try:
                 self._db = Datenbank(pfad)
                 self._db_pfad = pfad
+                self._zahlen_holen()
             except sqlite3.Error as exc:
                 self._log(f"FEHLER wikipedia öffnen: {exc}")
 
@@ -1026,9 +1027,9 @@ class WikiKopie:
             bedarf_mb = max(self.belegt_mb(), PLATZ_MB // 2) if st.get("fertig_ausgabe") else PLATZ_MB // 2
             if frei_mb - FREI_RESERVE_MB < bedarf_mb:
                 self.phase = "zu_wenig_platz"
-                self.meldung = f"auf dem Laufwerk sind nur {frei_mb // 1000} GB frei" + (
-                    f", zum Neu-Einlesen braucht die Kopie noch einmal {bedarf_mb // 1000} GB; die bisherige bleibt so lange in Gebrauch"
-                    if st.get("fertig_ausgabe") else "")
+                self.meldung = (f"auf dem Laufwerk sind nur {frei_mb // 1000} GB frei, zum Neu-Einlesen braucht die Kopie noch einmal "
+                                f"{bedarf_mb // 1000} GB; die bisherige bleibt so lange in Gebrauch" if st.get("fertig_ausgabe")
+                                else f"auf dem Laufwerk sind nur {frei_mb // 1000} GB frei")
                 self._log(f"OK wikipedia: zu wenig Platz ({frei_mb // 1000} GB frei, Bedarf {(bedarf_mb + FREI_RESERVE_MB) // 1000} GB), nächster Blick in einer Stunde")
                 return 3600
             self._stand_setzen(bau_ausgabe=ausgabe, bau_teile=[[n, a, g] for n, a, g in teile], bau_gb=round(gesamt_gb, 1), bau_seit=_jetzt())

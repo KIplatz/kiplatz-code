@@ -46,7 +46,11 @@
 
   function deutschWirkend(s) { return /[A-Za-zÄÖÜäöüß]{2}/.test(s); }
 
-  function zahlEn(w) { return /^[-+]?\d+,\d+(\s?[A-Za-z%]{1,3})?$/.test(w) ? w.replace(",", ".") : w; }
+
+  function zahlEn(w) {
+    if (/^[-+]?\d{1,3}(\.\d{3})+$/.test(w)) return w.replace(/\./g, ",");
+    return /^[-+]?\d+,\d+(\s?[A-Za-z%]{1,3})?$/.test(w) ? w.replace(",", ".") : w;
+  }
 
 
   function anfEn(w) { return w.replace(/„([^„“”]*)“/g, "“$1”"); }

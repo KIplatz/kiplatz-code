@@ -907,9 +907,9 @@ def _bau_im_paket(ordner: Path) -> str:
     return m.group(1) if m else ""
 
 
-def autostart_command_portable(install_dir: Path, *, produktiv: bool) -> str:
+def autostart_command_portable(install_dir: Path) -> str:
     cmd = start_command(install_dir)
-    return f'"{cmd[0]}" "{cmd[1]}" --autostart' + (" --produktiv" if produktiv else "")
+    return f'"{cmd[0]}" "{cmd[1]}" --autostart'
 
 
 def _still_weg(p: Path) -> None:
@@ -1155,8 +1155,8 @@ def _registry(registry: RegistryOps | None) -> RegistryOps:
     return registry if registry is not None else WinRegistryRunKey()
 
 
-def autostart_command(exe_path: Path, *, produktiv: bool) -> str:
-    return f'"{exe_path}" --autostart' + (" --produktiv" if produktiv else "")
+def autostart_command(exe_path: Path) -> str:
+    return f'"{exe_path}" --autostart'
 
 
 def autostart_enabled(*, registry: RegistryOps | None = None) -> bool:
@@ -1164,11 +1164,11 @@ def autostart_enabled(*, registry: RegistryOps | None = None) -> bool:
     return reg.get(RUN_VALUE_NAME) is not None or any(reg.get(n) is not None for n in ALTE_RUN_VALUE_NAMES)
 
 
-def autostart_enable(exe_path: Path, *, produktiv: bool, registry: RegistryOps | None = None) -> str:
+def autostart_enable(exe_path: Path, *, registry: RegistryOps | None = None) -> str:
     exe = Path(exe_path)
     if not exe.is_file():
         raise app_core.AppError("AUTOSTART_QUELLE", "Autostart geht erst nach der Installation")
-    command = autostart_command(exe, produktiv=produktiv)
+    command = autostart_command(exe)
     _registry(registry).set(RUN_VALUE_NAME, command)
     return command
 
@@ -1179,13 +1179,13 @@ def autostart_disable(*, registry: RegistryOps | None = None) -> None:
         reg.delete(n)
 
 
-def autostart_erneuern(install_dir: Path, *, produktiv: bool, registry: RegistryOps | None = None) -> str | None:
+def autostart_erneuern(install_dir: Path, *, registry: RegistryOps | None = None) -> str | None:
     reg = _registry(registry)
     alt = reg.get(RUN_VALUE_NAME)
     alter_name = next((n for n in ALTE_RUN_VALUE_NAMES if reg.get(n) is not None), None)
     if alt is None and alter_name is None:
         return None
-    neu = autostart_command_portable(install_dir, produktiv=produktiv)
+    neu = autostart_command_portable(install_dir)
     if alter_name is not None:
         reg.delete(alter_name)
     if alt == neu and alter_name is None:
