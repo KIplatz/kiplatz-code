@@ -343,13 +343,29 @@ function daheimPcs() {
 const pruefbar = (n) => !n.fehler && !nurRueckfrage(n.lieferschein || {}) && !n.dateien && !(n.lieferschein || {}).dateien;
 
 
+function kiName(modell) {
+  const m = /(\d+(?:[.,]\d+)?)\s*B\b/i.exec(modell || "");
+  const b = m ? Number(m[1].replace(",", ".")) : 0;
+  if (!b) return "KIplatz";
+  return b >= 12 ? "KIplatz (großes Modell)" : (b >= 6 ? "KIplatz (mittleres Modell)" : "KIplatz (kleines Modell)");
+}
+
+function fassungText(f) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:-(\d+))?$/.exec(f || "");
+  return m ? `${m[3]}.${m[2]}.${m[1]}${m[4] ? ` (${m[4]})` : ""}` : "Grundfassung";
+}
+
 function detailsZeilen(n) {
   const ls = n.lieferschein || {}, pr = ls.pruefung || {}, aus = [];
   const zeile = (k, v) => { if (v) aus.push([k, v]); };
   zeile("Woher", ls.quellen || "");
   zeile("Quellen", (ls.quellen_liste || []).map((q) => q.titel).join("\n"));
   if (pr.saetze?.length && !nurRueckfrage(ls)) zeile("Geprüft", `${pr.gruen || 0} aus Quellen, ${pr.gelb || 0} Schlussfolgerungen, ${pr.rot || 0} ohne Quelle (Wortabgleich mit den Auszügen, keine Wahrheitsprüfung)`);
-  zeile("Erarbeitet von", [n.von || "einem PC der Community", ls.modell, ls.dauer_s ? Number(ls.dauer_s).toFixed(1) + " s" : ""].filter(Boolean).join(", "));
+  zeile("Erarbeitet von", [n.von || "einem PC der Community", ls.dauer_s ? Number(ls.dauer_s).toFixed(1) + " s" : ""].filter(Boolean).join(", "));
+
+
+  if (ls.modell && !/ohne Modell/.test(ls.modell)) zeile("KI", kiName(ls.modell));
+  if (typeof ls.fassung === "string" && ls.modell && !/ohne Modell/.test(ls.modell)) zeile("Fassung", fassungText(ls.fassung));
   zeile("Skill", typeof ls.skill === "string" ? ls.skill.slice(0, 80) : "");
   zeile("Gemacht", ls.gemacht || "geantwortet");
   return aus;

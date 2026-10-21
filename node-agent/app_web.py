@@ -70,6 +70,7 @@ import gespraeche_import
 import hausordnung
 import heimnetz
 import ki_laufzeit
+import modell_katalog
 import nachschauen
 import ordner_aufgaben
 import node_local_state
@@ -117,6 +118,9 @@ PRUEFER_MODELLE = ("14B", "8B")
 PRUEFSTAND_MITGLIEDER = True
 TRAINING_HOECHSTENS_S = 6 * 3600
 TRAINING_TAKT_S = 10.0
+KURZTEST_SKRIPT = "kurztest.py"
+KURZTEST_ART = ("--ohne-systemtext", "--batch", "8")
+KURZTEST_HOECHSTENS_S = 9 * 60
 TRAINING_NACHHOLEN_NAECHTE = 2
 TRAINING_NACHHOLEN_BIS = 12
 PRUEFSTAND_VERSUCHE = 3
@@ -438,6 +442,7 @@ class KiSteuerung:
         self.bilder_gewuenscht = False
         self.probe: tuple[Path, str] | None = None
         self.probe_geladen = False
+        self.fassung = ""
         self.gesperrt = ""
 
 
@@ -494,6 +499,7 @@ class KiSteuerung:
             "laufzeit_da": self.ordner.laufzeit_da(),
             "quelle": quelle, "fern_name": self.fern_name() if self.verbindung.daten() else None, "gekoppelt": self.verbindung.daten() is not None,
             "modell": self.wahl.modell.name if (quelle == "lokal" and self.wahl) else None,
+            "fassung": self.fassung if (quelle == "lokal" and laeuft) else None, "probe": bool(self.probe_geladen),
             "geraet": self.geraet_de() if laeuft else None,
             "modelle": [{"kennung": m.kennung, "name": m.name, "gb": round(m.groesse / 2**30, 2), "da": self.ordner.modell_da(m)} for m in ki_laufzeit.MODELLE.values()],
         }
@@ -578,6 +584,7 @@ class KiSteuerung:
             probe = self.probe if self.probe is not None and self.probe[1] == wahl.modell.kennung else None
             self.server.start(wahl, threads=threads, bilder=self.bilder_gewuenscht, **({"modell_pfad": probe[0]} if probe else {}))
             self.probe_geladen = probe is not None
+            self.fassung = modell_katalog.fassung(probe[0].name if probe else wahl.modell.datei)
             self._nachlauf = True
             self.phase, self.meldung = "bereit",f"{ki_anzeigename(wahl.modell.name)} läuft auf {wahl.geraet_name_de()} ({wahl.grund})"
             _log(self._core, f"OK ki_einschalten {wahl.modell.kennung} {wahl.geraet.kennung if wahl.geraet else 'cpu'}"
@@ -723,11 +730,14 @@ class Api:
                                                             vertiefen=self._vertiefen, vertiefen_pruefen=self._vertiefen_pruefen,
                                                             vorwaermen=self._vorwaermen_lauf,
                                                             pruefstand=self._pruefstand_lauf, training=self._training_lauf,
+                                                            karte_vergeben=lambda: self._ki.gesperrt if self._kurztest_laeuft() else "",
                                                             modell_name=lambda: self._ki.wahl.modell.name if (self._ki.wahl and self._ki.quelle() == "lokal"
                                                                                                               and self._ki.ordner.modell_da(self._ki.wahl.modell)) else "",
                                                             kopie=lambda: bool(self._spiegel is not None and self._spiegel.bereit()),
                                                             speicher_freigeben=lambda: getattr(self._bedeutung, "schlank_machen", lambda: False)())
         self._pruefstand_thread: threading.Thread | None = None
+        self._kurztest_thread: threading.Thread | None = None
+        self._karte_lock = threading.Lock()
         self._warmhalter = warmhalten.Warmhalter(
             [("antwort", lambda: self._ki.server if self._ki.bereit() else None, lambda s: warmhalten.antwort_anstossen(s, getattr(self._rechen, "vorrang", None))),
              ("bewertung", lambda: self._bewertung.server if getattr(self._bewertung, "phase", "") == "bereit" else None, warmhalten.bewertung_anstossen),
@@ -1741,7 +1751,113 @@ class Api:
             return None
         return {"ordner": ordner, "python": python, "skript": skript, "wochentag": tag, "stunde": stunde}
 
+    def _mit_freier_karte(self, befehl: list[str], ordner, logdatei: Path, hoechstens_s: float, *, grund: str, meldung: str,
+                          gesperrt: str):
+        rechen = self._rechen
+        getattr(rechen, "fragen_abgeben", lambda grund: None)(grund)
+        vorher = rechen.phase
+        rechen.phase, rechen.meldung = "trainiert", meldung
+        self._ki.gesperrt = gesperrt
+        proc = None
+        unterbrochen = False
+        try:
+            self._ki_entladen()
+            getattr(rechen, "_server_stoppen", lambda: None)()
+            with open(logdatei, "ab") as log:
+                proc = subprocess.Popen(befehl, cwd=str(ordner), stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            ki_laufzeit.an_programm_binden(proc)
+            bis = time.time() + hoechstens_s
+            while proc.poll() is None:
+                if time.time() > bis:
+                    break
+                if self._core.run_state() is not node_local_state.RunState.ACTIVE:
+                    unterbrochen = True
+                    break
+                time.sleep(TRAINING_TAKT_S)
+        finally:
+            try:
+                if proc is not None and proc.poll() is None:
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=60)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                        proc.wait(timeout=30)
+            except Exception as exc:
+                _log(self._core, f"FEHLER training beenden: {type(exc).__name__}")
+            finally:
+                self._ki.gesperrt = ""
+                rechen.phase = vorher
+                try:
+                    if self.ki_auto() and not self._schwach():
+                        self._ki.einschalten()
+                except Exception as exc:
+                    _log(self._core, f"FEHLER ki nach dem training: {type(exc).__name__}")
+        return proc, unterbrochen
+
+    def kurztest_starten(self) -> dict:
+        def go():
+            if not self._community.ist_admin():
+                raise app_core.AppError("NUR_ADMIN", "Den Kurztest startet nur der Admin-PC.")
+            t = self._training_einstellung()
+            if t is None or not (t["ordner"] / KURZTEST_SKRIPT).is_file():
+                raise app_core.AppError("KURZTEST_FEHLT", f"Training oder {KURZTEST_SKRIPT} fehlen im Trainingsordner (Einstellung „training“).")
+            pruefstand = self._pruefstand_thread is not None and self._pruefstand_thread.is_alive()
+            if pruefstand or not self._karte_lock.acquire(blocking=False):
+                raise app_core.AppError("KURZTEST_LAEUFT", "Gerade läuft schon ein Test oder ein Training.")
+
+            def lauf():
+                try:
+                    self._guarded("kurztest_lauf", lambda: self._kurztest_lauf(t))
+                finally:
+                    self._karte_lock.release()
+            try:
+                self._kurztest_thread = threading.Thread(target=lauf, name="kurztest", daemon=True)
+                self._kurztest_thread.start()
+            except BaseException:
+                self._karte_lock.release()
+                raise
+            return {"gestartet": True}
+        return self._guarded("kurztest_starten", go, "Der Kurztest läuft, höchstens 10 Minuten. KIplatz pausiert so lange und startet danach wieder.")
+
+    def _kurztest_lauf(self, t: dict) -> dict:
+        aus = t["ordner"] / f"kurztest-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        _log(self._core, f"OK kurztest: beginnt in {aus.name}")
+        self._ki.einstellung_setzen(kurztest_ergebnis={"zeit": datetime.now().isoformat(timespec="seconds"), "ende": "läuft", "bericht": ""})
+        proc, unterbrochen = self._mit_freier_karte(
+            [str(t["python"]), "-I", "-X", "utf8", str(t["ordner"] / KURZTEST_SKRIPT), str(aus), *KURZTEST_ART], t["ordner"],
+            t["ordner"] / f"{aus.name}.log", KURZTEST_HOECHSTENS_S, grund="dieser PC testet gerade das Training",
+            meldung="Testet das Training. Fragen beantworten so lange andere PCs.",
+            gesperrt="Dieser PC testet gerade das Training. Bitte frag in ein paar Minuten noch einmal.")
+        try:
+            bericht = (aus / "bericht.txt").read_text(encoding="utf-8")
+        except OSError:
+            bericht = ""
+        ende = ("unterbrochen" if unterbrochen else "fertig" if proc is not None and proc.returncode == 0 and bericht
+                else f"Fehler (Rückgabe {getattr(proc, 'returncode', None)})")
+        ergebnis = {"zeit": datetime.now().isoformat(timespec="seconds"), "ende": ende, "ordner": aus.name, "bericht": bericht[:4000]}
+        self._ki.einstellung_setzen(kurztest_ergebnis=ergebnis)
+        _log(self._core, f"OK kurztest: {ende}, Bericht {aus / 'bericht.txt'}")
+        return ergebnis
+
+    def kurztest_stand(self) -> dict:
+        return self._guarded("kurztest_stand", lambda: {"laeuft": self._kurztest_laeuft(),
+                                                         "ergebnis": self._ki.einstellung().get("kurztest_ergebnis") or {}})
+
+    def _kurztest_laeuft(self) -> bool:
+        t = getattr(self, "_kurztest_thread", None)
+        return bool(t is not None and t.is_alive())
+
     def _training_lauf(self) -> dict | None:
+        if not self._karte_lock.acquire(blocking=False):
+            return None
+        try:
+            return self._training_lauf_innen()
+        finally:
+            self._karte_lock.release()
+
+    def _training_lauf_innen(self) -> dict | None:
         if self._pruefen_pausiert():
             return None
         t = self._training_einstellung()
@@ -1776,48 +1892,11 @@ class Api:
         except (OSError, app_core.AppError) as exc:
             return self._training_melden("fehler", f"Die Lernliste kam nicht an: {getattr(exc, 'detail', type(exc).__name__)}")
         _log(self._core, f"OK training: Lernliste mit {n} Paaren, das Training beginnt")
-        rechen = self._rechen
-        getattr(rechen, "fragen_abgeben", lambda grund: None)("dieser PC trainiert gerade KIplatz")
-        vorher = rechen.phase
-        rechen.phase, rechen.meldung = "trainiert", "Trainiert KIplatz. Fragen beantworten so lange andere PCs."
-        self._ki.gesperrt = "Dieser PC trainiert gerade KIplatz. Bitte frag in ein paar Stunden noch einmal."
-        proc = None
-        unterbrochen = False
-        try:
-            self._ki_entladen()
-            getattr(rechen, "_server_stoppen", lambda: None)()
-            with open(lauf / "training.log", "ab") as log:
-                proc = subprocess.Popen([str(t["python"]), str(t["skript"]), "--lauf", str(lauf), "--ki-modelle", str(self._ki.ordner.modelle_dir)],
-                                        cwd=str(t["ordner"]), stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-                                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-            ki_laufzeit.an_programm_binden(proc)
-            bis = time.time() + TRAINING_HOECHSTENS_S
-            while proc.poll() is None:
-                if time.time() > bis:
-                    break
-                if self._core.run_state() is not node_local_state.RunState.ACTIVE:
-                    unterbrochen = True
-                    break
-                time.sleep(TRAINING_TAKT_S)
-        finally:
-            try:
-                if proc is not None and proc.poll() is None:
-                    proc.terminate()
-                    try:
-                        proc.wait(timeout=60)
-                    except subprocess.TimeoutExpired:
-                        proc.kill()
-                        proc.wait(timeout=30)
-            except Exception as exc:
-                _log(self._core, f"FEHLER training beenden: {type(exc).__name__}")
-            finally:
-                self._ki.gesperrt = ""
-                rechen.phase = vorher
-                try:
-                    if self.ki_auto() and not self._schwach():
-                        self._ki.einschalten()
-                except Exception as exc:
-                    _log(self._core, f"FEHLER ki nach dem training: {type(exc).__name__}")
+        proc, unterbrochen = self._mit_freier_karte(
+            [str(t["python"]), str(t["skript"]), "--lauf", str(lauf), "--ki-modelle", str(self._ki.ordner.modelle_dir)], t["ordner"],
+            lauf / "training.log", TRAINING_HOECHSTENS_S, grund="dieser PC trainiert gerade KIplatz",
+            meldung="Trainiert KIplatz. Fragen beantworten so lange andere PCs.",
+            gesperrt="Dieser PC trainiert gerade KIplatz. Bitte frag in ein paar Stunden noch einmal.")
         if unterbrochen:
             if str(self._ki.einstellung().get("training_unterbrochen", "")) != heute and datetime.now().hour < TRAINING_NACHHOLEN_BIS - 1:
                 self._ki.einstellung_setzen(training_zuletzt="", training_unterbrochen=heute)
@@ -2032,6 +2111,8 @@ class Api:
         def go():
             if self._pruefstand_thread and self._pruefstand_thread.is_alive():
                 return {"gestartet": False}
+            if self._kurztest_laeuft():
+                raise app_core.AppError("KURZTEST_LAEUFT", "Gerade läuft schon ein Test oder ein Training.")
             self._pruefstand_thread = threading.Thread(target=lambda: self._guarded("pruefstand_lauf", lambda: self._pruefstand_lauf(erzwingen=True)), name="pruefstand", daemon=True)
             self._pruefstand_thread.start()
             return {"gestartet": True}
@@ -2358,6 +2439,7 @@ class Api:
             lieferschein = {
                 "modell": wahl.modell.name if wahl else "KIplatz", "geraet": f"{self._geraet_name} (Community) für {fuer}",
                 "bau": app_core.APP_BUILD,
+                "fassung": self._ki.fassung,
                 "dauer_s": a.dauer_s, "wortstuecke": a.completion_tokens, "gelesen": a.prompt_tokens,
                 "quellen": wissen.quellen_text_de(a.text or "", quellen, im_speicher, auch_nummern={s.quelle for s in pr.saetze if s.farbe == "gruen" and s.quelle}) + (f" {hinweis}" if hinweis else ""),
                 "quellen_liste": wissen.benutzte_quellen(a.text or "", quellen, {s.quelle for s in pr.saetze if s.farbe == "gruen" and s.quelle}),
@@ -4459,6 +4541,7 @@ class Api:
             lieferschein = {
                 "modell": ("KIplatz" if fern else (wahl.modell.name if wahl else "?")), "geraet": self._ki.geraet_de(),
                 "bau": app_core.APP_BUILD,
+                "fassung": None if fern else self._ki.fassung,
                 "dauer_s": a.dauer_s, "wortstuecke": a.completion_tokens, "gelesen": a.prompt_tokens,
                 "credits": ("Admin, unbegrenzt" if admin else f"1 Credit für diese Frage, Stand {stand.guthaben}") + (f"; {self._ki.fern_name()} hat 1 verdient" if fern else ""),
                 "quellen": wissen.quellen_text_de(a.text or "", quellen, im_speicher, auch_nummern={s.quelle for s in pr.saetze if s.farbe == "gruen" and s.quelle})

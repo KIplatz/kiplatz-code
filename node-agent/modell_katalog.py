@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 SERVER = "https://kiplatz.at:8444"
@@ -205,5 +206,15 @@ STUECKLISTEN: dict[str, str] = {
     "mmproj-Qwen3-ASR-0.6B-Q8_0.gguf": "f542db65c955965a2fc83ddd1785f95c82d7fd284dbfda1a4d974f1983aefc62",
 }
 
+_FASSUNG = re.compile(r"-kiplatz-(\d{4}-\d{2}-\d{2})(?:-(\d+))?-", re.I)
+
+
+def fassung(datei: str) -> str:
+    m = _FASSUNG.search(str(datei or ""))
+    if not m:
+        return ""
+    return m.group(1) + (f"-{m.group(2)}" if m.group(2) else "")
+
+
 __all__ = ["SERVER", "MODELLE_WEG", "ORDNER", "Paket", "Modell", "LAUFZEIT", "LAUFZEIT_ALT", "MODELLE", "MODELL_REIHENFOLGE", "EMBEDDING", "EMBEDDING_DIMENSION",
-           "BEWERTUNG", "SPRACHE_LAUFZEIT", "SPRACHE_MODELL", "HOEREN", "ALLE", "NACH_DATEI"]
+           "BEWERTUNG", "SPRACHE_LAUFZEIT", "SPRACHE_MODELL", "HOEREN", "ALLE", "NACH_DATEI", "fassung"]

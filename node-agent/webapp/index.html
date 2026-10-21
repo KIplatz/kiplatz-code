@@ -834,6 +834,9 @@
             <p class="muted small" style="margin-top:0">Jede Nacht zwischen 2 und 5 Uhr stellt dieses Gerät KIplatz die Prüffragen und meldet dem Server, wie viele richtig waren. Jede freigegebene Berichtigung wird von selbst eine Prüffrage.</p>
             <label class="switch"><input type="checkbox" id="pruefstand-an" disabled> <span id="pruefstand-text">Wird geladen …</span></label>
             <div class="row" style="margin:8px 0;gap:8px"><button class="btn" id="btn-pruefstand-jetzt" type="button">Jetzt prüfen</button><span class="small muted" id="pruefstand-lauf"></span></div>
+            <div class="row" style="margin:8px 0;gap:8px"><button class="btn" id="btn-kurztest" type="button">Training kurz testen</button><span class="small muted" id="kurztest-lauf"></span></div>
+            <p class="small muted" style="margin:4px 0">Höchstens 10 Minuten. KIplatz gibt dafür die Grafikkarte frei, Fragen beantworten so lange andere PCs, danach startet KIplatz von selbst wieder.</p>
+            <pre class="small" id="kurztest-bericht" hidden style="white-space:pre-wrap;margin:4px 0"></pre>
             <p class="small" id="pruefstand-stand" style="margin:4px 0"></p>
             <div id="pruefstand-liste"></div>
             <details style="margin-top:8px"><summary class="small" style="cursor:pointer">Prüffrage hinzufügen</summary>
@@ -2043,6 +2046,11 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
     return dateienHtml(l) + standHtml(l.stand) + ersteFassungHtml(l) + mitgliedHtml(l.mitglied_pruefung) + ja + zeile;
   }
 
+  function fassungText(f) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})(?:-(\d+))?$/.exec(f || "");
+    return m ? `${m[3]}.${m[2]}.${m[1]}${m[4] ? ` (${m[4]})` : ""}` : "Grundfassung";
+  }
+
   function detailsHtml(l) {
     const aus = [];
     const zeile = (k, v) => { if (v) aus.push(`<dt>${esc(k)}</dt><dd>${v}</dd>`); };
@@ -2052,6 +2060,8 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
       ? `<div><span class="ampel gruen"></span>${Number(l.pruefung.gruen || 0)} aus Quellen</div><div><span class="ampel gelb"></span>${Number(l.pruefung.gelb || 0)} Schlussfolgerungen</div><div><span class="ampel rot"></span>${Number(l.pruefung.rot || 0)} ohne Quelle</div><div class="muted">Wortabgleich mit den Auszügen, keine Wahrheitsprüfung.</div>`
       : esc(l.erfunden || ""));
     zeile("Erarbeitet von", esc(`KIplatz auf ${l.geraet || "einem PC der Community"}${l.dauer_s ? `, ${l.dauer_s} s` : ""}`));
+
+    if (typeof l.fassung === "string" && !/ohne Modell/.test(l.modell || "")) zeile("Fassung", esc(fassungText(l.fassung)));
     zeile("Credits", esc(l.credits || ""));
     return aus.join("");
   }
@@ -2543,6 +2553,7 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
     if (c.admin) api().community_geraete().then((r) => { if (r.ok) zeichneGeraete(r.daten); });
     if (c.admin) api().sammler_stand().then((r) => { if (r.ok) zeichneSammler(r.daten); else $("#sammler-stand").textContent = r.text || ""; });
     if (c.admin) api().pruefstand_stand().then((r) => { if (r.ok) zeichnePruefstand(r.daten); else $("#pruefstand-stand").textContent = r.text || ""; });
+    if (c.admin) kurztestZeigen();
     if (c.admin) api().quellen_stand().then((r) => { if (r.ok) zeichneQuellen(r.daten); else $("#quellen-geraete").textContent = r.text || ""; });
     zeichneNotaus(c.not_aus || {});
     zeichneKonto({ konto: c.konto, laeuft: false, mitglied: !!(c.mitglied || c.admin) });
@@ -3279,6 +3290,18 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
   }
   $("#pruefstand-an").addEventListener("change", () => api().pruefstand_setzen({ an: $("#pruefstand-an").checked }).then((r) => nach(r, zeichnePruefstand)));
   $("#btn-pruefstand-jetzt").addEventListener("click", () => { api().pruefstand_jetzt().then((r) => nach(r, () => { $("#pruefstand-lauf").textContent = "Läuft gerade …"; })); });
+
+  function kurztestZeigen() {
+    api().kurztest_stand().then((r) => {
+      if (!r.ok) return;
+      const d = r.daten || {}, e = d.ergebnis || {};
+      $("#kurztest-lauf").textContent = d.laeuft ? "Läuft gerade …" : (e.zeit ? `Zuletzt ${String(e.zeit).replace("T", " ")}: ${e.ende || ""}` : "");
+      $("#kurztest-bericht").textContent = d.laeuft ? "" : (e.bericht || "");
+      $("#kurztest-bericht").hidden = d.laeuft || !e.bericht;
+      if (d.laeuft) setTimeout(kurztestZeigen, 10000);
+    });
+  }
+  $("#btn-kurztest").addEventListener("click", () => { api().kurztest_starten().then((r) => nach(r, () => kurztestZeigen())); });
   $("#btn-pf-hinzu").addEventListener("click", () => { const h = { frage: $("#pf-frage").value.trim(), erwartet: $("#pf-erwartet").value.trim(), pflicht: $("#pf-pflicht").value.split(",").map((w) => w.trim()).filter(Boolean), quelle: "Admin" }; if (!h.frage) { sag("Bitte eine Frage eintragen."); return; } api().pruefstand_setzen({ hinzufuegen: h }).then((r) => nach(r, (d) => { zeichnePruefstand(d); ["#pf-frage", "#pf-erwartet", "#pf-pflicht"].forEach((id) => { $(id).value = ""; }); })); });
   function zeichneFehlerberichte(d) {
     const f = d.fehlerberichte || [];

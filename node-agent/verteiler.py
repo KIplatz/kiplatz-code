@@ -77,6 +77,7 @@ CREDITS_JE_VERTIEF_PRUEFUNG = 1
 VERTIEF_TREFFER_MIN = 2
 VERTIEF_TREFFER = 2
 VERTIEF_GEWICHT_MIN = 0.6
+TRAININGS_SCHRITT = 5000
 VERTIEF_VERZEICHNIS_PRUEFEN_S = 2.0
 
 
@@ -1452,18 +1453,21 @@ class Verteiler:
         r["geraet"] = neu.kurz() if neu else geraet.kurz()
         return r
 
-    def trainings_paare(self, n: int = 50000) -> list[dict]:
-        out: list[dict] = []
+    def trainings_paare(self, n: int = 50000, woche: int | None = None) -> list[dict]:
+        alle: list[dict] = []
         for s, e in self._alle_vertieft().items():
             if not isinstance(e, dict) or not e.get("geprueft"):
                 continue
             quelle = "Wikipedia" if s.lower().startswith("wiki") else "Gemeinschaftswissen"
             for f in e.get("fragen") or []:
                 if isinstance(f, dict) and f.get("frage") and f.get("antwort"):
-                    out.append({"frage": str(f["frage"]), "antwort": str(f["antwort"]), "quelle": quelle, "abschnitt": s})
-                    if len(out) >= n:
-                        return out
-        return out
+                    alle.append({"frage": str(f["frage"]), "antwort": str(f["antwort"]), "quelle": quelle, "abschnitt": s})
+        if len(alle) <= n:
+            return alle
+        if woche is None:
+            woche = int(time.strftime("%G")) * 53 + int(time.strftime("%V"))
+        start = (woche * TRAININGS_SCHRITT) % len(alle)
+        return (alle[start:] + alle[:start])[:n]
 
     def _vertief_verzeichnis(self) -> list[tuple[dict, dict]]:
         jetzt = time.monotonic()

@@ -163,7 +163,19 @@ def ohne_schlussangebot(text: str) -> str:
     return neu if neu.strip() else text
 
 
-AUSLIEFERN_STAND = f"2026-10-20 schlussangebot, {MINDEST_BAU}"
+def _fassungen() -> dict[str, str]:
+    from modell_katalog import MODELLE, fassung
+    return {m.name: fassung(m.datei) for m in MODELLE.values()}
+
+
+def fremde_fassung(lieferschein) -> bool:
+    ls = lieferschein if isinstance(lieferschein, dict) else {}
+    jetzt = _fassungen().get(str(ls.get("modell") or ""))
+    return jetzt is not None and str(ls.get("fassung") or "") != jetzt
+
+
+AUSLIEFERN_STAND = (f"2026-10-20 schlussangebot, {MINDEST_BAU}, fassung "
+                    + ",".join(f"{n}={f or 'grund'}" for n, f in sorted(_fassungen().items())))
 
 
 def schlussangebot(text) -> bool:
@@ -171,7 +183,8 @@ def schlussangebot(text) -> bool:
 
 
 def ausliefern_ok(lieferschein, text=None) -> bool:
-    return not nachgebessert(lieferschein) and not vor_mindest_bau(lieferschein) and not schlussangebot(text)
+    return (not nachgebessert(lieferschein) and not vor_mindest_bau(lieferschein) and not fremde_fassung(lieferschein)
+            and not schlussangebot(text))
 
 
 def antwort_taugt(text: str, lieferschein) -> bool:

@@ -11,8 +11,9 @@ def dank(satz: str, wer: str, art: str = "Meldung") -> str:
 
 
 NEUERUNGEN: dict[str, list[str]] = {
+    "2026-10-20d": [],
     "2026-10-20c": [
-        "Endet eine Antwort mit einer Frage wie „Gibt es noch etwas dazu?“, nimmt KIplatz sie jetzt weg. Eine Rückfrage, weil etwas fehlt, bleibt stehen.",
+        "Endet eine Antwort mit einer Frage wie „Gibt es noch etwas dazu?“, nimmt KIplatz sie jetzt weg. Eine Rückfrage, weil eine Angabe zur Frage nötig ist, bleibt stehen.",
         "In der App führt Zurückwischen jetzt immer ins vorherige Menü, nicht mehr auf die Startseite, und „Meine KI“ steht nicht mehr über der Fragezeile.",
     ],
     "2026-10-20b": [

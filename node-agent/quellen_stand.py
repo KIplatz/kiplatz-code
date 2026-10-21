@@ -118,6 +118,8 @@ def _kalender(heute: date | None = None) -> dict:
 MODELL_TEXTE = {
     "modell": {"nicht": "Chat-Modell: nicht eingerichtet.", "aus": "Chat-Modell: ausgeschaltet.", "laeuft": "Chat-Modell: läuft ({wo}).",
                "laeuft_ohne": "Chat-Modell: läuft.", "laden": "Chat-Modell: wird gerade geholt oder geladen.",
+               "fremd": "Chat-Modell: läuft in einer anderen Fassung als im Katalog ({ist} statt {soll}).",
+               "ohne_fassung": "Chat-Modell: läuft, das Programm meldet keine Fassung (Bau vor 2026-10-20d).",
                "starten": "Chat-Modell: startet gerade.", "fehler": "Chat-Modell: läuft nicht ({wie}).",
                "nicht_bereit": "Chat-Modell: läuft gerade nicht.", "unlesbar": "Chat-Modell: Zustand nicht lesbar ({fehler})."},
     "bedeutung": {"nicht": "Bedeutungs-Modell: nicht eingerichtet.", "aus": "Bedeutungs-Modell: ausgeschaltet.",
@@ -126,6 +128,17 @@ MODELL_TEXTE = {
                   "fehler": "Bedeutungs-Modell: läuft nicht ({wie}).", "nicht_bereit": "Bedeutungs-Modell: läuft gerade nicht.",
                   "unlesbar": "Bedeutungs-Modell: Zustand nicht lesbar ({fehler})."},
 }
+
+
+def _katalog_fassung(name: str) -> str | None:
+    try:
+        import modell_katalog
+        for m in modell_katalog.MODELLE.values():
+            if m.name == name:
+                return modell_katalog.fassung(m.datei)
+    except Exception:
+        return None
+    return None
 
 
 def _modell(ki, art: str = "modell") -> dict:
@@ -138,7 +151,10 @@ def _modell(ki, art: str = "modell") -> dict:
         if phase == "aus":
             return _eintrag(False, t["aus"], gilt=False)
         if laeuft:
-            return _eintrag(True, t["laeuft"].format(wo=modell) if modell else t["laeuft_ohne"], stand=modell)
+            e = _eintrag(True, t["laeuft"].format(wo=modell) if modell else t["laeuft_ohne"], stand=modell)
+            if art == "modell" and isinstance(z.get("fassung"), str):
+                e["fassung"], e["probe"] = z["fassung"][:STAND_MAX], bool(z.get("probe"))
+            return e
         meldung = str(z.get("meldung") or "")
         if phase in ("laden", "starten"):
             return _eintrag(False, t[phase], stand=modell)
@@ -194,7 +210,26 @@ def pruefen(quellen) -> dict | None:
         out[name] = _eintrag(bool(e.get("ok")), str(e.get("text") or "")[:TEXT_MAX], gilt=bool(e.get("gilt", True)), stand=str(e.get("stand") or "")[:STAND_MAX],
                              zahl=int(e.get("zahl") or 0) if isinstance(e.get("zahl"), (int, float)) and not isinstance(e.get("zahl"), bool) else 0,
                              fehlt=[str(x) for x in fehlt if isinstance(x, str)] if isinstance(fehlt, list) else None)
+    if "modell" in out:
+        fassung_pruefen(out["modell"], quellen.get("modell"))
     return out or None
+
+
+def fassung_pruefen(eintrag: dict, roh) -> None:
+    soll = _katalog_fassung(eintrag.get("stand") or "") if eintrag.get("ok") else None
+    if soll is None:
+        return
+    roh = roh if isinstance(roh, dict) else {}
+    ist = roh.get("fassung")
+    t = MODELL_TEXTE["modell"]
+    if not isinstance(ist, str):
+        if soll:
+            eintrag.update(ok=False, text=t["ohne_fassung"])
+        return
+    ist = ist[:STAND_MAX]
+    eintrag["fassung"] = ist
+    if ist != soll and not roh.get("probe"):
+        eintrag.update(ok=False, text=t["fremd"].format(ist=ist or "Grundfassung", soll=soll or "Grundfassung"))
 
 
 class Sammlung:

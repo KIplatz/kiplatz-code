@@ -121,7 +121,7 @@ class Rechenarbeit:
                  leerlauf_s=None, schlafen=None, protokoll=None, urteil=None, urteil_bereit=None,
                  antworten=None, ki_starten=None, ki_stoppen=None, antworten_moeglich=None, fragen_immer=None, am_strom=None,
                  vertiefen=None, vertiefen_pruefen=None, vorwaermen=None, pruefstand=None, training=None, server_geteilt=None, jetzt=None, halter=None, themen=None, hitze_messen=None, ram_messen=None,
-                 modell_name=None, stand=None, kartenteiler=None, kopie=None, speicher_freigeben=None) -> None:
+                 modell_name=None, stand=None, kartenteiler=None, kopie=None, speicher_freigeben=None, karte_vergeben=None) -> None:
         self._core = core
         self._gemeinschaft = gemeinschaft if callable(gemeinschaft) else (lambda: gemeinschaft)
         self._urteil = urteil
@@ -139,6 +139,7 @@ class Rechenarbeit:
         self._vorwaermen = vorwaermen
         self._pruefstand = pruefstand
         self._training = training
+        self._karte_vergeben = karte_vergeben
         self._server_geteilt = server_geteilt or (lambda: False)
         self._jetzt = jetzt or time.time
         self._halter = halter
@@ -638,6 +639,16 @@ class Rechenarbeit:
         if not self._anmelden():
             self.phase = "nicht_angemeldet"
             self._schlafen(WARTEN_LEER_S)
+            return
+        try:
+            vergeben = str(self._karte_vergeben() or "") if self._karte_vergeben is not None else ""
+        except Exception:
+            vergeben = ""
+        if vergeben:
+            if self.phase != "trainiert":
+                self._log("OK rechenarbeit ruht: die Grafikkarte ist gerade für einen Test oder das Training vergeben")
+            self.phase, self.meldung = "trainiert", vergeben
+            self._schlafen(WARTEN_LEERLAUF_S)
             return
         if self._mitglied_beantworten():
             return
