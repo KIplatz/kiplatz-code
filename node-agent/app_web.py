@@ -123,6 +123,8 @@ KURZTEST_ART = ("--ohne-systemtext", "--batch", "8")
 KURZTEST_HOECHSTENS_S = 9 * 60
 TRAINING_NACHHOLEN_NAECHTE = 2
 TRAINING_NACHHOLEN_BIS = 12
+TRAINING_VERSUCHE = 4
+TRAINING_OFFEN_TAGE = 2
 PRUEFSTAND_VERSUCHE = 3
 PRUEFSTAND_ABSTAND_S = 12.0
 PRUEFSTAND_HOCHLADEN_VERSUCHE = 3
@@ -1002,7 +1004,7 @@ class Api:
         vorab = None
         ohne_wiki = not selbst and not frisch and nachschauen.nicht_im_lexikon(frage)
         namen = [] if (selbst or live or orte or frisch or ohne_wiki) else self._unbekannte_namen(frage)
-        if (frisch or ohne_wiki or namen) and not live and not orte and not selbst and self.nachschauen_an() and frage.strip():
+        if (frisch or ohne_wiki or namen) and not live and (frisch or not orte) and not selbst and self.nachschauen_an() and frage.strip():
             if namen:
                 _log(self._core, f"OK unbekannter name: {len(namen)} Name(n) stehen in keinem Wikipedia-Abschnitt, die Suche läuft gleich mit")
             vorab = self._nachschauen_vorab(frage, server + lokal, nachrichten, frisch=frisch)
@@ -1059,7 +1061,7 @@ class Api:
             if kandidaten:
                 self._schritt("prüft, welche Fundstellen wirklich passen …")
                 sortiert = self._bewertung.sortieren(frage, kandidaten)
-        if not live and not orte and self.nachschauen_an():
+        if not live and (frisch or not orte) and self.nachschauen_an():
             nach, satz = vorab() if vorab is not None else self._nachschauen(frage, server + lokal + ([] if zeitgebunden else wiki + wiki_titel), frisch=frisch,
                                                                              nachrichten=nachrichten, abgedeckt=sortiert.deckt_ab if sortiert is not None else None)
             if nach and sortiert is not None and (art is None or art.art == "suche"):
@@ -1879,9 +1881,27 @@ class Api:
             return None
         e_ = self._ki.einstellung()
         zuletzt = str(e_.get("training_zuletzt", ""))
+        im_fenster = t is not None and t["stunde"] <= jetzt.hour < max(t["stunde"] + 2, TRAINING_NACHHOLEN_BIS)
+        offen = e_.get("training_offen") if isinstance(e_.get("training_offen"), dict) else None
+        if offen is not None and t is not None and self._community.ist_admin():
+            lauf = Path(str(offen.get("lauf", "")))
+            try:
+                tage = (jetzt.date() - type(jetzt.date()).fromisoformat(str(offen.get("seit", "")))).days
+            except ValueError:
+                tage = TRAINING_OFFEN_TAGE + 1
+            versuche = int(offen.get("versuche", 1) or 1)
+            if not (lauf.is_absolute() and lauf.parent == t["ordner"] and lauf.is_dir()) or tage > TRAINING_OFFEN_TAGE \
+                    or versuche >= TRAINING_VERSUCHE:
+                self._ki.einstellung_setzen(training_offen=None)
+                return self._training_melden("fehler", f"Das Training wurde {versuche}-mal unterbrochen (Pause, Programmende oder "
+                                                       "Neustart) und kam nicht zu Ende. Nächste Woche beginnt es neu.")
+            if not im_fenster:
+                return None
+            self._ki.einstellung_setzen(training_offen={**offen, "versuche": versuche + 1})
+            _log(self._core, f"OK training: macht in {lauf.name} weiter (Start {versuche + 1} von höchstens {TRAINING_VERSUCHE})")
+            return self._training_ausfuehren(t, lauf, jetzt)
         if (t is None or not (t["wochentag"] == jetzt.weekday() or self._training_nachholen(zuletzt, e_, jetzt))
-                or not (t["stunde"] <= jetzt.hour < max(t["stunde"] + 2, TRAINING_NACHHOLEN_BIS))
-                or zuletzt == heute or not self._community.ist_admin()):
+                or not im_fenster or zuletzt == heute or not self._community.ist_admin()):
             return None
         nachgeholt = 0 if t["wochentag"] == jetzt.weekday() else int(e_.get("training_nachgeholt", 0) or 0) + 1
         self._ki.einstellung_setzen(training_zuletzt=heute, training_nachgeholt=nachgeholt)
@@ -1892,18 +1912,19 @@ class Api:
         except (OSError, app_core.AppError) as exc:
             return self._training_melden("fehler", f"Die Lernliste kam nicht an: {getattr(exc, 'detail', type(exc).__name__)}")
         _log(self._core, f"OK training: Lernliste mit {n} Paaren, das Training beginnt")
+        self._ki.einstellung_setzen(training_offen={"lauf": str(lauf), "seit": heute, "versuche": 1})
+        return self._training_ausfuehren(t, lauf, jetzt)
+
+    def _training_ausfuehren(self, t: dict, lauf: Path, jetzt: datetime) -> dict:
         proc, unterbrochen = self._mit_freier_karte(
             [str(t["python"]), str(t["skript"]), "--lauf", str(lauf), "--ki-modelle", str(self._ki.ordner.modelle_dir)], t["ordner"],
             lauf / "training.log", TRAINING_HOECHSTENS_S, grund="dieser PC trainiert gerade KIplatz",
             meldung="Trainiert KIplatz. Fragen beantworten so lange andere PCs.",
             gesperrt="Dieser PC trainiert gerade KIplatz. Bitte frag in ein paar Stunden noch einmal.")
         if unterbrochen:
-            if str(self._ki.einstellung().get("training_unterbrochen", "")) != heute and datetime.now().hour < TRAINING_NACHHOLEN_BIS - 1:
-                self._ki.einstellung_setzen(training_zuletzt="", training_unterbrochen=heute)
-                _log(self._core, "INFO training: unterbrochen (Pause oder Programmende), es startet heute noch einmal")
-                return {"urteil": "unterbrochen"}
-            return self._training_melden("fehler", "Das Training wurde unterbrochen (Pause oder Programmende) und konnte heute nicht "
-                                                   "zu Ende laufen. Nächste Woche läuft es wieder.")
+            _log(self._core, "INFO training: unterbrochen (Pause oder Programmende), es macht später im selben Ordner weiter")
+            return {"urteil": "unterbrochen"}
+        self._ki.einstellung_setzen(training_offen=None)
         if proc is None or proc.returncode != 0:
             return self._training_melden("fehler", f"Das Trainingswerkzeug endete nicht sauber (Rückgabe {getattr(proc, 'returncode', None)}); "
                                                    f"Einzelheiten in {lauf / 'training.log'}.")

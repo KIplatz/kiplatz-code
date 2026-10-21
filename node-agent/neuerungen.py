@@ -11,6 +11,10 @@ def dank(satz: str, wer: str, art: str = "Meldung") -> str:
 
 
 NEUERUNGEN: dict[str, list[str]] = {
+    "2026-10-21b": [
+        "Bei „Ja, live nachprüfen“ sucht KIplatz jetzt immer im Internet, auch wenn ein Berg oder Ort mit diesem Namen schon auf der Karte steht.",
+    ],
+    "2026-10-21a": [],
     "2026-10-20d": [],
     "2026-10-20c": [
         "Endet eine Antwort mit einer Frage wie „Gibt es noch etwas dazu?“, nimmt KIplatz sie jetzt weg. Eine Rückfrage, weil eine Angabe zur Frage nötig ist, bleibt stehen.",
@@ -1102,6 +1106,9 @@ ZURUECKGEHALTEN: dict[str, list[str]] = {
 }
 
 KURZ_JE_TAG: dict[str, list[str]] = {
+    "2026-10-21": [
+        "„Ja, live nachprüfen“ sucht jetzt immer im Internet, auch bei Bergen mit bekanntem Namen",
+    ],
     "2026-10-20": [
         "KIplatz läuft jetzt auch auf Linux und am Mac mit Apple-Chip, als Helfer ohne Fenster",
         "Dein PC tritt jetzt mit deinem KIplatz-Konto bei, ganz ohne Code",
@@ -1201,6 +1208,10 @@ KURZ_JE_TAG: dict[str, list[str]] = {
 
 
 GESCHICHTE_JE_TAG: dict[str, dict[str, str]] = {
+    "2026-10-21": {
+        "haken": "Frag KIplatz ab heute „Wie hoch ist der Traunstein?“, und tippst du auf „Ja, live nachprüfen“, wird wirklich im Internet gesucht.",
+        "text": "Bisher hielt ein Treffer auf der Karte die Suche im Internet auf, auch wenn du ausdrücklich nachprüfen wolltest. Das haben wir behoben.",
+    },
     "2026-10-20": {
         "haken": "Frag KIplatz ab heute „What is the capital of Australia?“, und auch alles rund um die Antwort kommt auf Englisch.",
         "text": "Wir haben den Helfer für Linux und Macs mit Apple-Chip fertig: drei Befehle im Terminal, und dein Rechner arbeitet ohne Fenster für die Community mit. Dein PC tritt jetzt mit deinem KIplatz-Konto bei, ganz ohne Code. Und unter jeder Antwort steht, auf welchem PC wirklich nachgeschlagen wurde.",

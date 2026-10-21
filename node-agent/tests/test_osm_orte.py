@@ -224,6 +224,6 @@ def test_a_wrong_checksum_is_never_read(tmp_path):
 def test_program_asks_the_places_before_searching_the_net():
     code = (Path(__file__).resolve().parent.parent / "app_web.py").read_text(encoding="utf-8")
     assert "self._osm = osm_orte.OrteKopie(" in code and "self._osm.start()" in code
-    assert "if not live and not orte and self.nachschauen_an():" in code
+    assert "if not live and (frisch or not orte) and self.nachschauen_an():" in code
     assert "self._wiki.belegt_mb() - self._osm.belegt_mb()" in code
     assert "vorgesehen=lambda: self._community.ist_admin()" in code
