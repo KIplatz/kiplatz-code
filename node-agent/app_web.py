@@ -896,6 +896,7 @@ class Api:
         except app_core.AppError:
             lokal, lokal_n = [], 0
         live: list[wissen.Treffer] = []
+        ergaenzend: list[wissen.Treffer] = []
         for adresse in wissen.adressen_in_text(frage):
             try:
                 q, text, tr = wissen.live_lesen(adresse, frage)
@@ -914,7 +915,7 @@ class Api:
             hinweis = "Österreichisches Wörterbuch von KIplatz als erste Quelle. " + hinweis
         anbieter = not selbst and selbstauskunft.anbieter(frage)
         if anbieter:
-            live = selbstauskunft.steckbrief_treffer() + live
+            ergaenzend = selbstauskunft.steckbrief_treffer() + ergaenzend
             hinweis = "Steckbrief von KIplatz als Quelle (Frage nach KI-Anbietern). " + hinweis
         ziel = zeitziel(frage)
         if ziel != (None, None):
@@ -977,7 +978,7 @@ class Api:
                 bis = (datetime.now(timezone.utc) + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
                 for f in reversed(funde):
                     sq = wissen.Quelle(wissen.kennung_fuer("stelle", f.adresse + "|" + f.stelle), "nachgeschaut", f.titel, f.adresse, jetzt, len(f.text), bis)
-                    live = [wissen.Treffer(sq, f.text, 9.0)] + live
+                    ergaenzend = [wissen.Treffer(sq, f.text, 9.0)] + ergaenzend
                 if funde:
                     namen = ", ".join(sorted({stellen.NAMEN.get(f.stelle, f.stelle) for f in funde}))
                     hinweis = f"Bei der zuständigen Stelle nachgeschaut ({namen}). " + hinweis
@@ -996,12 +997,12 @@ class Api:
                            else "In den Orten aus OpenStreetMap auf dem PC, der geantwortet hat, nachgeschlagen. ") + hinweis
         vorab = None
         ohne_wiki = not selbst and not frisch and nachschauen.nicht_im_lexikon(frage)
-        namen = [] if (selbst or live or orte or frisch or ohne_wiki) else self._unbekannte_namen(frage)
-        if (frisch or ohne_wiki or namen) and not live and (frisch or not orte) and not selbst and self.nachschauen_an() and frage.strip():
+        namen = [] if (selbst or live or ergaenzend or orte or frisch or ohne_wiki) else self._unbekannte_namen(frage)
+        if (frisch or ohne_wiki or namen) and not live and not selbst and self.nachschauen_an() and frage.strip():
             if namen:
                 _log(self._core, f"OK unbekannter name: {len(namen)} Name(n) stehen in keinem Wikipedia-Abschnitt, die Suche läuft gleich mit")
             vorab = self._nachschauen_vorab(frage, server + lokal, nachrichten, frisch=frisch)
-        if (vorab is None and not frisch and not live and not orte and not selbst and self.nachschauen_an() and frage.strip()
+        if (vorab is None and not frisch and not live and not ergaenzend and not orte and not selbst and self.nachschauen_an() and frage.strip()
                 and massfrage(frage) and nachschauen.erkennen(frage) is None and not _frueher_gefragt(nachrichten)
                 and not nachschauen.richtung(frage)):
             self._suche_nebenher(frage, nachrichten)
@@ -1050,12 +1051,12 @@ class Api:
                            else f"In der Wikipedia-Kopie auf dem PC, der geantwortet hat, nachgeschlagen (Stand {a_[6:8]}.{a_[4:6]}.{a_[:4]}). ") + hinweis
         sortiert: bewertung.Sortierung | None = None
         if bewerten and not selbst:
-            kandidaten = server + lokal + ([] if zeitgebunden else wiki + wiki_titel)
+            kandidaten = ergaenzend + orte + server + lokal + ([] if zeitgebunden else wiki + wiki_titel)
             if kandidaten:
                 self._schritt("prüft, welche Fundstellen wirklich passen …")
                 sortiert = self._bewertung.sortieren(frage, kandidaten)
-        if not live and (frisch or not orte) and self.nachschauen_an():
-            nach, satz = vorab() if vorab is not None else self._nachschauen(frage, server + lokal + ([] if zeitgebunden else wiki + wiki_titel), frisch=frisch,
+        if not live and self.nachschauen_an():
+            nach, satz = vorab() if vorab is not None else self._nachschauen(frage, ergaenzend + orte + server + lokal + ([] if zeitgebunden else wiki + wiki_titel), frisch=frisch,
                                                                              nachrichten=nachrichten, abgedeckt=sortiert.deckt_ab if sortiert is not None else None)
             if nach and sortiert is not None and (art is None or art.art == "suche"):
                 s2 = self._bewertung.sortieren(frage, nach)
@@ -1067,7 +1068,7 @@ class Api:
             live += nach
             if satz:
                 hinweis = satz + " " + hinweis
-        live = kalender_teil + live
+        live = kalender_teil + ergaenzend + live
         schon_live = {t.quelle.kennung for t in live if t.quelle.art != "nachgeschaut"}
         live = orte + live
         n_treffer = KNAPP_TREFFER if knapp else wissen.TREFFER
@@ -1960,9 +1961,6 @@ class Api:
     def _antwort_fuer_mitglied(self, nachrichten: list[dict], auszuege: list[dict], fuer: str, *, frisch: bool = False, teil_melden=None, schritt_melden=None,
                                skill: dict | None = None, zuhause: dict | None = None, fenster: dict | None = None,
                                fachgebiete: list | None = None, messen: bool = False) -> tuple[str, dict]:
-        kh = krisenhilfe.antwort(krisenhilfe.letzte_frage(nachrichten)) if fenster is None else None
-        if kh is not None:
-            return kh, {**self._schein_ohne_modell(krisenhilfe.GEMACHT), "geraet": "ein PC der Community", "quellen": krisenhilfe.WOHER}
         vorher = getattr(_SCHRITT, "fn", None)
         lauf_vorher = getattr(_SUCHLAUF, "stand", None)
         _SCHRITT.fn = schritt_melden
@@ -2016,22 +2014,20 @@ class Api:
             ab0 = absicht.letzte(nachrichten)
             _ABSICHT.wert = ab0
             en_frage = antwortsprache.frage_sprache(antwortsprache.letzte_frage(nachrichten)) == "en"
-            vorige = next((str(n.get("content") or "") for n in reversed(nachrichten[:-1]) if n.get("role") == "assistant"), "")
-            if en_frage and ab0.art == "sprache" and vorige.strip() and self._ki.server.laeuft():
-                self._schritt("schreibt die Antwort auf Englisch …")
-                text, schein = antwortsprache.antwort_uebersetzen(self._ki.server.frage, ohne_auszuege(ohne_markdown(vorige)), self._schein_ohne_modell("übersetzt"),
-                                                                  teil_melden, log=lambda z: _log(self._core, z))
-                return text, {**schein, "geraet": f"{self._geraet_name} (Community) für {fuer}"}
-            if not ab0.antwort and not skill and not zuhause and self._ki.server.laeuft():
-                kw = self._waehrung_antwort(antwortsprache.letzte_frage(nachrichten))
-                if kw is not None:
-                    return (kw.en if en_frage else kw.de), {**self._schein_ohne_modell("gerechnet"), "geraet": f"{self._geraet_name} (Community) für {fuer}",
-                                                              "quellen": "Referenzkurs der Europäischen Zentralbank (EZB), vom Programm selbst gerechnet."}
-            if not ab0.antwort and not skill and not zuhause and not fenster and not auszuege:
-                bz = bezug.rueckfrage(nachrichten)
-                if bz:
-                    return (bezug.ANTWORT_EN if en_frage else bz), {**self._schein_ohne_modell("nachgefragt"), "geraet": f"{self._geraet_name} (Community) für {fuer}",
-                                                                   "quellen": "keine Quelle nötig, das Programm fragt nach."}
+            laeuft = self._ki.server.laeuft()
+            vorab = self._antwort_vorab(nachrichten, ab=ab0, en_frage=en_frage, krisenhilfe_an=fenster is None,
+                                        waehrung=not skill and not zuhause and laeuft, bezug_an=not skill and not zuhause and not fenster and not auszuege,
+                                        uebersetzen=laeuft)
+            if vorab is not None:
+                text_v, gemacht_v, woher_v, en_v = vorab
+                schein = {**self._schein_ohne_modell(gemacht_v), "quellen": woher_v,
+                          "geraet": "ein PC der Community" if gemacht_v == krisenhilfe.GEMACHT else f"{self._geraet_name} (Community) für {fuer}"}
+                if en_frage and en_v:
+                    return en_v, schein
+                if en_frage and laeuft:
+                    self._schritt("schreibt die Antwort auf Englisch …")
+                    return antwortsprache.antwort_uebersetzen(self._ki.server.frage, text_v, schein, teil_melden, log=lambda z: _log(self._core, z))
+                return text_v, schein
             if en_frage and not ab0.antwort and self._ki.server.laeuft():
                 self._schritt("liest die Frage …")
                 try:
@@ -2043,8 +2039,9 @@ class Api:
             text, schein = self._antwort_fuer_mitglied_ohne_schritt(englisch or nachrichten, auszuege, fuer, frisch=frisch,
                                                                     teil_melden=None if englisch else teil_melden, skill=skill, privat=privat,
                                                                     messen=messen)
-            if en_frage and ab0.antwort:
-                text = ab0.antwort_en or text
+            en_fertig = str(schein.pop("_en", "") or "")
+            if en_frage and en_fertig:
+                text = en_fertig
             elif englisch:
                 self._schritt("schreibt die Antwort auf Englisch …")
                 text, schein = antwortsprache.antwort_uebersetzen(self._ki.server.frage, text, schein, teil_melden, log=lambda z: _log(self._core, z),
@@ -2095,125 +2092,193 @@ class Api:
         _EIGEN.an = bool(privat)
         ab = _absicht_von(nachrichten)
         frisch = frisch or ab.frisch
-        if ab.antwort:
-            return ab.antwort, {"modell": f"{ab.gemacht}, ohne Modell",
-                                "geraet": f"{self._geraet_name} (Community) für {fuer}", "dauer_s": 0.0, "wortstuecke": 0, "gelesen": 0,
-                                "quellen": "keine Quelle nötig, das Programm antwortet selbst.", "quellen_liste": [],
-                                "gemacht": ab.gemacht, "erfunden": "nichts, ohne Modell",
-                                "pruefung": pruefung.pruefen("", []).kurz()}
-        ohne_suche = absicht.ohne_suche(ab)
         mit_skill = None
         if skill:
             try:
                 mit_skill = skills.lesen(str(skill.get("text", "")), quelle="platzl")
             except app_core.AppError as exc:
                 raise app_core.AppError("SKILL", f"der mitgebrachte Skill ist nicht lesbar: {exc.detail}") from exc
-        a4 = nachschauen.erkennen_im_gespraech(nachrichten) if self.nachschauen_an() else None
-        if a4 is not None and a4.rueckfrage:
-            return a4.rueckfrage, {"modell": "nachgefragt, ohne Modell", "geraet": f"{self._geraet_name} (Community) für {fuer}", "dauer_s": 0.0, "wortstuecke": 0, "gelesen": 0,
-                                   "quellen": "keine Quelle nötig, das Programm fragt nach.", "quellen_liste": [], "gemacht": "nachgefragt", "erfunden": "nichts, es wurde nur nachgefragt",
-                                   "pruefung": pruefung.pruefen("", []).kurz()}
-        if not (frisch or skill or privat or messen):
-            fertig = self._fertig_aus_kopie(nachrichten, fuer_andere=True)
-            if fertig is not None:
-                fertig[1]["geraet"] = f"{self._geraet_name} (Community) für {fuer}, aus dem Antwort-Speicher"
-                return fertig
-        if _dateifrage(suchfrage(nachrichten)) and privat != wissen.FENSTER:
+        if not ab.antwort and _dateifrage(suchfrage(nachrichten)) and privat != wissen.FENSTER:
             gefunden = self._wissen.suchen(suchfrage(nachrichten), privat_erlaubt=privat) if privat else []
             if not gefunden:
                 satz = (DATEI_NICHTS_DAHEIM if privat else DATEI_NUR_DAHEIM)
                 return satz, {"modell": "ohne Modell", "geraet": f"{self._geraet_name} (Community) für {fuer}", "dauer_s": 0.0, "wortstuecke": 0, "gelesen": 0,
                               "quellen": "Frage nach einer eigenen Datei: nicht im Internet gesucht.", "quellen_liste": [], "gemacht": "nachgesehen",
                               "erfunden": "nichts", "pruefung": pruefung.pruefen("", []).kurz()}
-        schrift = None if (ab.frisch or ohne_suche) else schriftstueck.runde(nachrichten)
+        text, lieferschein, _a = self._antwort_kern(
+            nachrichten, ab=ab, fuer=fuer, frisch=frisch, privat=privat, messen=messen,
+            kopie=None if (skill or privat) else "andere",
+            vorspann=skills.vorspann(mit_skill) if mit_skill is not None else "",
+            vorspann_hinweis=f"Skill „{mit_skill.name}“ angewendet." if mit_skill is not None else "",
+            strom=_Teilgeber(teil_melden) if teil_melden is not None else None, skill_name=mit_skill.name if mit_skill is not None else None)
+        return text, lieferschein
+
+
+    def _antwort_vorab(self, nachrichten: list[dict], *, ab, en_frage: bool, krisenhilfe_an: bool = True, waehrung: bool = True,
+                       bezug_an: bool = True, uebersetzen: bool = True) -> tuple[str, str, str, str] | None:
+        frage = antwortsprache.letzte_frage(nachrichten)
+        if krisenhilfe_an:
+            kh = krisenhilfe.antwort(frage)
+            if kh is not None:
+                _log(self._core, "OK antwort: Krisenhilfe, ohne Modell")
+                return kh, krisenhilfe.GEMACHT, krisenhilfe.WOHER, krisenhilfe.TEXT_EN
+        if ab.antwort:
+            return None
+        vorige = next((str(n.get("content") or "") for n in reversed(nachrichten[:-1]) if n.get("role") == "assistant"), "")
+        if uebersetzen and en_frage and ab.art == "sprache" and ab.sprache == "en" and vorige.strip():
+            return ohne_auszuege(ohne_markdown(vorige)), "übersetzt", "die vorige Antwort, ins Englische übertragen.", ""
+        if waehrung:
+            kw = self._waehrung_antwort(frage)
+            if kw is not None:
+                return kw.de, "gerechnet", "Referenzkurs der Europäischen Zentralbank (EZB), vom Programm selbst gerechnet.", kw.en
+        if bezug_an:
+            bz = bezug.rueckfrage(nachrichten)
+            if bz:
+                return bz, "nachgefragt", "keine Quelle nötig, das Programm fragt nach.", bezug.ANTWORT_EN
+        return None
+
+    def _antwort_kern(self, nachrichten: list[dict], *, ab, fuer: str, frisch: bool = False, privat: bool | str = True, fern: bool = False,
+                      messen: bool = False, kopie: str | None = None, vorspann: str = "", vorspann_hinweis: str = "",
+                      modell_nachrichten: list[dict] | None = None, strom=None, melden=None, knapp: bool = False, max_tokens: int | None = None,
+                      kurz: bool = False, prozessor_rueckfall: bool = False, knopf: bool = False, nachsuche_erlaubt: bool = True,
+                      skill_name: str | None = None, geraet: str | None = None) -> tuple[str, dict, "ki_laufzeit.Antwort | None"]:
+        melden = melden or self._schritt
+        strom = strom if strom is not None else _Still()
+        modell_nachrichten = modell_nachrichten if modell_nachrichten is not None else nachrichten
+        geraet = geraet or f"{self._geraet_name} (Community) für {fuer}"
+        if ab.antwort:
+            return ab.antwort, {"modell": f"{ab.gemacht}, ohne Modell", "geraet": geraet, "dauer_s": 0.0, "wortstuecke": 0, "gelesen": 0,
+                                "quellen": "keine Quelle nötig, das Programm antwortet selbst.", "quellen_liste": [],
+                                "gemacht": ab.gemacht, "erfunden": "nichts, ohne Modell",
+                                "pruefung": pruefung.pruefen("", []).kurz(), "_en": ab.antwort_en or ""}, None
+        ohne_suche = absicht.ohne_suche(ab) and not fern
+        a4 = nachschauen.erkennen_im_gespraech(nachrichten) if (not fern and self.nachschauen_an()) else None
+        if a4 is not None and a4.rueckfrage:
+            return a4.rueckfrage, {"modell": "nachgefragt, ohne Modell", "geraet": geraet, "dauer_s": 0.0, "wortstuecke": 0, "gelesen": 0,
+                                   "quellen": "keine Quelle nötig, das Programm fragt nach.", "quellen_liste": [], "gemacht": "nachgefragt",
+                                   "erfunden": "nichts, es wurde nur nachgefragt", "pruefung": pruefung.pruefen("", []).kurz(), "_en": ""}, None
+        if kopie and not (messen or frisch):
+            fertig = self._fertig_aus_kopie(nachrichten, fuer_andere=(kopie == "andere"))
+            if fertig is not None:
+                fertig[1]["geraet"] = (geraet + ", aus dem Antwort-Speicher") if kopie == "andere" else "aus dem Antwort-Speicher der Community (Kopie auf diesem PC)"
+                return fertig[0], fertig[1], None
+        if callable(vorspann):
+            vorspann, vorspann_hinweis, mn = vorspann()
+            if mn is not None:
+                modell_nachrichten = mn
+        lauf = getattr(_SUCHLAUF, "stand", None)
+        wahl = self._ki.wahl
+        schrift = None if (fern or ab.frisch or ohne_suche) else schriftstueck.runde(nachrichten)
         klein = False
         if schrift is not None and not schrift[0].offen:
-            zusatz = (wissen.datum_zeile() + "\n\n" + (schriftstueck.vorspann_fragen(schrift[0]) if schrift[1] == "fragen" else schriftstueck.vorspann_schreiben(schrift[0]))
+            aufgabe, runde = schrift
+            zusatz = (wissen.datum_zeile() + "\n\n" + (schriftstueck.vorspann_fragen(aufgabe) if runde == "fragen" else schriftstueck.vorspann_schreiben(aufgabe))
                       + "\n\n" + wissen.uhrzeit_zeile())
-            quellen, im_speicher, hinweis, quellen_stand = [], 0, f"Schriftstück ({schrift[0].art}); der Wissensspeicher wurde dafür nicht durchsucht.", None
+            quellen, im_speicher, hinweis, quellen_stand = [], 0, f"Schriftstück ({aufgabe.art}), Runde: {'Rückfragen' if runde == 'fragen' else 'Schreiben'}; der Wissensspeicher wurde dafür nicht durchsucht.", None
         elif schrift is not None:
             aufgabe, runde = schrift
-            zusatz, quellen, im_speicher, hinweis = self._mit_wissen(nachrichten, privat_erlaubt=privat, frisch=frisch)
+            zusatz, quellen, im_speicher, hinweis = self._mit_wissen(nachrichten, privat_erlaubt=privat, frisch=frisch, knapp=knapp)
             quellen_stand = self._letzter_stand
             zusatz = (schriftstueck.vorspann_fragen(aufgabe) if runde == "fragen" else schriftstueck.vorspann_schreiben(aufgabe)) + ("\n\n" + zusatz if zusatz else "")
             hinweis = (hinweis + " " if hinweis else "") + ("Vorhaben: die KI prüft zuerst, ob dir etwas Wichtiges fehlt." if runde == "fragen" else "Vorhaben, zweite Runde nach den Rückfragen.")
         elif ohne_suche:
-            zusatz, quellen, im_speicher, quellen_stand = wissen.datum_zeile(), [], 0, None
-            hinweis = KEINE_NEUE_SUCHE
+            zusatz, quellen, im_speicher, hinweis, quellen_stand = wissen.datum_zeile(), [], 0, KEINE_NEUE_SUCHE, None
             _suchrunden_aufbrauchen()
         else:
-            klein = not frisch and self.nachschauen_an() and klein_wissensfrage(self._ki.wahl.modell.name if self._ki.wahl else "", suchfrage(nachrichten))
-            zusatz, quellen, im_speicher, hinweis = self._mit_wissen(nachrichten, privat_erlaubt=privat, frisch=frisch or klein)
-            quellen_stand = self._letzter_stand
+            klein = not frisch and not fern and self.nachschauen_an() and klein_wissensfrage(wahl.modell.name if wahl else "", suchfrage(nachrichten))
+            zusatz, quellen, im_speicher, hinweis = ("", [], 0, "") if fern else self._mit_wissen(nachrichten, privat_erlaubt=privat, frisch=frisch or klein, knapp=knapp)
+            quellen_stand = None if fern else self._letzter_stand
             if klein:
                 hinweis = (KLEIN_HINWEIS + " " + hinweis).strip()
-        if mit_skill is not None:
-            zusatz = skills.vorspann(mit_skill) + ("\n\n" + zusatz if zusatz else "")
-            hinweis = (hinweis + " " if hinweis else "") + f"Skill „{mit_skill.name}“ angewendet."
-        geber = _Teilgeber(teil_melden) if teil_melden is not None else None
-        on_token = geber.token if geber is not None else None
+            if knopf and not fern and quellen_stand is None and "live gelesen" not in hinweis:
+                grund = next((s for s in hinweis.split(". ") if "nicht geklappt" in s or "ließ sich nicht" in s), "").strip().rstrip(".")
+                raise app_core.AppError("NACHPRUEFEN_LEER", (grund or "im Netz war zu dieser Frage nichts zu finden") + "; die Antwort oben bleibt")
+        if vorspann:
+            zusatz = vorspann + ("\n\n" + zusatz if zusatz else "")
+        if vorspann_hinweis:
+            hinweis = (hinweis + " " if hinweis else "") + vorspann_hinweis
+
+        def modell(zusatz_: str, on_token, *, max_tokens_: int | None = None):
+            return self._ki.frage(modell_nachrichten, on_token=on_token, zusatz=zusatz_, max_tokens=max_tokens_ or max_tokens, kurz=kurz)
+
         self._schritt("schreibt die Antwort …")
-        zusatz = mit_auftrag(mit_fokus(zusatz, suchfrage(nachrichten)), nachrichten)
-        a = self._ki.server.frage(nachrichten, zusatz=zusatz, on_token=on_token)
-        if geber is not None:
-            geber.schluss()
+        zusatz = mit_auftrag(mit_fokus(zusatz, suchfrage(modell_nachrichten)), modell_nachrichten)
+        try:
+            a = modell(zusatz, strom.token)
+        except app_core.AppError as exc:
+            if not prozessor_rueckfall or exc.code != "KI_ANTWORT" or fern or self.abbruch_gewuenscht or not self._ki.auf_prozessor_wechseln():
+                raise
+            _log(self._core, f"INFO prozessor statt grafikkarte: {exc.detail}")
+            melden("Das Modell ist auf der Grafikkarte gestolpert; es startet auf dem Prozessor neu …")
+            self._ki_bereit_machen(einschalten=True)
+            wahl = self._ki.wahl
+            kurz, max_tokens = True, 320
+            a = modell(zusatz, strom.token)
+            hinweis = (hinweis + " " if hinweis else "") + f"Die Grafikkarte hat versagt ({exc.detail}); die Antwort kam vom Prozessor."
+        strom.schluss()
         nachgeholt = False
-        lauf = getattr(_SUCHLAUF, "stand", None)
-        while schrift is None and not frisch and self.nachschauen_an() and _WEISS_NICHT.search(ohne_markdown(a.text) or "") and lauf and lauf["runde"] < SUCHRUNDEN_MITGLIED - 1:
+
+        def nachsuchen(satz: str, grund: str) -> bool:
+            nonlocal a, zusatz, quellen, im_speicher, hinweis, quellen_stand, nachgeholt
             lauf["runde"] += 1
-            self._schritt("Das weiß ich noch nicht, ich suche danach …" if lauf["runde"] == 1 else "Noch nicht gefunden, ich suche mit anderen Wörtern …")
-            zusatz2, quellen2, im_speicher2, hinweis2 = self._mit_wissen(nachrichten, privat_erlaubt=privat, frisch=True)
-            if not any(q.get("art") == "nachgeschaut" for q in quellen2):
+            melden(satz)
+            try:
+                zusatz2, quellen2, im_speicher2, hinweis2 = self._mit_wissen(nachrichten, privat_erlaubt=privat, frisch=True)
+                if not any(q.get("art") == "nachgeschaut" for q in quellen2):
+                    return False
+                if vorspann:
+                    zusatz2 = vorspann + ("\n\n" + zusatz2 if zusatz2 else "")
+                zusatz2 = (zusatz2 + "\n\n" if zusatz2 else "") + frage_fokus(suchfrage(nachrichten))
+                self._schritt("schreibt die Antwort mit dem, was es gefunden hat …")
+                r = strom.runde()
+                a2 = modell(zusatz2, r.token)
+                r.schluss()
+            except app_core.AppError as exc:
+                _log(self._core, f"ABGELEHNT nachgeholt: {exc.code}: {exc.detail}")
+                return False
+            a, zusatz, quellen, im_speicher, quellen_stand, nachgeholt = a2, zusatz2, quellen2, im_speicher2, self._letzter_stand, True
+            hinweis = (grund + " " + hinweis2 + (" " + vorspann_hinweis if vorspann_hinweis else "")).strip()
+            strom.neu()
+            return True
+
+        while (schrift is None and not frisch and not fern and self.nachschauen_an() and _WEISS_NICHT.search(ohne_markdown(a.text) or "")
+               and lauf and lauf["runde"] < SUCHRUNDEN - 1):
+            if not nachsuchen("Das weiß ich noch nicht, ich suche danach …" if lauf["runde"] == 0 else "Noch nicht gefunden, ich suche mit anderen Wörtern …",
+                              "Das Modell kannte es nicht, darum wurde im Internet nachgeschaut."):
                 break
-            if mit_skill is not None:
-                zusatz2 = skills.vorspann(mit_skill) + ("\n\n" + zusatz2 if zusatz2 else "")
-            self._schritt("schreibt die Antwort mit dem, was es gefunden hat …")
-            zusatz2 = (zusatz2 + "\n\n" if zusatz2 else "") + frage_fokus(suchfrage(nachrichten))
-            geber2 = _Teilgeber(teil_melden) if teil_melden is not None else None
-            a2 = self._ki.server.frage(nachrichten, zusatz=zusatz2, on_token=geber2.token if geber2 is not None else None)
-            if geber2 is not None:
-                geber2.schluss()
-            a, zusatz, quellen, im_speicher, hinweis, quellen_stand, nachgeholt = a2, zusatz2, quellen2, im_speicher2, ("Das Modell kannte es nicht, darum wurde im Internet nachgeschaut. " + hinweis2).strip(), self._letzter_stand, True
+        if getattr(a, "abgebrochen", False):
+            hinweis = (hinweis + " " if hinweis else "") + "Auf deinen Wunsch gestoppt; das ist der Teil der Antwort bis dahin."
+        if fern:
+            quellen, im_speicher = list(getattr(a, "quellen", ()) or ()), int(getattr(a, "im_speicher", 0) or 0)
         self._schritt("prüft die Antwort gegen die Quellen …")
         pr = pruefung.pruefen(a.text or "", [(int(q["nummer"]), str(q.get("text", ""))) for q in quellen if q.get("text")])
         if klein and not getattr(a, "abgebrochen", False) and pr.gruen == 0 and not _WEISS_NICHT.search(ohne_markdown(a.text or "")):
             a = dataclasses.replace(a, text=_GESUCHT_NICHTS_SATZ)
             pr = pruefung.pruefen(a.text, [])
+            strom.neu()
         verworfen = False
-        if erfunden_verdacht(pr, quellen, schrift):
+        if not fern and erfunden_verdacht(pr, quellen, schrift):
+            melden("Die erste Antwort enthielt Erfundenes; KIplatz antwortet noch einmal, kurz und ehrlich …")
             try:
-                self._schritt("die erste Fassung passte nicht zu den Quellen, KIplatz antwortet noch einmal …")
-                a = self._ki.server.frage(nachrichten, zusatz=zusatz + "\n\n" + ERFUNDEN_ZUSATZ, max_tokens=160)
+                a = modell(zusatz + "\n\n" + ERFUNDEN_ZUSATZ, None, max_tokens_=160)
                 pr = pruefung.pruefen(a.text or "", [(int(q["nummer"]), str(q.get("text", ""))) for q in quellen if q.get("text")])
                 hinweis = (hinweis + " " if hinweis else "") + "Die erste Fassung enthielt Erfundenes und wurde verworfen."
                 verworfen = True
+                strom.neu()
             except app_core.AppError as exc:
-                _log(self._core, f"ABGELEHNT erfunden_nachfrage: {exc.code}")
-        if (verworfen and schrift is None and not frisch and not nachgeholt and self.nachschauen_an() and _WEISS_NICHT.search(ohne_markdown(a.text) or "")
-                and lauf and lauf["runde"] < SUCHRUNDEN_MITGLIED - 1):
-            lauf["runde"] += 1
-            self._schritt("Die erste Fassung passte nicht zu den Quellen, ich suche im Internet …")
-            zusatz2, quellen2, im_speicher2, hinweis2 = self._mit_wissen(nachrichten, privat_erlaubt=privat, frisch=True)
-            if any(q.get("art") == "nachgeschaut" for q in quellen2):
-                if mit_skill is not None:
-                    zusatz2 = skills.vorspann(mit_skill) + ("\n\n" + zusatz2 if zusatz2 else "")
-                self._schritt("schreibt die Antwort mit dem, was es gefunden hat …")
-                zusatz2 = (zusatz2 + "\n\n" if zusatz2 else "") + frage_fokus(suchfrage(nachrichten))
-                geber2 = _Teilgeber(teil_melden) if teil_melden is not None else None
-                a = self._ki.server.frage(nachrichten, zusatz=zusatz2, on_token=geber2.token if geber2 is not None else None)
-                if geber2 is not None:
-                    geber2.schluss()
-                zusatz, quellen, im_speicher, quellen_stand, nachgeholt = zusatz2, quellen2, im_speicher2, self._letzter_stand, True
-                hinweis = ("Die erste Fassung passte nicht zu den Quellen, darum wurde im Internet nachgeschaut. " + hinweis2).strip()
+                _log(self._core, f"ABGELEHNT erfunden_nachfrage: {exc.code}: {exc.detail}")
+        if (verworfen and schrift is None and not frisch and not fern and not nachgeholt and self.nachschauen_an()
+                and _WEISS_NICHT.search(ohne_markdown(a.text) or "") and lauf and lauf["runde"] < SUCHRUNDEN - 1):
+            if nachsuchen("Die erste Fassung passte nicht zu den Quellen, ich suche im Internet …",
+                          "Die erste Fassung passte nicht zu den Quellen, darum wurde im Internet nachgeschaut."):
                 self._schritt("prüft die Antwort gegen die Quellen …")
                 pr = pruefung.pruefen(a.text or "", [(int(q["nummer"]), str(q.get("text", ""))) for q in quellen if q.get("text")])
-        wahl = self._ki.wahl
 
-        def fertig_machen(a, zusatz, quellen, im_speicher, hinweis, quellen_stand, nachgeholt, pr):
+        def fertig_machen():
             lieferschein = {
-                "modell": wahl.modell.name if wahl else "KIplatz", "geraet": f"{self._geraet_name} (Community) für {fuer}",
+                "modell": "KIplatz" if fern else (wahl.modell.name if wahl else "KIplatz"), "geraet": geraet,
                 "bau": app_core.APP_BUILD,
-                "fassung": self._ki.fassung,
+                "fassung": None if fern else self._ki.fassung,
                 "dauer_s": a.dauer_s, "wortstuecke": a.completion_tokens, "gelesen": a.prompt_tokens,
                 "quellen": wissen.quellen_text_de(a.text or "", quellen, im_speicher, auch_nummern={s.quelle for s in pr.saetze if s.farbe == "gruen" and s.quelle}) + (f" {hinweis}" if hinweis else ""),
                 "quellen_liste": wissen.benutzte_quellen(a.text or "", quellen, {s.quelle for s in pr.saetze if s.farbe == "gruen" and s.quelle}),
@@ -2223,40 +2288,30 @@ class Api:
                 lieferschein["erste_fassung"] = "nachgeschaut" if nachgeholt else "verworfen"
             if quellen_stand:
                 lieferschein["stand"] = quellen_stand
-            if mit_skill is not None:
-                lieferschein["skill"] = mit_skill.name
+            if skill_name:
+                lieferschein["skill"] = skill_name
             antwort_text = ohne_auszuege(ohne_markdown(a.text)) or "(keine Antwort erhalten)"
             vorher_text = antwort_text
-            antwort_text = self._belege_nachher(antwort_text, suchfrage(nachrichten), zusatz, quellen, lieferschein,
-                                                lambda extra: self._ki.server.frage(nachrichten, zusatz=zusatz + "\n\n" + extra, max_tokens=240).text,
-                                                schreiben=schrift is not None)
+            antwort_text = self._belege_nachher(antwort_text, suchfrage(nachrichten), "" if fern else zusatz, [] if fern else quellen, lieferschein,
+                                                None if fern else (lambda extra: modell(zusatz + "\n\n" + extra, None, max_tokens_=240).text),
+                                                schreiben=schrift is not None, ampel=not fern)
+            if antwort_text != vorher_text:
+                strom.neu()
             return antwort_text, vorher_text, lieferschein
 
-        antwort_text, vorher_text, lieferschein = fertig_machen(a, zusatz, quellen, im_speicher, hinweis, quellen_stand, nachgeholt, pr)
-        if (schrift is None and not frisch and self.nachschauen_an() and lauf and lauf["runde"] < SUCHRUNDEN_MITGLIED - 1
+        antwort_text, vorher_text, lieferschein = fertig_machen()
+        if (schrift is None and not frisch and not fern and nachsuche_erlaubt and self.nachschauen_an() and lauf and lauf["runde"] < SUCHRUNDEN - 1
                 and _WEISS_NICHT.search(antwort_text) and (not im_netz_gesucht(nachgeholt, quellen, lauf) or lauf.get("nur_regel"))):
-            lauf["runde"] += 1
-            self._schritt("Das weiß ich noch nicht sicher, ich suche danach …")
-            zusatz2, quellen2, im_speicher2, hinweis2 = self._mit_wissen(nachrichten, privat_erlaubt=privat, frisch=True)
-            if any(q.get("art") == "nachgeschaut" for q in quellen2):
-                if mit_skill is not None:
-                    zusatz2 = skills.vorspann(mit_skill) + ("\n\n" + zusatz2 if zusatz2 else "")
-                self._schritt("schreibt die Antwort mit dem, was es gefunden hat …")
-                zusatz2 = (zusatz2 + "\n\n" if zusatz2 else "") + frage_fokus(suchfrage(nachrichten))
-                geber2 = _Teilgeber(teil_melden) if teil_melden is not None else None
-                a = self._ki.server.frage(nachrichten, zusatz=zusatz2, on_token=geber2.token if geber2 is not None else None)
-                if geber2 is not None:
-                    geber2.schluss()
-                zusatz, quellen, im_speicher, quellen_stand, nachgeholt = zusatz2, quellen2, im_speicher2, self._letzter_stand, True
-                hinweis = ("Die Angabe stand in keiner Fundstelle, darum wurde im Internet nachgeschaut. " + hinweis2).strip()
+            if nachsuchen("Das weiß ich noch nicht sicher, ich suche im Internet …",
+                          "Die Angabe stand in keiner Fundstelle, darum wurde im Internet nachgeschaut."):
                 self._schritt("prüft die Antwort gegen die Quellen …")
                 pr = pruefung.pruefen(a.text or "", [(int(q["nummer"]), str(q.get("text", ""))) for q in quellen if q.get("text")])
-                antwort_text, vorher_text, lieferschein = fertig_machen(a, zusatz, quellen, im_speicher, hinweis, quellen_stand, nachgeholt, pr)
+                antwort_text, vorher_text, lieferschein = fertig_machen()
         if nebenher_satz(lauf):
             lieferschein["quellen"] = (lieferschein.get("quellen", "") + " " + nebenher_satz(lauf)).strip()
         if schrift is not None:
             antwort_text, lieferschein["gemacht"] = _schriftstueck_nachbearbeiten(antwort_text, schrift[1], lieferschein, schrift[0])
-        elif not frisch and self.nachschauen_an() and _WEISS_NICHT.search(antwort_text):
+        elif not frisch and not fern and self.nachschauen_an() and _WEISS_NICHT.search(antwort_text):
             antwort_text = _weiss_nicht_anwenden(antwort_text, lieferschein, gesucht=im_netz_gesucht(nachgeholt, quellen, lauf), vorher=vorher_text)
         _woertlich_markieren(antwort_text, quellen, lieferschein)
         weg = getattr(_MESSWEG, "d", None)
@@ -2264,8 +2319,7 @@ class Api:
             weg.update(stellen=sum(1 for q in quellen if q.get("text")), arten=sorted({str(q.get("art") or "") for q in quellen if q.get("text")}),
                        suchanfragen=len(lauf["gesucht"]) if lauf else 0, suchrunden=int(lauf["runde"]) if lauf else 0,
                        im_netz=im_netz_gesucht(nachgeholt, quellen, lauf))
-        return antwort_text, lieferschein
-
+        return antwort_text, lieferschein, a
 
     def _wiki_darf(self) -> bool:
         if self._core.run_state() is not node_local_state.RunState.ACTIVE or not rechenarbeit.am_strom_windows():
@@ -4146,28 +4200,14 @@ class Api:
             if not b.ok:
                 _log(self._core, f"ABGELEHNT HAUSORDNUNG frage: {b.grund}")
                 return ohne_modell(f"Das gehört nicht in diese Community ({b.grund}). {hausordnung.HAUSORDNUNG}", "abgelehnt", "Platzordnung der Community.")
-            kh = krisenhilfe.antwort(str(text))
-            if kh is not None:
-                _log(self._core, "OK frage: Krisenhilfe, ohne Modell")
-                return ohne_modell(kh, krisenhilfe.GEMACHT, krisenhilfe.WOHER, fertig_en=krisenhilfe.TEXT_EN)
             ab = absicht.letzte(g.fuer_modell())
             _ABSICHT.wert = ab
             frisch = frisch or ab.frisch
-            if ab.antwort and not fern:
-                return ohne_modell(ab.antwort, ab.gemacht, "keine Quelle nötig, das Programm antwortet selbst.", fertig_en=ab.antwort_en)
-            if not ab.antwort and not fern and not g.anhaenge:
-                kw = self._waehrung_antwort(str(text))
-                if kw is not None:
-                    return ohne_modell(kw.de, "gerechnet", "Referenzkurs der Europäischen Zentralbank (EZB), vom Programm selbst gerechnet.", fertig_en=kw.en)
-            if not ab.antwort and not fern and not g.anhaenge and not getattr(g, "ordner", None):
-                bz = bezug.rueckfrage(g.fuer_modell())
-                if bz:
-                    return ohne_modell(bz, "nachgefragt", "keine Quelle nötig, das Programm fragt nach.", fertig_en=bezug.ANTWORT_EN)
-            vorige = next((str(n.get("content") or "") for n in reversed(g.fuer_modell()[:-1]) if n.get("role") == "assistant"), "")
-            if ab.art == "sprache" and ab.sprache == "en" and englisch_gefragt and vorige.strip() and not fern:
-                return ohne_modell(ohne_auszuege(ohne_markdown(vorige)), "übersetzt", "die vorige Antwort, ins Englische übertragen.")
-            ohne_suche = absicht.ohne_suche(ab) and not fern
-            if englisch_gefragt:
+            vorab = self._antwort_vorab(g.fuer_modell(), ab=ab, en_frage=englisch_gefragt, waehrung=not fern and not g.anhaenge,
+                                        bezug_an=not fern and not g.anhaenge and not getattr(g, "ordner", None), uebersetzen=not fern)
+            if vorab is not None:
+                return ohne_modell(*vorab[:3], fertig_en=vorab[3])
+            if englisch_gefragt and not ab.antwort:
                 hinweis_seite("Die Frage ist auf Englisch, die Antwort kommt auf Englisch …")
                 try:
                     nachrichten_de = antwortsprache.frage_auf_deutsch(self._ki.server.frage, g.fuer_modell())
@@ -4177,234 +4217,89 @@ class Api:
                 if nachrichten_de:
                     ki_laufzeit.original_setzen(str(text))
             fm = (lambda: nachrichten_de) if nachrichten_de else g.fuer_modell
-            a4 = nachschauen.erkennen_im_gespraech(fm()) if (not fern and self.nachschauen_an()) else None
-            if a4 is not None and a4.rueckfrage:
-                return ohne_modell(a4.rueckfrage, "nachgefragt", "keine Quelle nötig, das Programm fragt nach.")
-            fertig = None if (frisch or fern or g.anhaenge or self._kiste.fuer_gespraech(g.skill)) else self._fertig_aus_kopie(fm())
-            if fertig is not None:
-                text_f, ls_f = fertig
-                ls_f.update({"geraet": "aus dem Antwort-Speicher der Community (Kopie auf diesem PC)", "guthaben_vorher": stand_vorher.guthaben,
-                             "credits": "Admin, unbegrenzt" if admin else f"nichts verrechnet: die Antwort kam fertig aus dem Antwort-Speicher, Stand {stand_vorher.guthaben}"})
-                if englisch_gefragt:
-                    text_f, ls_f = antwortsprache.antwort_uebersetzen(self._ki.server.frage, text_f, ls_f, log=lambda z: _log(self._core, z))
-                self._ablage.anhaengen(g, "assistant", text_f, lieferschein=ls_f)
-                hinweis_seite("")
-                return {"text": text_f, "lieferschein": ls_f, "gespraech": g.to_json_dict(), "credits": self._credits_dict()}
             _SUCHLAUF.stand = {"runde": 0, "gesucht": [], "gelesen": set()}
             _FREMD.texte = []
-            schrift = None if (fern or ab.frisch or ohne_suche) else schriftstueck.runde(fm())
-            klein = False
-            if schrift is not None and not schrift[0].offen:
-                aufgabe, runde = schrift
-                zusatz = (wissen.datum_zeile() + "\n\n" + (schriftstueck.vorspann_fragen(aufgabe) if runde == "fragen" else schriftstueck.vorspann_schreiben(aufgabe))
-                          + "\n\n" + wissen.uhrzeit_zeile())
-                quellen, im_speicher, hinweis, quellen_stand = [], 0, f"Schriftstück ({aufgabe.art}), Runde: {'Rückfragen' if runde == 'fragen' else 'Schreiben'}; der Wissensspeicher wurde dafür nicht durchsucht.", None
-            elif schrift is not None:
-                aufgabe, runde = schrift
-                zusatz, quellen, im_speicher, hinweis = self._mit_wissen(fm(), frisch=frisch, knapp=am_prozessor)
-                quellen_stand = self._letzter_stand
-                zusatz = (schriftstueck.vorspann_fragen(aufgabe) if runde == "fragen" else schriftstueck.vorspann_schreiben(aufgabe)) + ("\n\n" + zusatz if zusatz else "")
-                hinweis = (hinweis + " " if hinweis else "") + ("Vorhaben: die KI prüft zuerst, ob dir etwas Wichtiges fehlt." if runde == "fragen" else "Vorhaben, zweite Runde nach den Rückfragen.")
-            elif ohne_suche:
-                zusatz, quellen, im_speicher, hinweis, quellen_stand = wissen.datum_zeile(), [], 0, KEINE_NEUE_SUCHE, None
-                _suchrunden_aufbrauchen()
-            else:
-                klein = (not frisch and not fern and self.nachschauen_an()
-                         and klein_wissensfrage(wahl.modell.name if wahl else "", suchfrage(fm())))
-                zusatz, quellen, im_speicher, hinweis = ("", [], 0, "") if fern else self._mit_wissen(fm(), frisch=frisch or klein, knapp=am_prozessor)
-                quellen_stand = None if fern else self._letzter_stand
-                if klein:
-                    hinweis = (KLEIN_HINWEIS + " " + hinweis).strip()
-                if knopf and not fern and quellen_stand is None and "live gelesen" not in hinweis:
-                    grund = next((s for s in hinweis.split(". ") if "nicht geklappt" in s or "ließ sich nicht" in s), "").strip().rstrip(".")
-                    raise app_core.AppError("NACHPRUEFEN_LEER", (grund or "im Netz war zu dieser Frage nichts zu finden") + "; die Antwort oben bleibt")
-            if g.anhaenge and not fern:
-                zusatz = anhaenge.vorspann(g.anhaenge) + ("\n\n" + zusatz if zusatz else "")
-                hinweis = (hinweis + " " if hinweis else "") + ("1 Datei aus dem Gespräch mitgelesen." if len(g.anhaenge) == 1
-                                                                 else f"{len(g.anhaenge)} Dateien aus dem Gespräch mitgelesen.")
-            if ersatz_grund:
-                hinweis = (hinweis + " " if hinweis else "") + f"Kein Rechner der Community konnte übernehmen ({ersatz_grund}); dieses Gerät hat mit seinem eigenen Modell geantwortet."
-            if g.ordner and not fern:
-                try:
-                    alle = ordner_aufgaben.uebersicht(Path(g.ordner))
-                    gelesen = ordner_aufgaben.auswahl(Path(g.ordner), str(text))
-                    for d in gelesen:
-                        b_o = hausordnung.pruefen(d["text"][:20_000])
-                        if not b_o.ok:
-                            raise app_core.AppError("HAUSORDNUNG", f"die Datei „{d['name']}“ im Ordner: {b_o.text}")
-                    zusatz = ordner_aufgaben.vorspann(Path(g.ordner).name, gelesen, alle) + ("\n\n" + zusatz if zusatz else "")
-                    hinweis = (hinweis + " " if hinweis else "") + (f"Aus dem Ordner „{Path(g.ordner).name}“ mitgelesen: " + ", ".join(d["name"] for d in gelesen) + "." if gelesen
-                                                                     else f"Ordner „{Path(g.ordner).name}“ freigegeben ({len(alle)} Dateien), für diese Frage keine gelesen.")
-                    _log(self._core, f"OK ordner_gelesen {len(gelesen)} von {len(alle)}")
-                except app_core.AppError as exc:
-                    if exc.code == "HAUSORDNUNG":
-                        raise
-                    _log(self._core, f"ABGELEHNT ordner: {exc.code}: {exc.detail}")
-                    hinweis = (hinweis + " " if hinweis else "") + f"Der freigegebene Ordner war nicht lesbar ({exc.detail})."
-            if not fern:
-                sk_mit, sk_weg = skills.passend(self._kiste.fuer_gespraech(g.skill))
-                if sk_mit:
-                    zusatz = skills.vorspann_mehrere(sk_mit) + ("\n\n" + zusatz if zusatz else "")
-                if sk_mit or sk_weg:
-                    hinweis = (hinweis + " " if hinweis else "") + skills.hinweis_angewendet(sk_mit, sk_weg)
-            if not fern:
-                zusatz, n_ged = self._gedaechtnis.anhaengen(zusatz)
-                if n_ged:
-                    hinweis = (hinweis + " " if hinweis else "") + f"Gedächtnis: {n_ged} Einträge mitgegeben."
-            nachrichten_modell = fm()
-            bilder = self._ablage.bilder_fuer_modell(g) if any(x.get("art") == "bild" for x in g.anhaenge) else []
-            if bilder and not fern and not getattr(self._ki.server, "bilder", False) and self._ki.mit_bildern_einschalten():
-                hinweis_seite("Der Bild-Zusatz wird geladen, das dauert einmal ein paar Sekunden …")
-                self._ki_bereit_machen(einschalten=True)
-                wahl = self._ki.wahl
-            if bilder and not fern:
-                if getattr(self._ki.server, "bilder", False) and nachrichten_modell and nachrichten_modell[-1]["role"] == "user":
-                    nachrichten_modell[-1] = {"role": "user", "content": [{"type": "text", "text": nachrichten_modell[-1]["content"]}] + bilder}
-                    hinweis = (hinweis + " " if hinweis else "") + ("1 Bild angeschaut." if len(bilder) == 1 else f"{len(bilder)} Bilder angeschaut.")
-                else:
-                    zusatz = ("Die Person hat ein Bild mitgeschickt, aber dieses Gerät kann Bilder nicht anschauen (der Bild-Zusatz läuft nur auf einer Grafikkarte). "
-                              "Sag das in einem Satz und beantworte, was ohne das Bild geht.\n\n") + zusatz
-            self._schritt("schreibt die Antwort …")
-            zusatz = mit_auftrag(mit_fokus(zusatz, suchfrage(nachrichten_modell)), nachrichten_modell)
-            try:
-                try:
-                    a = self._ki.frage(nachrichten_modell, on_token=on_token, zusatz=zusatz, max_tokens=max_tokens, kurz=am_prozessor)
-                except app_core.AppError as exc:
-                    if exc.code != "KI_ANTWORT" or fern or self.abbruch_gewuenscht or not self._ki.auf_prozessor_wechseln():
-                        raise
-                    _log(self._core, f"INFO prozessor statt grafikkarte: {exc.detail}")
-                    hinweis_seite("Das Modell ist auf der Grafikkarte gestolpert; es startet auf dem Prozessor neu …")
+            def vorspann_bauen() -> tuple[str, str, list[dict] | None]:
+                anh = ordn = sk = ged_t = bild_satz = ""
+                hinweise: list[str] = []
+                if g.anhaenge and not fern:
+                    anh = anhaenge.vorspann(g.anhaenge)
+                    hinweise.append("1 Datei aus dem Gespräch mitgelesen." if len(g.anhaenge) == 1 else f"{len(g.anhaenge)} Dateien aus dem Gespräch mitgelesen.")
+                if ersatz_grund:
+                    hinweise.append(f"Kein Rechner der Community konnte übernehmen ({ersatz_grund}); dieses Gerät hat mit seinem eigenen Modell geantwortet.")
+                if g.ordner and not fern:
+                    try:
+                        alle = ordner_aufgaben.uebersicht(Path(g.ordner))
+                        gelesen = ordner_aufgaben.auswahl(Path(g.ordner), str(text))
+                        for d in gelesen:
+                            b_o = hausordnung.pruefen(d["text"][:20_000])
+                            if not b_o.ok:
+                                raise app_core.AppError("HAUSORDNUNG", f"die Datei „{d['name']}“ im Ordner: {b_o.text}")
+                        ordn = ordner_aufgaben.vorspann(Path(g.ordner).name, gelesen, alle)
+                        hinweise.append(f"Aus dem Ordner „{Path(g.ordner).name}“ mitgelesen: " + ", ".join(d["name"] for d in gelesen) + "." if gelesen
+                                        else f"Ordner „{Path(g.ordner).name}“ freigegeben ({len(alle)} Dateien), für diese Frage keine gelesen.")
+                        _log(self._core, f"OK ordner_gelesen {len(gelesen)} von {len(alle)}")
+                    except app_core.AppError as exc:
+                        if exc.code == "HAUSORDNUNG":
+                            raise
+                        _log(self._core, f"ABGELEHNT ordner: {exc.code}: {exc.detail}")
+                        hinweise.append(f"Der freigegebene Ordner war nicht lesbar ({exc.detail}).")
+                if not fern:
+                    sk_mit, sk_weg = skills.passend(self._kiste.fuer_gespraech(g.skill))
+                    if sk_mit:
+                        sk = skills.vorspann_mehrere(sk_mit)
+                    if sk_mit or sk_weg:
+                        hinweise.append(skills.hinweis_angewendet(sk_mit, sk_weg))
+                    ged_t, n_ged = self._gedaechtnis.anhaengen("")
+                    if n_ged:
+                        hinweise.append(f"Gedächtnis: {n_ged} Einträge mitgegeben.")
+                    else:
+                        ged_t = ""
+                nachrichten_modell = list(fm())
+                bilder = self._ablage.bilder_fuer_modell(g) if any(x.get("art") == "bild" for x in g.anhaenge) else []
+                if bilder and not fern and not getattr(self._ki.server, "bilder", False) and self._ki.mit_bildern_einschalten():
+                    hinweis_seite("Der Bild-Zusatz wird geladen, das dauert einmal ein paar Sekunden …")
                     self._ki_bereit_machen(einschalten=True)
-                    wahl = self._ki.wahl
-                    a = self._ki.frage(nachrichten_modell, on_token=on_token, zusatz=zusatz, max_tokens=320, kurz=True)
-                    hinweis = (hinweis + " " if hinweis else "") + f"Die Grafikkarte hat versagt ({exc.detail}); die Antwort kam vom Prozessor."
+                if bilder and not fern:
+                    if getattr(self._ki.server, "bilder", False) and nachrichten_modell and nachrichten_modell[-1]["role"] == "user":
+                        nachrichten_modell[-1] = {"role": "user", "content": [{"type": "text", "text": nachrichten_modell[-1]["content"]}] + bilder}
+                        hinweise.append("1 Bild angeschaut." if len(bilder) == 1 else f"{len(bilder)} Bilder angeschaut.")
+                    else:
+                        bild_satz = ("Die Person hat ein Bild mitgeschickt, aber dieses Gerät kann Bilder nicht anschauen (der Bild-Zusatz läuft nur auf einer Grafikkarte). "
+                                     "Sag das in einem Satz und beantworte, was ohne das Bild geht.")
+                return "\n\n".join(t for t in (bild_satz, ged_t, sk, ordn, anh) if t), " ".join(h for h in hinweise if h), nachrichten_modell
+            gemeldet: list[str] = []
+
+            def melden(t: str) -> None:
+                gemeldet.append(t)
+                hinweis_seite(t)
+            try:
+                antwort_text, lieferschein, a = self._antwort_kern(
+                    fm(), ab=ab, fuer="dich", frisch=frisch, privat=True, fern=fern,
+                    kopie=None if (fern or g.anhaenge or self._kiste.fuer_gespraech(g.skill)) else "eigen",
+                    vorspann=vorspann_bauen, strom=_FensterStrom(self._js, on_token) if self._window is not None else None,
+                    melden=melden, knapp=am_prozessor, max_tokens=max_tokens, kurz=am_prozessor, prozessor_rueckfall=not fern,
+                    knopf=knopf, nachsuche_erlaubt=not g.anhaenge and not getattr(g, "ordner", None), geraet=self._ki.geraet_de())
             except app_core.AppError:
                 if not admin:
                     self._kontobuch.antwort(geraet=self._geraet_name)
                 raise
-            if isinstance(on_token, satzweise.Sammler):
-                on_token.rest()
-            nachgeholt = False
-            lauf = getattr(_SUCHLAUF, "stand", None)
-            while (schrift is None and not frisch and not fern and self.nachschauen_an() and _WEISS_NICHT.search(ohne_markdown(a.text) or "")
-                   and lauf and lauf["runde"] < SUCHRUNDEN - 1):
-                lauf["runde"] += 1
-                hinweis_seite("Das weiß ich noch nicht, ich suche danach …" if lauf["runde"] == 1 else "Noch nicht gefunden, ich suche mit anderen Wörtern …")
-                try:
-                    zusatz2, quellen2, im_speicher2, hinweis2 = self._mit_wissen(fm(), frisch=True)
-                    if not any(q.get("art") == "nachgeschaut" for q in quellen2):
-                        break
-                    a2 = self._ki.frage(nachrichten_modell, on_token=None, zusatz=zusatz2)
-                    a, zusatz, quellen, im_speicher, hinweis, quellen_stand, nachgeholt = a2, zusatz2, quellen2, im_speicher2, ("Das Modell kannte es nicht, darum wurde im Internet nachgeschaut. " + hinweis2).strip(), self._letzter_stand, True
-                    if on_token is not None:
-                        self._js("app.tokenNeu()")
-                except app_core.AppError as exc:
-                    _log(self._core, f"ABGELEHNT nachgeholt: {exc.code}: {exc.detail}")
-                    break
-            if getattr(a, "abgebrochen", False):
-                hinweis = (hinweis + " " if hinweis else "") + "Auf deinen Wunsch gestoppt; das ist der Teil der Antwort bis dahin."
-            stand = self._kontobuch.stand() if fern else self._kontobuch.antwort(geraet=self._geraet_name)
-            if fern:
-                quellen, im_speicher = list(getattr(a, "quellen", ()) or ()), int(getattr(a, "im_speicher", 0) or 0)
-            pr = pruefung.pruefen(a.text or "", [(int(q["nummer"]), str(q.get("text", ""))) for q in quellen if q.get("text")])
-            if klein and not getattr(a, "abgebrochen", False) and pr.gruen == 0 and not _WEISS_NICHT.search(ohne_markdown(a.text or "")):
-                a = dataclasses.replace(a, text=_GESUCHT_NICHTS_SATZ)
-                pr = pruefung.pruefen(a.text, [])
-                if on_token is not None:
-                    self._js("app.tokenNeu()")
-            verworfen = False
-            if not fern and erfunden_verdacht(pr, quellen, schrift):
-                hinweis_seite("Die erste Antwort enthielt Erfundenes; KIplatz antwortet noch einmal, kurz und ehrlich …")
-                try:
-                    a = self._ki.frage(nachrichten_modell, on_token=None, zusatz=zusatz + "\n\n" + ERFUNDEN_ZUSATZ, max_tokens=160)
-                    pr = pruefung.pruefen(a.text or "", [(int(q["nummer"]), str(q.get("text", ""))) for q in quellen if q.get("text")])
-                    hinweis = (hinweis + " " if hinweis else "") + "Die erste Fassung enthielt Erfundenes und wurde verworfen."
-                    verworfen = True
-                    if on_token is not None:
-                        self._js("app.tokenNeu()")
-                except app_core.AppError as exc:
-                    _log(self._core, f"ABGELEHNT erfunden_nachfrage: {exc.code}: {exc.detail}")
-            if (verworfen and schrift is None and not frisch and not nachgeholt and self.nachschauen_an() and _WEISS_NICHT.search(ohne_markdown(a.text) or "")
-                    and lauf and lauf["runde"] < SUCHRUNDEN - 1):
-                lauf["runde"] += 1
-                hinweis_seite("Die erste Fassung passte nicht zu den Quellen, ich suche im Internet …")
-                try:
-                    zusatz2, quellen2, im_speicher2, hinweis2 = self._mit_wissen(fm(), frisch=True)
-                    if any(q.get("art") == "nachgeschaut" for q in quellen2):
-                        a = self._ki.frage(nachrichten_modell, on_token=None, zusatz=zusatz2)
-                        zusatz, quellen, im_speicher, quellen_stand, nachgeholt = zusatz2, quellen2, im_speicher2, self._letzter_stand, True
-                        hinweis = ("Die erste Fassung passte nicht zu den Quellen, darum wurde im Internet nachgeschaut. " + hinweis2).strip()
-                        pr = pruefung.pruefen(a.text or "", [(int(q["nummer"]), str(q.get("text", ""))) for q in quellen if q.get("text")])
-                except app_core.AppError as exc:
-                    _log(self._core, f"ABGELEHNT nachgeholt nach verworfener Fassung: {exc.code}: {exc.detail}")
-            lieferschein = {
-                "modell": ("KIplatz" if fern else (wahl.modell.name if wahl else "?")), "geraet": self._ki.geraet_de(),
-                "bau": app_core.APP_BUILD,
-                "fassung": None if fern else self._ki.fassung,
-                "dauer_s": a.dauer_s, "wortstuecke": a.completion_tokens, "gelesen": a.prompt_tokens,
-                "credits": ("Admin, unbegrenzt" if admin else f"1 Credit für diese Frage, Stand {stand.guthaben}") + (f"; {self._ki.fern_name()} hat 1 verdient" if fern else ""),
-                "quellen": wissen.quellen_text_de(a.text or "", quellen, im_speicher, auch_nummern={s.quelle for s in pr.saetze if s.farbe == "gruen" and s.quelle})
-                           + (f" {hinweis}" if hinweis else ""),
-                "quellen_liste": wissen.benutzte_quellen(a.text or "", quellen, {s.quelle for s in pr.saetze if s.farbe == "gruen" and s.quelle}),
-                "gemacht": "live nachgeprüft" if frisch else ("nachgeschaut und geantwortet" if nachgeholt else "geantwortet"), "erfunden": pr.text, "pruefung": pr.kurz(),
-                "guthaben_vorher": stand_vorher.guthaben,
-            }
-            if verworfen:
-                lieferschein["erste_fassung"] = "nachgeschaut" if nachgeholt else "verworfen"
-            if quellen_stand:
-                lieferschein["stand"] = quellen_stand
-            antwort_text = ohne_auszuege(ohne_markdown(a.text)) or "(keine Antwort erhalten)"
-            vorher_text = antwort_text
-            antwort_text = self._belege_nachher(antwort_text, suchfrage(fm()), "" if fern else zusatz, [] if fern else quellen, lieferschein,
-                                                None if fern else (lambda extra: self._ki.frage(nachrichten_modell, on_token=None, zusatz=zusatz + "\n\n" + extra, max_tokens=240).text),
-                                                schreiben=schrift is not None, ampel=not fern)
-            if antwort_text != vorher_text and on_token is not None:
-                self._js("app.tokenNeu()")
-            if (schrift is None and not frisch and not fern and not g.anhaenge and not getattr(g, "ordner", None) and self.nachschauen_an()
-                    and lauf and lauf["runde"] < SUCHRUNDEN - 1 and _WEISS_NICHT.search(antwort_text) and not im_netz_gesucht(nachgeholt, quellen, lauf)):
-                lauf["runde"] += 1
-                hinweis_seite("Das weiß ich noch nicht sicher, ich suche im Internet …")
-                try:
-                    zusatz2, quellen2, im_speicher2, hinweis2 = self._mit_wissen(fm(), frisch=True)
-                    if any(q.get("art") == "nachgeschaut" for q in quellen2):
-                        sk_mit2, sk_weg2 = skills.passend(self._kiste.fuer_gespraech(g.skill))
-                        if sk_mit2:
-                            zusatz2 = skills.vorspann_mehrere(sk_mit2) + ("\n\n" + zusatz2 if zusatz2 else "")
-                        zusatz2 = (zusatz2 + "\n\n" if zusatz2 else "") + frage_fokus(suchfrage(fm()))
-                        a = self._ki.frage(nachrichten_modell, on_token=None, zusatz=zusatz2)
-                        zusatz, quellen, im_speicher, quellen_stand, nachgeholt = zusatz2, quellen2, im_speicher2, self._letzter_stand, True
-                        hinweis = ("Die Angabe stand in keiner Fundstelle, darum wurde im Internet nachgeschaut. " + hinweis2).strip()
-                        if sk_mit2:
-                            hinweis = (hinweis + " " + skills.hinweis_angewendet(sk_mit2, sk_weg2)).strip()
-                        pr = pruefung.pruefen(a.text or "", [(int(q["nummer"]), str(q.get("text", ""))) for q in quellen if q.get("text")])
-                        lieferschein = {k: v for k, v in lieferschein.items() if k not in ("belege", "stand")}
-                        lieferschein.update({
-                            "dauer_s": a.dauer_s, "wortstuecke": a.completion_tokens, "gelesen": a.prompt_tokens,
-                            "quellen": wissen.quellen_text_de(a.text or "", quellen, im_speicher, auch_nummern={s.quelle for s in pr.saetze if s.farbe == "gruen" and s.quelle})
-                                       + (f" {hinweis}" if hinweis else ""),
-                            "quellen_liste": wissen.benutzte_quellen(a.text or "", quellen, {s.quelle for s in pr.saetze if s.farbe == "gruen" and s.quelle}),
-                            "gemacht": "nachgeschaut und geantwortet", "erfunden": pr.text, "pruefung": pr.kurz(),
-                        })
-                        if verworfen:
-                            lieferschein["erste_fassung"] = "nachgeschaut"
-                        if quellen_stand:
-                            lieferschein["stand"] = quellen_stand
-                        antwort_text = ohne_auszuege(ohne_markdown(a.text)) or "(keine Antwort erhalten)"
-                        vorher_text = antwort_text
-                        antwort_text = self._belege_nachher(antwort_text, suchfrage(fm()), zusatz, quellen, lieferschein,
-                                                            lambda extra: self._ki.frage(nachrichten_modell, on_token=None, zusatz=zusatz + "\n\n" + extra, max_tokens=240).text,
-                                                            schreiben=False)
-                        if on_token is not None:
-                            self._js("app.tokenNeu()")
-                except app_core.AppError as exc:
-                    _log(self._core, f"ABGELEHNT nachgeholt vor „weiß ich nicht“: {exc.code}: {exc.detail}")
+            if gemeldet:
                 hinweis_seite("")
-            if nebenher_satz(lauf):
-                lieferschein["quellen"] = (lieferschein.get("quellen", "") + " " + nebenher_satz(lauf)).strip()
-            if schrift is not None:
-                antwort_text, lieferschein["gemacht"] = _schriftstueck_nachbearbeiten(antwort_text, schrift[1], lieferschein, schrift[0])
-            if schrift is None and not frisch and not fern and self.nachschauen_an() and _WEISS_NICHT.search(antwort_text):
-                antwort_text = _weiss_nicht_anwenden(antwort_text, lieferschein, gesucht=im_netz_gesucht(nachgeholt, quellen, lauf), vorher=vorher_text)
+            if a is None and "aus_speicher" in lieferschein:
+                ls_f = lieferschein
+                ls_f.update({"guthaben_vorher": stand_vorher.guthaben,
+                             "credits": "Admin, unbegrenzt" if admin else f"nichts verrechnet: die Antwort kam fertig aus dem Antwort-Speicher, Stand {stand_vorher.guthaben}"})
+                if englisch_gefragt:
+                    antwort_text, ls_f = antwortsprache.antwort_uebersetzen(self._ki.server.frage, antwort_text, ls_f, log=lambda z: _log(self._core, z))
+                self._ablage.anhaengen(g, "assistant", antwort_text, lieferschein=ls_f)
+                return {"text": antwort_text, "lieferschein": ls_f, "gespraech": g.to_json_dict(), "credits": self._credits_dict()}
+            if a is None:
+                return ohne_modell(antwort_text, str(lieferschein.get("gemacht", "geantwortet")), str(lieferschein.get("quellen", "")), fertig_en=str(lieferschein.get("_en", "")))
+            stand = self._kontobuch.stand() if fern else self._kontobuch.antwort(geraet=self._geraet_name)
+            lieferschein["credits"] = (("Admin, unbegrenzt" if admin else f"1 Credit für diese Frage, Stand {stand.guthaben}")
+                                       + (f"; {self._ki.fern_name()} hat 1 verdient" if fern else ""))
+            lieferschein["guthaben_vorher"] = stand_vorher.guthaben
             if englisch_gefragt:
                 hinweis_seite("Die Antwort wird ins Englische übertragen …")
                 antwort_text, lieferschein = antwortsprache.antwort_uebersetzen(self._ki.server.frage, antwort_text, lieferschein,
@@ -5819,7 +5714,6 @@ SUCHWORT_ENTSCHEIDEN = ("Braucht die letzte Frage keine Suche, weil sie allgemei
 SUCHWORT_ANDERS = ("Diese Suchen wurden schon gemacht und haben die Antwort nicht gebracht: {bisher}. Schreib zwei neue Suchanfragen mit anderen Wörtern, "
                    "zum Beispiel mit dem Namen der Seite oder Stelle, die es sicher weiß, oder mit dem Begriff, den diese Stelle dafür verwendet.")
 SUCHRUNDEN = 3
-SUCHRUNDEN_MITGLIED = 2
 FRAGE_FOKUS = ("Gefragt ist genau: „{frage}“. Beantworte genau das. Steht die gefragte Angabe (zum Beispiel eine Dauer, eine Anzahl, ein Ort) "
                "in keiner Quelle, sag das in einem Satz, statt eine andere Zahl oder Angabe zu nennen. Schreib in eigenen Worten, nie mehr als 6 "
                "Wörter am Stück aus einer Quelle.")
@@ -6105,6 +5999,43 @@ class _Teilgeber:
             self._melden(t)
         except Exception:
             pass
+
+    def neu(self) -> None:
+        pass
+
+    def runde(self) -> "_Teilgeber":
+        return _Teilgeber(self._melden, self._abstand)
+
+
+class _Still:
+    token = None
+
+    def schluss(self) -> None:
+        pass
+
+    def neu(self) -> None:
+        pass
+
+    def runde(self) -> "_Still":
+        return self
+
+
+class _FensterStrom:
+
+    def __init__(self, js, on_token) -> None:
+        self._js, self._on_token = js, on_token
+        self.token = on_token
+
+    def schluss(self) -> None:
+        if isinstance(self._on_token, satzweise.Sammler):
+            self._on_token.rest()
+
+    def neu(self) -> None:
+        if self.token is not None:
+            self._js("app.tokenNeu()")
+
+    def runde(self) -> _Still:
+        return _Still()
 
 
 DATEI_NUR_DAHEIM = ("In deinen Dateien sucht nur dein eigener PC. Ist dein Handy mit ihm verbunden, tipp auf das Plus neben dem Eingabefeld, "

@@ -13,7 +13,7 @@ from test_app_web import _api
 FRAGE = "Wie lange braucht eine KI sich selbst zu kopieren"
 
 
-def test_a_member_question_gets_one_more_search_at_most_and_the_question_goes_along(tmp_path):
+def test_a_member_question_gets_the_same_search_rounds_as_the_own_window_and_the_question_goes_along(tmp_path):
     api, fake, _ = _api(tmp_path)
     gesehen: list[str] = []
     suchen = []
@@ -29,10 +29,10 @@ def test_a_member_question_gets_one_more_search_at_most_and_the_question_goes_al
     api._mit_wissen = mit_wissen
     api._ki_starten_blockierend()
     api._antwort_fuer_mitglied([{"role": "user", "content": FRAGE}], [], "ein Mitglied")
-    assert len(gesehen) == 2, gesehen
-    assert suchen.count(True) == 1
-    assert FRAGE in gesehen[1] and "Beantworte genau das" in gesehen[1]
-    assert app_web.SUCHRUNDEN_MITGLIED == 2 and app_web.SUCHRUNDEN == 3
+    assert len(gesehen) == app_web.SUCHRUNDEN == 3, gesehen
+    assert suchen.count(True) == 2
+    assert all(FRAGE in z and "Beantworte genau das" in z for z in gesehen[1:])
+    assert not hasattr(app_web, "SUCHRUNDEN_MITGLIED")
 
 
 def test_a_measure_question_gets_the_focus_already_in_the_first_draft(tmp_path):

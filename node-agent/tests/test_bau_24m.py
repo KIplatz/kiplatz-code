@@ -133,7 +133,8 @@ def test_the_program_checks_after_the_model_and_asks_once_more_when_nothing_is_l
 
 def test_both_answer_paths_use_the_offices_and_the_checks():
     src = (HIER / "app_web.py").read_text(encoding="utf-8")
-    assert src.count("self._belege_nachher(") == 3 and "stellen.lesen_fuer(frage, vorher=vorher)" in src
+    assert src.count("self._belege_nachher(") == 1 and "stellen.lesen_fuer(frage, vorher=vorher)" in src
+    assert src.index("def _antwort_kern(") < src.index("self._belege_nachher(") < src.index("    def _wiki_darf(self)")
     assert "Bei der zuständigen Stelle nachgeschaut" in src
 
 
