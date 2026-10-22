@@ -707,13 +707,33 @@ _GESPERRT: dict[str, float] = {}
 
 _NAECHST = re.compile(r"n[äa]chste[nrms]?\b|als n[äa]chstes|kommende[nrms]?\b|demn[äa]chst|\bwann (?:spielt|ist|findet|kommt|beginnt|startet|öffnet|oeffnet)\b|"
                       r"spielplan|\btermine?\b|\bbald\b|übermorgen|\bmorgen\b|am wochenende|diese woche|ab wann", re.I)
-_LETZT = re.compile(r"\bletzte[nrms]?\b|\bzuletzt\b|\bgestern\b|\bvorige[nrms]?\b|\bvergangene[nrms]?\b|ergebnis(?:se)?\b|\bendstand\b|"
-                    r"wie (?:hat|haben) .{1,40} gespielt|wie ist .{1,40} ausgegangen|wer hat .{1,40} gewonnen", re.I)
+_AUSGANG_DE = r"(?:gespielt|gewonnen|verloren|ausgegangen|geendet|gewählt)"
+_AUSGANG_EN = r"(?:won|lost|play(?:ed)?|beat|ended|end|finish(?:ed)?|score|result|game|match|race|election)"
+_LETZT = re.compile(r"\bletzte[nrms]?\b(?!\s+mal\b)|\bzuletzt\b|\bgestern\b|\bgestrig\w*|\bvorige[nrms]?\b|\bvergangene[nrms]?\b|"
+                    r"\bergebnis(?:se)? (?:der|des|vom|von|im|in|bei)\b|\bendstand\b|\bspielstand\b|"
+                    r"wie (?:hat|haben) .{1,40} gespielt|wie (?:ist|sind) .{1,40} ausgegangen|wer hat .{1,40} gewonnen|"
+                    rf"\b(?:heute|heutig\w*)\b.{{0,60}}\b{_AUSGANG_DE}\b|\b{_AUSGANG_DE}\b.{{0,30}}\bheute\b|"
+                    rf"\b(?:yesterday|today|tonight)(?:'s)?\b.{{0,60}}\b{_AUSGANG_EN}\b|\b{_AUSGANG_EN}\b.{{0,60}}\b(?:yesterday|today|tonight)\b", re.I)
+_HEUTE = re.compile(r"\bheute\b|\bheutig\w*|\btoday\b|\btonight\b", re.I)
+_GESTERN = re.compile(r"\bgestern\b|\bgestrig\w*|\byesterday\b", re.I)
+
+
+def _mit_original(frage: str) -> str:
+    try:
+        import ki_laufzeit
+        original = ki_laufzeit.original()
+    except Exception:
+        original = ""
+    return (frage or "") + ("\n" + original if original else "")
 
 
 def richtung(frage: str) -> str:
     f = frage or ""
-    if _LETZT.search(f):
+    if _LETZT.search(_mit_original(f)):
+        import kalender_tage
+        from datetime import date as _date
+        if any(j < (_date.today() - timedelta(days=45)).year for j in kalender_tage.jahre(f)):
+            return ""
         return "letzt"
     if _NAECHST.search(f):
         import kalender_tage
@@ -721,6 +741,38 @@ def richtung(frage: str) -> str:
             return ""
         return "naechst"
     return ""
+
+
+def zeitraum(frage: str) -> str:
+    if richtung(frage) != "letzt":
+        return ""
+    f = _mit_original(frage)
+    if _HEUTE.search(f):
+        return "day"
+    if _GESTERN.search(f):
+        return "week"
+    return "month"
+
+
+_MONATE_DE = ("Jänner", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember")
+_MONATE_EN = ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
+
+
+def ereignis_tag(frage: str, heute=None):
+    from datetime import date as _date
+    h = heute or _date.today()
+    if richtung(frage) != "letzt":
+        return None
+    f = _mit_original(frage)
+    if _HEUTE.search(f):
+        return h
+    if _GESTERN.search(f):
+        return h - timedelta(days=1)
+    return None
+
+
+def tag_wort(tag, englisch: bool = False) -> str:
+    return f"{_MONATE_EN[tag.month - 1]} {tag.day} {tag.year}" if englisch else f"{tag.day}. {_MONATE_DE[tag.month - 1]} {tag.year}"
 
 
 def _tage(text: str, heute) -> list:

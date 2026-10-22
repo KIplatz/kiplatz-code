@@ -976,9 +976,12 @@ class Api:
                 funde, fehler = stellen.lesen_fuer(frage, vorher=vorher)
                 jetzt = wissen._jetzt()
                 bis = (datetime.now(timezone.utc) + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+                lauf_s = getattr(_SUCHLAUF, "stand", None)
                 for f in reversed(funde):
                     sq = wissen.Quelle(wissen.kennung_fuer("stelle", f.adresse + "|" + f.stelle), "nachgeschaut", f.titel, f.adresse, jetzt, len(f.text), bis)
                     ergaenzend = [wissen.Treffer(sq, f.text, 9.0)] + ergaenzend
+                    if isinstance(lauf_s, dict):
+                        lauf_s.setdefault("stellen", set()).add(sq.kennung)
                 if funde:
                     namen = ", ".join(sorted({stellen.NAMEN.get(f.stelle, f.stelle) for f in funde}))
                     hinweis = f"Bei der zuständigen Stelle nachgeschaut ({namen}). " + hinweis
@@ -1230,7 +1233,7 @@ class Api:
 
         def suchen() -> None:
             try:
-                erg["r"] = self._nachschauer.suche_runde(anfragen, frage, sprache=sprache, zeit="month" if richtung == "letzt" else "",
+                erg["r"] = self._nachschauer.suche_runde(anfragen, frage, sprache=sprache, zeit=nachschauen.zeitraum(frage),
                                                           ausser=frozenset(), ziel=zeitziel(frage))
             except BaseException as exc:
                 erg["e"] = exc
@@ -1370,7 +1373,7 @@ class Api:
             self._schritt(f"sucht im Internet nach „{''.join(anfragen)}“ und liest die besten Seiten …")
         try:
             ergebnisse, gelesen, woher = neben["holen"]() if neben is not None else self._nachschauer.suche_runde(
-                anfragen, frage, sprache=such_sprache(frage), zeit="month" if richtung == "letzt" else "",
+                anfragen, frage, sprache=such_sprache(frage), zeit=nachschauen.zeitraum(frage),
                 ausser=frozenset(lauf["gelesen"]) if lauf else frozenset(), ziel=zeitziel(frage))
         except app_core.AppError as exc:
             _log(self._core, f"ABGELEHNT nachschauen suche: {exc.code}: {exc.detail}")
@@ -2160,7 +2163,8 @@ class Api:
         if kopie and not (messen or frisch):
             fertig = self._fertig_aus_kopie(nachrichten, fuer_andere=(kopie == "andere"))
             if fertig is not None:
-                fertig[1]["geraet"] = (geraet + ", aus dem Antwort-Speicher") if kopie == "andere" else "aus dem Antwort-Speicher der Community (Kopie auf diesem PC)"
+                fertig[1]["geraet"] = (f"{self._geraet_name} (Community) für {fuer}, aus dem Antwort-Speicher" if kopie == "andere"
+                                       else "aus dem Antwort-Speicher der Community (Kopie auf diesem PC)")
                 return fertig[0], fertig[1], None
         if callable(vorspann):
             vorspann, vorspann_hinweis, mn = vorspann()
@@ -4236,8 +4240,9 @@ class Api:
                             if not b_o.ok:
                                 raise app_core.AppError("HAUSORDNUNG", f"die Datei „{d['name']}“ im Ordner: {b_o.text}")
                         ordn = ordner_aufgaben.vorspann(Path(g.ordner).name, gelesen, alle)
-                        hinweise.append(f"Aus dem Ordner „{Path(g.ordner).name}“ mitgelesen: " + ", ".join(d["name"] for d in gelesen) + "." if gelesen
-                                        else f"Ordner „{Path(g.ordner).name}“ freigegeben ({len(alle)} Dateien), für diese Frage keine gelesen.")
+                        hinweis = (f"Aus dem Ordner „{Path(g.ordner).name}“ mitgelesen: " + ", ".join(d["name"] for d in gelesen) + "." if gelesen
+                                   else f"Ordner „{Path(g.ordner).name}“ freigegeben ({len(alle)} Dateien), für diese Frage keine gelesen.")
+                        hinweise.append(hinweis)
                         _log(self._core, f"OK ordner_gelesen {len(gelesen)} von {len(alle)}")
                     except app_core.AppError as exc:
                         if exc.code == "HAUSORDNUNG":
@@ -5692,7 +5697,7 @@ def klein_wissensfrage(modellname: str, frage: str) -> bool:
 _SCHRITT = threading.local()
 
 SUCHWORT_SYSTEM = (
-    "Du schreibst Suchanfragen für eine Suchmaschine. Gefragt wird aus Deutschland, Österreich und der Schweiz. Lies das Gespräch und schreib "
+    "Du schreibst Suchanfragen für eine Suchmaschine. Gefragt wird von überall auf der Welt. Lies das Gespräch und schreib "
     "für die LETZTE Frage zwei Suchanfragen, jede in einer eigenen Zeile: in der ersten Zeile die genaue Suche mit allem Wichtigen aus der Frage "
     "(Sache, Ort, Land, genannte Firmen oder Vereine), in der zweiten Zeile eine allgemeinere Suche mit nur 2 bis 4 Wörtern, die dieselbe Antwort "
     "auf einer anderen Seite findet. Jede Zeile 2 bis 8 Wörter, Deutsch, nur die Sache, "
@@ -5922,6 +5927,10 @@ def suchwoerter_ordnen(liste: list[str], frage: str, frueher: str = "", heute=No
         q2 = " ".join(w)
         if len(q2.split()) < 2:
             q2 = " ".join(frage.split())[:120]
+        tag = nachschauen.ereignis_tag(frage, h)
+        if tag is not None and not out and str(tag.year) not in q2:
+            englisch = antwortsprache.frage_sprache(frage) == "en" or antwortsprache.frage_sprache(q2) == "en" or such_sprache(frage) == "en"
+            q2 += " " + nachschauen.tag_wort(tag, englisch=englisch)
         if not re.search(r"\b20\d\d\b", q2):
             if _ZEITGEBUNDEN_SAISON.search(q2 + " " + frage):
                 q2 += " " + saison_jetzt(h)
@@ -6461,7 +6470,8 @@ def _aufzaehlung(woerter: list[str]) -> tuple[str, str]:
 
 
 def im_netz_gesucht(nachgeholt: bool, quellen: list[dict], lauf: dict | None) -> bool | str:
-    if nachgeholt or any(q.get("art") == "nachgeschaut" for q in quellen or []):
+    stellen = (lauf or {}).get("stellen") or ()
+    if nachgeholt or any(q.get("art") == "nachgeschaut" and q.get("kennung") not in stellen for q in quellen or []):
         return True
     if lauf and lauf.get("gesucht"):
         return "nicht_erreicht" if lauf.get("abgelehnt") else True
