@@ -11,6 +11,8 @@ def dank(satz: str, wer: str, art: str = "Meldung") -> str:
 
 
 NEUERUNGEN: dict[str, list[str]] = {
+    "2026-10-21d": [],
+    "2026-10-21c": [],
     "2026-10-21b": [
         "Bei „Ja, live nachprüfen“ sucht KIplatz jetzt immer im Internet, auch wenn ein Berg oder Ort mit diesem Namen schon auf der Karte steht.",
     ],

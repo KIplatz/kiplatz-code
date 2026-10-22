@@ -564,11 +564,14 @@ class Community:
     def pruefstand_holen(self) -> list[dict]:
         return [f for f in self._anfrage("/pruefstand", als_geraet=True).get("fragen", []) if isinstance(f, dict)]
 
-    def pruefstand_ergebnis(self, antworten: list[dict], wege: dict) -> dict:
-        return self._anfrage("/pruefstand-ergebnis", {"antworten": antworten, "wege": wege}, als_geraet=True, timeout=PRUEFSTAND_ERGEBNIS_TIMEOUT_S)
+    def pruefrunde_holen(self, bau: str, fassung: str = "", *, probelauf: bool = False) -> tuple[list[dict], dict]:
+        weg = "/pruefstand?" + urllib.parse.urlencode({"runde": "1", "bau": str(bau)[:40], "fassung": str(fassung or "")[:120], **({"probelauf": "1"} if probelauf else {})})
+        a = self._anfrage(weg, als_geraet=True)
+        return [f for f in a.get("fragen", []) if isinstance(f, dict)], (a.get("runde") if isinstance(a.get("runde"), dict) else {})
 
-    def messreihe_nacht(self, tag: str) -> dict:
-        return self._anfrage("/messreihe-nacht", {"tag": str(tag)[:10]}, als_geraet=True)
+    def pruefstand_ergebnis(self, antworten: list[dict], wege: dict, *, runde: str = "") -> dict:
+        return self._anfrage("/pruefstand-ergebnis", {"antworten": antworten, "wege": wege, **({"runde": str(runde)[:20]} if runde else {})},
+                             als_geraet=True, timeout=PRUEFSTAND_ERGEBNIS_TIMEOUT_S)
 
     def training_bericht(self, urteil: str, text: str) -> dict:
         return self._anfrage("/training-bericht", {"urteil": str(urteil)[:20], "text": str(text)[:4000]}, als_geraet=True)

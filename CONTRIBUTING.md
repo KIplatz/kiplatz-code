@@ -10,6 +10,8 @@ Great that you want to join in. This repository is an **export**: we build in ou
 | ask a question or talk with others | [Forum (Platzl)](https://forum.kiplatz.at/?tl=en) |
 | report a security hole | confidentially, see [SECURITY.md](SECURITY.md) |
 
+Looking for something to start with? The issues labelled [Guter Einstieg](https://werkstatt.kiplatz.at/KIplatz/mitbauen/issues?labels=11&lang=en-US) ("good first task") take between 10 minutes and an hour.
+
 One account works for the forum, the workshop and the program: [create one for free](https://werkstatt.kiplatz.at/user/sign_up?lang=en-US). Most conversations are in German; English is welcome everywhere.
 
 ## What a good code change looks like
@@ -49,6 +51,8 @@ Schön, dass du mitmachen willst. Dieses Repository ist ein **Export**: Wir baue
 | einen Skill schreiben, teilen oder verbessern | [Platzl, Bereich Skills](https://forum.kiplatz.at/) |
 | eine Frage stellen oder mitreden | [Platzl](https://forum.kiplatz.at/) |
 | eine Sicherheitslücke melden | vertraulich, siehe [SECURITY.md](SECURITY.md) |
+
+Du suchst etwas für den Anfang? Die Meldungen mit [Guter Einstieg](https://werkstatt.kiplatz.at/KIplatz/mitbauen/issues?labels=11) brauchen zwischen 10 Minuten und einer Stunde.
 
 Ein Konto gilt für Platzl, Werkstatt und Programm: [kostenlos anlegen](https://werkstatt.kiplatz.at/user/sign_up).
 

@@ -57,8 +57,7 @@ TEXTE = {
     "speicher": "Hält eine Scheibe des gemeinsamen Wissens auf der Festplatte (Paket 6).",
     "themen": "Sammelt Wissen zu deinen eigenen Themen, privat, nur auf diesem Gerät (Paket 7).",
     "vorwaermt": "Holt Wetter und Schlagzeilen für alle Mitglieder vor (einmal am Morgen).",
-    "prueft_selbst": "Prüfstand: stellt KIplatz die Prüffragen der Nacht.",
-    "prueft_probe": "Prüft eine nachtrainierte Fassung. Fragen beantworten so lange andere PCs.",
+    "prueft_selbst": "Prüfstand: stellt KIplatz eine Prüfrunde, solange die Grafikkarte sonst frei ist.",
     "trainiert": "Trainiert KIplatz. Fragen beantworten so lange andere PCs.",
     "antwortet": "Beantwortet eine Frage von {fuer}.",
     "bereit": "Bereit, KIplatz ist geladen. Gerade fragt niemand.",
@@ -1126,6 +1125,11 @@ _SCHRITT_ENDE = {"nach", "und", "gegen", "die", "der", "für", "mit", "von"}
 
 
 def zeit_je_schritt(ablauf: list[tuple[float, str]], gesamt_s: float, *, ab_s: float = 1.0) -> str:
+    gezeigt = [f"{n} {round(s):.0f} s" for n, s in schritt_teile(ablauf, gesamt_s) if s >= ab_s]
+    return ZEIT_SATZ.format(", ".join(gezeigt)) if gezeigt else ""
+
+
+def schritt_teile(ablauf: list[tuple[float, str]], gesamt_s: float) -> list[list]:
     teile: list[list] = []
     for i, (t, text) in enumerate(ablauf):
         ende = ablauf[i + 1][0] if i + 1 < len(ablauf) else gesamt_s
@@ -1140,8 +1144,7 @@ def zeit_je_schritt(ablauf: list[tuple[float, str]], gesamt_s: float, *, ab_s: f
             teile[-1][1] += max(0.0, ende - t)
         else:
             teile.append([name, max(0.0, ende - t)])
-    gezeigt = [f"{n} {round(s):.0f} s" for n, s in teile if s >= ab_s]
-    return ZEIT_SATZ.format(", ".join(gezeigt)) if gezeigt else ""
+    return teile
 
 
 def aufrufe_zeile(aufrufe: list[dict]) -> str:

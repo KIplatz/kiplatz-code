@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 from __future__ import annotations
 
+import hashlib
 import re
 import secrets
 import sys
@@ -22,7 +23,6 @@ MITGLIEDER_NAECHTE = 3
 MITGLIEDER_MAX = 5000
 SCHWACH_UNTER = 0.8
 MAX_ANTWORT = 600
-FENSTER = (2, 5)
 BERICHTIGUNG_MAX = 60
 SIEBEN = 7
 
@@ -89,11 +89,13 @@ def bewerten(antwort: str, erwartet: str, pflicht) -> tuple[bool, float, list[st
     return richtig, round(deckung, 2), fehlt
 
 
-MESSREIHE_NAECHTE = ("2026-10-06", "2026-10-07")
 MESSREIHE_DATEI = "messreihe.json"
-MESSREIHE_NAECHTE_DATEI = "messreihe-naechte.json"
-MESSREIHE_MAX = 1400
-MESSREIHE_BERICHTE = 20
+MESSREIHE_MAX = 1500
+MESSREIHE_BERICHTE = 60
+RUNDE_FRAGEN = 100
+PROBELAUF_FRAGEN = 24
+DURCHGANG_RUNDEN = 3
+RUNDEN_DATEI = "pruefrunden.json"
 SUCHE_AUS_MERKMAL = "Suche im Internet ist gerade nicht durchgekommen"
 NOTIZ_MAX = 600
 _NOTIZ = re.compile(r"[^.]*(?:neu geantwortet|gestrichen|nicht ausgegeben|ausgelassen|nachübersetzt|Zeit je Schritt)[^.]*\.(?:[^.]*\d s[^.]*\.)?")
@@ -119,7 +121,8 @@ PROBE_UNSICHER_ART = 0.15
 
 def ohne_suche_raus(probe: list, vorher: list) -> set:
     def aus(liste):
-        return {str(x.get("kennung")): str(x.get("art", "")) for x in liste if isinstance(x, dict) and suche_aus(x.get("antwort"))}
+        return {str(x.get("kennung")): BEWERTET_WIE.get(str(x.get("art", "")), str(x.get("art", ""))) for x in liste
+                if isinstance(x, dict) and suche_aus(x.get("antwort"))}
     pa, va = aus(probe), aus(vorher)
     return {k for k, art in pa.items() if art == "erfunden"} | {k for k, art in va.items() if art != "erfunden"}
 
@@ -142,10 +145,10 @@ def unsicher(fragen: list, raus: set) -> bool:
     gesamt = sum(a[0] for a in je_art.values())
     return bool(gesamt) and (sum(a[1] for a in je_art.values()) > PROBE_UNSICHER_ANTEIL * gesamt
                              or any(a[1] > PROBE_UNSICHER_ART * a[0] for a in je_art.values()))
-PROBE_NAECHTE_MAX = 3
 _NICHT_WISSEN = re.compile(r"wei(?:ß|ss) ich (?:\w+ )*nicht|kenne ich (?:\w+ )*nicht|(?:nichts|keine \w+) (?:\w+ ){0,3}gefunden|finde (?:\w+ ){0,3}(?:nichts|keine)"
                            r"|keine (?:gesicherten |verlässlichen |genauen )?(?:informationen|angaben|treffer|quellen?|daten)|nicht bekannt|gibt es (?:\w+ )?nicht"
                            r"|existiert (?:\w+ )?nicht|nicht (?:sicher )?sagen|nichts (?:verlässliches|bekannt)", re.I)
+_VERNEINT = re.compile(r"\b(?:hat|besitzt|gibt es)\s+(?:gar\s+)?(?:keinen?|keine)\b|\bist\s+kein(?:e|en)?\s+(?:Bundesland|Land|Staat|Hauptstadt)\b")
 _NICHT_WISSEN_EN = re.compile(r"I (?:don't|do not|can't|cannot|couldn't|could not|am unable to|'m unable to) (?:know|say|tell|find|confirm|verify|answer)"
                               r"|not (?:entirely |completely |quite |really )?sure|no (?:reliable |verified |specific |further |such )?(?:information|data|details|answer|record)"
                               r"|(?:doesn't|does not|didn't|did not) (?:seem to )?exist|(?:nothing|no results?) (?:reliable )?(?:was |were )?found"
@@ -167,6 +170,59 @@ def messreihe_laden(ordner: Path | None = None) -> list[dict]:
             if isinstance(f, dict) and str(f.get("kennung", "")).startswith("m-") and f.get("frage") and f.get("art"):
                 out.append(f)
     return out[:MESSREIHE_MAX]
+
+
+MESSREIHE_ANTWORT = 4000
+_WEG_IM_NETZ = (True, False, "nicht_erreicht")
+BEWERTET_WIE = {"klasse_a": "wissen", "klasse_b": "wissen", "klasse_c": "wissen", "klasse_d": "erfunden"}
+BEKANNT = ("wissen", "alltag", "alltag_en", "klasse_a", "klasse_b", "klasse_c")
+ARTEN_NAMEN = (("wissen", "Wissen"), ("alltag", "Alltag und Praxis"), ("alltag_en", "Alltag und Praxis auf Englisch"),
+               ("erfunden", "Erfundenes erkennen"), ("rueckfrage", "Nachfragen"), ("grenze", "Formatvorgaben"))
+KLASSEN_NAMEN = (("A", "Klasse A, echte Namen in den Formen der Weiß-nicht-Übungen"), ("B", "Klasse B, Grundwissen deutschsprachiger Raum"),
+                 ("C", "Klasse C, Weltwissen in anderen Formen"), ("D", "Klasse D, Erfundenes in denselben Formen"))
+
+
+def weiss_nicht(antwort) -> bool:
+    a = _norm(antwort)
+    return bool(_NICHT_WISSEN.search(a) or _NICHT_WISSEN_EN.search(a))
+
+
+def _weg(w) -> dict:
+    w = w if isinstance(w, dict) else {}
+
+    def zahl(k):
+        try:
+            return max(0, min(int(w.get(k, 0) or 0), 99))
+        except (TypeError, ValueError):
+            return 0
+    netz = w.get("im_netz")
+    schritte = {}
+    for s, n in list((w.get("schritte") if isinstance(w.get("schritte"), dict) else {}).items())[:8]:
+        try:
+            schritte[_norm(s)[:40]] = max(0, min(int(n or 0), 3600))
+        except (TypeError, ValueError):
+            continue
+    return {"gemacht": _norm(w.get("gemacht"))[:60], "stellen": zahl("stellen"),
+            "arten": [_norm(a)[:30] for a in (w.get("arten") if isinstance(w.get("arten"), list) else [])][:8],
+            "suchanfragen": zahl("suchanfragen"), "suchrunden": zahl("suchrunden"), "im_netz": netz if netz in _WEG_IM_NETZ else False,
+            **({"schritte": schritte} if schritte else {})}
+
+
+def mess_frage(mf: dict, a: dict) -> dict:
+    roh = a.get("antwort", "")
+    text = _norm(roh)
+    try:
+        ms = round(max(0.0, min(float(a.get("dauer_s", 0) or 0), 3600.0)), 1)
+    except (TypeError, ValueError):
+        ms = 0.0
+    e = {"kennung": mf["kennung"], "art": mf["art"], "frage": mf["frage"], "richtig": messreihe_bewerten(mf, roh),
+         "antwort": text[:MESSREIHE_ANTWORT], "laenge": len(text), "weiss_nicht": weiss_nicht(text), "ohne_suche": suche_aus(text),
+         "dauer_s": ms, "weg": _weg(a.get("weg"))}
+    if mf.get("klasse"):
+        e["klasse"] = str(mf["klasse"])[:2]
+    if a.get("notiz"):
+        e["notiz"] = str(a.get("notiz"))[:NOTIZ_MAX]
+    return e
 
 
 def _pflicht_ok(text: str, pflicht) -> bool:
@@ -196,8 +252,10 @@ def messreihe_bewerten(f: dict, antwort: str) -> bool:
     a = _norm(antwort)
     if not a or a.startswith("(keine Antwort"):
         return False
-    art = f.get("art")
-    if art in ("wissen", "alltag"):
+    art = BEWERTET_WIE.get(f.get("art"), f.get("art"))
+    if art == "wissen":
+        return _pflicht_ok(a, f.get("pflicht")) and not _NICHT_WISSEN.search(a) and not _VERNEINT.search(a)
+    if art == "alltag":
         return _pflicht_ok(a, f.get("pflicht")) and not _NICHT_WISSEN.search(a)
     if art == "alltag_en":
         return _pflicht_ok(a, f.get("pflicht")) and not _NICHT_WISSEN.search(a) and not _NICHT_WISSEN_EN.search(a)
@@ -226,11 +284,20 @@ def messreihe_bewerten(f: dict, antwort: str) -> bool:
     return False
 
 
-ADMIN_NACHHOLEN_BIS = 12
+def faellig(zuletzt: str, jetzt: datetime) -> bool:
+    return zuletzt != jetzt.strftime("%Y-%m-%d")
 
 
-def faellig(zuletzt: str, jetzt: datetime, *, bis: int = FENSTER[1]) -> bool:
-    return FENSTER[0] <= jetzt.hour < bis and zuletzt != jetzt.strftime("%Y-%m-%d")
+def runden_reihe(mess: list[dict], rotation: int) -> list[str]:
+    gruppen: dict[str, list[str]] = {}
+    for f in mess:
+        if isinstance(f, dict) and f.get("kennung"):
+            gruppen.setdefault(str(f.get("klasse") or f.get("art") or ""), []).append(str(f["kennung"]))
+    stellen = []
+    for name, ks in gruppen.items():
+        ks.sort(key=lambda k: hashlib.sha256(f"{rotation}:{k}".encode("utf-8")).hexdigest())
+        stellen += [((i + 0.5) / len(ks), name, k) for i, k in enumerate(ks)]
+    return [k for _p, _n, k in sorted(stellen)]
 
 
 class Pruefstand:
@@ -285,13 +352,11 @@ class Pruefstand:
     def fragen(self) -> list[dict]:
         return [dict(f) for f in self._laden()["fragen"]]
 
-    def fragen_fuer_geraet(self, *, admin: bool = False, stark: bool = True) -> list[dict]:
+    def fragen_fuer_geraet(self) -> list[dict]:
         import zufallsfragen
         heute = self._jetzt().astimezone().date()
-        mess = messreihe_laden() if admin and stark else []
         return ([{"kennung": f["kennung"], "frage": f["frage"]} for f in self._laden()["fragen"]]
-                + [{"kennung": f["kennung"], "frage": f["frage"]} for f in zufallsfragen.ziehen(heute)]
-                + [{"kennung": f["kennung"], "frage": f["frage"]} for f in mess])
+                + [{"kennung": f["kennung"], "frage": f["frage"]} for f in zufallsfragen.ziehen(heute)])
 
     def hinzufuegen(self, frage: str, erwartet: str, pflicht, quelle: str = "", *, art: str = "admin") -> dict:
         frage, erwartet = _norm(frage), _norm(erwartet)
@@ -346,9 +411,12 @@ class Pruefstand:
                     b["geraet"], b["geraet_name"] = "ausgetreten", "ein ausgetretenes Mitglied"
             self._speichern(d)
 
-    def bericht_annehmen(self, geraet: str, geraet_name: str, antworten, wege=None, *, admin: bool = True) -> dict:
+    def bericht_annehmen(self, geraet: str, geraet_name: str, antworten, wege=None, *, admin: bool = True, runde: str = "") -> dict:
         if not isinstance(antworten, list) or not antworten:
             raise PruefstandError("PRUEFSTAND_LEER", "keine Antworten im Bericht")
+        r = self.runde_annehmen(geraet, geraet_name, runde, antworten) if (runde and admin) else None
+        if r is not None and r.get("wiederholt"):
+            return {"tag": r["tag"], "richtig": r["richtig"], "gesamt": r["gesamt"], "wege_ok": 0, "wege_gesamt": 0, "dauer_s": r["dauer_s"], "runde": r}
         d = self._laden()
         nach_kennung = {f["kennung"]: f for f in d["fragen"]}
         ergebnisse = []
@@ -356,21 +424,9 @@ class Pruefstand:
         dauer = 0.0
         heute = self._jetzt().astimezone().date()
         zufall: list[dict] = []
-        mess = {f["kennung"]: f for f in messreihe_laden()} if admin else {}
-        gemessen: list[dict] = []
         import zufallsfragen
         for a in antworten[:MAX_FRAGEN + MESSREIHE_MAX]:
-            if not isinstance(a, dict):
-                continue
-            mf = mess.get(str(a.get("kennung", "")))
-            if mf is not None:
-                mt = _norm(a.get("antwort", ""))[:4000]
-                try:
-                    ms = round(max(0.0, min(float(a.get("dauer_s", 0) or 0), 3600.0)), 1)
-                except (TypeError, ValueError):
-                    ms = 0.0
-                gemessen.append({"kennung": mf["kennung"], "art": mf["art"], "frage": mf["frage"], "richtig": messreihe_bewerten(mf, a.get("antwort", "")),
-                                 "antwort": mt[:MAX_ANTWORT], "dauer_s": ms, **({"notiz": str(a.get("notiz"))[:NOTIZ_MAX]} if a.get("notiz") else {})})
+            if not isinstance(a, dict) or str(a.get("kennung", "")).startswith("m-"):
                 continue
             f = nach_kennung.get(str(a.get("kennung", "")))
             zf = zufallsfragen.aus_kennung(str(a.get("kennung", ""))) if f is None else None
@@ -406,6 +462,8 @@ class Pruefstand:
             ergebnisse.append({"kennung": f["kennung"], "frage": f["frage"], "richtig": richtig, "deckung": deckung, "fehlt": fehlt,
                                "antwort": text[:MAX_ANTWORT], "dauer_s": round(max(0.0, min(s, 3600.0)), 1), "quelle": f.get("quelle", "")})
         if not ergebnisse:
+            if r is not None:
+                return {"tag": r["tag"], "richtig": r["richtig"], "gesamt": r["gesamt"], "wege_ok": 0, "wege_gesamt": 0, "dauer_s": r["dauer_s"], "runde": r}
             raise PruefstandError("PRUEFSTAND_UNBEKANNT", "keine der Antworten gehört zu einer bekannten Prüffrage")
         w = {}
         if isinstance(wege, dict):
@@ -427,35 +485,21 @@ class Pruefstand:
             return {**n, "wege_ok": b["wege_ok"], "wege_gesamt": b["wege_gesamt"], "schwach": self._schwach(d["mitglieder"][str(geraet)[:40]])}
         d["berichte"].append(b)
         self._speichern(d)
-        if gemessen:
-            vorher = [x for x in self.messreihe_stand() if not x.get("modell") and vollstaendig(x)]
-            neu = self._messreihe_ablegen(b, gemessen)
-            b["messreihe"] = {k: v for k, v in neu.items() if k != "fragen"}
-            b["messreihe_mail"] = self.nacht_mail(neu, vorher[-1] if vorher else None)
+        if r is not None:
+            b["runde"] = r
         return b
 
-    def _messreihe_ablegen(self, b: dict, gemessen: list[dict], *, modell: str = "") -> dict:
+    def _messreihe_ablegen(self, b: dict, gemessen: list[dict], *, modell: str = "", runde: dict | None = None) -> dict:
         datei = self.datei.parent / MESSREIHE_DATEI
         alt = sicher_schreiben.json_laden(datei, {"berichte": []}, art=dict)
         berichte = alt.get("berichte") if isinstance(alt.get("berichte"), list) else []
-        je_art: dict = {}
-        for x in gemessen:
-            e = je_art.setdefault(x["art"], {"richtig": 0, "gesamt": 0})
-            e["gesamt"] += 1
-            e["richtig"] += 1 if x["richtig"] else 0
+        je_art = self._je_art(gemessen, set())
+        je_klasse = self._je_art(gemessen, set(), feld="klasse")
         neu = {"zeit": b["zeit"], "tag": b["tag"], "geraet": b["geraet"], "geraet_name": b["geraet_name"], "je_art": je_art,
+               **({"je_klasse": je_klasse} if je_klasse else {}),
                "richtig": sum(1 for x in gemessen if x["richtig"]), "gesamt": len(gemessen),
                "dauer_s": round(sum(x["dauer_s"] for x in gemessen), 1), "fragen": gemessen, **({"modell": modell} if modell else {}),
-               "ohne_antwort": sum(1 for x in gemessen if ohne_antwort(x.get("antwort")))}
-        if not modell:
-            def gleich(x) -> bool:
-                try:
-                    return (isinstance(x, dict) and not x.get("modell") and x.get("geraet") == neu["geraet"] and x.get("gesamt") == neu["gesamt"]
-                            and abs((datetime.fromisoformat(str(neu["zeit"]).replace("Z", "+00:00"))
-                                     - datetime.fromisoformat(str(x.get("zeit")).replace("Z", "+00:00"))).total_seconds()) < 1800)
-                except ValueError:
-                    return False
-            berichte = [x for x in berichte if not gleich(x)]
+               "ohne_antwort": sum(1 for x in gemessen if ohne_antwort(x.get("antwort"))), **(runde or {})}
         if modell:
             berichte = [x for x in berichte if not (isinstance(x, dict) and x.get("modell") == modell and x.get("geraet") == neu["geraet"]
                                                     and x.get("tag") == neu["tag"])]
@@ -464,25 +508,133 @@ class Pruefstand:
         return neu
 
 
-    def messreihe_naechte(self) -> tuple[str, ...]:
-        d = sicher_schreiben.json_laden(self.datei.parent / MESSREIHE_NAECHTE_DATEI, {"naechte": []}, art=dict)
-        mehr = [str(t) for t in d.get("naechte", []) if isinstance(t, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", t)]
-        return tuple(MESSREIHE_NAECHTE) + tuple(mehr)
+    def _runden_laden(self) -> dict:
+        d = sicher_schreiben.json_laden(self.datei.parent / RUNDEN_DATEI, {"geraete": {}}, art=dict)
+        if not isinstance(d.get("geraete"), dict):
+            d["geraete"] = {}
+        return d
 
-    def messreihe_nacht_bestellen(self, tag: str) -> list[str]:
-        tag = str(tag or "").strip()
-        try:
-            t = datetime.strptime(tag, "%Y-%m-%d").date()
-        except ValueError:
-            raise PruefstandError("MESSREIHE_TAG", "der Tag muss als JJJJ-MM-TT kommen") from None
-        heute = self._jetzt().astimezone().date()
-        if not (heute <= t <= heute + timedelta(days=14)):
-            raise PruefstandError("MESSREIHE_TAG", "nur heute bis in 14 Tagen")
-        datei = self.datei.parent / MESSREIHE_NAECHTE_DATEI
-        d = sicher_schreiben.json_laden(datei, {"naechte": []}, art=dict)
-        naechte = [x for x in d.get("naechte", []) if isinstance(x, str) and x >= heute.isoformat() and x != tag] + [tag]
-        sicher_schreiben.json_datei(datei, {"naechte": sorted(naechte)[-30:]}, indent=None)
-        return sorted(naechte)[-30:]
+    def _runden_speichern(self, d: dict) -> None:
+        sicher_schreiben.json_datei(self.datei.parent / RUNDEN_DATEI, d, indent=None)
+
+    @staticmethod
+    def _neue_rotation(g: dict, mess: list[dict], sammlung: str) -> None:
+        g["rotation"] = int(g.get("rotation", 0) or 0) + 1
+        g["reihe"], g["pos"], g["sammlung"] = runden_reihe(mess, g["rotation"]), 0, sammlung
+
+    def runde_holen(self, geraet: str, bau: str, fassung: str = "", *, probelauf: bool = False) -> dict:
+        geraet, bau, fassung = str(geraet)[:40], _norm(bau)[:40], _norm(fassung)[:120]
+        mess = messreihe_laden()
+        nach = {f["kennung"]: f for f in mess}
+        sammlung = hashlib.sha256("\n".join(sorted(nach)).encode("utf-8")).hexdigest()[:16]
+        d = self._runden_laden()
+        g = d["geraete"].get(geraet) if isinstance(d["geraete"].get(geraet), dict) else {}
+        if g.get("sammlung") != sammlung or not isinstance(g.get("reihe"), list):
+            self._neue_rotation(g, mess, sammlung)
+            alt = g.get("offen") if isinstance(g.get("offen"), dict) else None
+            if alt is not None and set(alt.get("kennungen") or []) <= set(nach):
+                alt["pos_vorher"] = 0
+            else:
+                g["durchgang"], g["offen"] = None, None
+        offen = g.get("offen") if isinstance(g.get("offen"), dict) else None
+        if offen is not None and offen.get("bau") == bau and offen.get("fassung") == fassung:
+            return self._runde_fragen(offen, nach)
+        if offen is not None:
+            g["pos"], g["offen"] = int(offen.get("pos_vorher", g.get("pos", 0)) or 0), None
+            if offen.get("tagesfragen"):
+                g["tagesfragen_tag"] = ""
+        dg = g.get("durchgang") if isinstance(g.get("durchgang"), dict) else None
+        if dg is None or dg.get("bau") != bau or dg.get("fassung") != fassung or len(dg.get("runden") or []) >= DURCHGANG_RUNDEN:
+            dg = {"id": "d" + secrets.token_hex(4), "bau": bau, "fassung": fassung, "runden": [], "seit": _jetzt()}
+            g["durchgang"] = dg
+        if int(g.get("pos", 0) or 0) >= len(g["reihe"]):
+            self._neue_rotation(g, mess, sammlung)
+        pos = int(g.get("pos", 0) or 0)
+        n = PROBELAUF_FRAGEN if probelauf else RUNDE_FRAGEN
+        teil = [k for k in g["reihe"][pos:pos + n] if k in nach]
+        heute = _tag(self._jetzt())
+        tagesfragen = not probelauf and g.get("tagesfragen_tag") != heute
+        if tagesfragen:
+            g["tagesfragen_tag"] = heute
+        offen = {"id": "r" + secrets.token_hex(4), "kennungen": teil, "bau": bau, "fassung": fassung, "durchgang": dg["id"],
+                 "nummer": len(dg["runden"]) + 1, "rotation": g["rotation"], "pos_vorher": pos,
+                 "pos_bis": min(len(g["reihe"]), pos + n), "von_gesamt": len(g["reihe"]),
+                 "letzte": pos + n >= len(g["reihe"]), "tagesfragen": tagesfragen, "probelauf": probelauf, "seit": _jetzt()}
+        g["pos"], g["offen"] = pos + n, offen
+        d["geraete"][geraet] = g
+        self._runden_speichern(d)
+        return self._runde_fragen(offen, nach)
+
+    def _runde_fragen(self, offen: dict, nach: dict) -> dict:
+        fragen = [{"kennung": k, "frage": nach[k]["frage"]} for k in offen.get("kennungen") or [] if k in nach]
+        if offen.get("tagesfragen"):
+            fragen = self.fragen_fuer_geraet() + fragen
+        info = {k: offen.get(k) for k in ("id", "durchgang", "nummer", "rotation", "pos_bis", "von_gesamt", "letzte", "probelauf")}
+        return {"runde": {**info, "von": DURCHGANG_RUNDEN, "messfragen": len(offen.get("kennungen") or [])}, "fragen": fragen}
+
+    def runde_annehmen(self, geraet: str, geraet_name: str, runde_id: str, antworten: list) -> dict:
+        geraet = str(geraet)[:40]
+        d = self._runden_laden()
+        g = d["geraete"].get(geraet) if isinstance(d["geraete"].get(geraet), dict) else {}
+        offen = g.get("offen") if isinstance(g.get("offen"), dict) else None
+        zuletzt = g.get("zuletzt") if isinstance(g.get("zuletzt"), dict) else {}
+        if zuletzt.get("runde") == str(runde_id)[:20]:
+            return {**zuletzt, "mails": [], "wiederholt": True}
+        if offen is None or offen.get("id") != str(runde_id)[:20]:
+            raise PruefstandError("RUNDE_UNBEKANNT", "diese Prüfrunde ist am Server nicht offen (schon gemeldet oder durch einen neuen Bau ersetzt)")
+        mess = {f["kennung"]: f for f in messreihe_laden()}
+        dabei = set(offen.get("kennungen") or [])
+        gemessen, gesehen = [], set()
+        for a in antworten[:MAX_FRAGEN + MESSREIHE_MAX]:
+            k = str(a.get("kennung", "")) if isinstance(a, dict) else ""
+            if k in dabei and k in mess and k not in gesehen:
+                gesehen.add(k)
+                gemessen.append(mess_frage(mess[k], a))
+        if not gemessen:
+            raise PruefstandError("RUNDE_LEER", "keine der Antworten gehört zu dieser Prüfrunde")
+        meta = {"runde": offen["id"], "durchgang": offen.get("durchgang"), "nummer": offen.get("nummer"), "rotation": offen.get("rotation"),
+                "bau": offen.get("bau", ""), "fassung": offen.get("fassung", ""), "fehlen": len(dabei - gesehen)}
+        b = {"zeit": _jetzt(), "tag": _tag(self._jetzt()), "geraet": geraet, "geraet_name": _norm(geraet_name)[:60]}
+        neu = self._messreihe_ablegen(b, gemessen, runde=meta)
+        dg = g.get("durchgang") if isinstance(g.get("durchgang"), dict) else {}
+        voll = False
+        if dg.get("id") == offen.get("durchgang"):
+            dg["runden"] = list(dg.get("runden") or []) + [offen["id"]]
+            voll = len(dg["runden"]) >= DURCHGANG_RUNDEN
+        g["offen"] = None
+        g["zuletzt"] = {k: v for k, v in neu.items() if k != "fragen"}
+        if offen.get("letzte"):
+            g["durchgang"] = None
+        d["geraete"][geraet] = g
+        self._runden_speichern(d)
+        mails = []
+        if offen.get("letzte"):
+            mails.append(self.runden_mail(self.runden_stand(geraet, rotation=offen.get("rotation")), "rotation"))
+        elif voll:
+            mails.append(self.runden_mail(self.runden_stand(geraet, durchgang=dg["id"]), "durchgang"))
+        return {**{k: v for k, v in neu.items() if k != "fragen"}, "mails": mails}
+
+    def runden_stand(self, geraet: str, *, durchgang: str | None = None, rotation: int | None = None) -> dict:
+        je: dict[str, dict] = {}
+        runden, bauten, name, zeit = 0, [], "", ""
+        for x in self._messreihe_berichte():
+            if x.get("geraet") != geraet or not x.get("runde") or x.get("modell"):
+                continue
+            if (durchgang is not None and x.get("durchgang") != durchgang) or (rotation is not None and x.get("rotation") != rotation):
+                continue
+            runden += 1
+            name, zeit = x.get("geraet_name") or name, x.get("zeit") or zeit
+            if x.get("bau") and x["bau"] not in bauten:
+                bauten.append(x["bau"])
+            for f in x.get("fragen") or []:
+                if isinstance(f, dict) and f.get("kennung"):
+                    je[str(f["kennung"])] = f
+        fragen = list(je.values())
+        return {"geraet": geraet, "geraet_name": name, "zeit": zeit, "tag": str(zeit)[:10], "runden": runden, "bauten": bauten,
+                "rotation": rotation, "durchgang": durchgang, "fragen": fragen, "je_art": self._je_art(fragen, set()),
+                "je_klasse": self._je_art(fragen, set(), feld="klasse"), "richtig": sum(1 for f in fragen if f.get("richtig")),
+                "gesamt": len(fragen), "ohne_antwort": sum(1 for f in fragen if ohne_antwort(f.get("antwort")))}
+
 
     def messreihe_probe_annehmen(self, geraet: str, geraet_name: str, antworten, modell: str) -> dict:
         if not isinstance(antworten, list) or not antworten:
@@ -496,12 +648,7 @@ class Pruefstand:
             mf = mess.get(str(a.get("kennung", ""))) if isinstance(a, dict) else None
             if mf is None:
                 continue
-            try:
-                ms = round(max(0.0, min(float(a.get("dauer_s", 0) or 0), 3600.0)), 1)
-            except (TypeError, ValueError):
-                ms = 0.0
-            gemessen.append({"kennung": mf["kennung"], "art": mf["art"], "frage": mf["frage"], "richtig": messreihe_bewerten(mf, a.get("antwort", "")),
-                             "antwort": _norm(a.get("antwort", ""))[:MAX_ANTWORT], "dauer_s": ms})
+            gemessen.append(mess_frage(mf, a))
         if not gemessen:
             raise PruefstandError("PRUEFSTAND_UNBEKANNT", "keine der Antworten gehört zur Messreihe")
         b = {"zeit": _jetzt(), "tag": _tag(self._jetzt()), "geraet": str(geraet)[:40], "geraet_name": _norm(geraet_name)[:60]}
@@ -510,89 +657,96 @@ class Pruefstand:
         vorher = next((x for x in reversed(berichte[:-1]) if x.get("geraet") == neu["geraet"] and not x.get("modell") and x.get("tag") == neu["tag"]
                        and vollstaendig(x)), None)
         e = {"probe": {k: v for k, v in neu.items() if k != "fragen"}, "vorher": {k: v for k, v in vorher.items() if k != "fragen"} if vorher else None}
-        naechte = sum(1 for x in berichte if x.get("modell") == modell)
-        if not vorher and naechte < PROBE_NAECHTE_MAX:
-            morgen = (self._jetzt().astimezone().date() + timedelta(days=1)).isoformat()
-            self.messreihe_nacht_bestellen(morgen)
-            e["nochmal"] = morgen
         if vorher:
             raus = ohne_suche_raus(neu["fragen"], list(vorher.get("fragen") or []))
             e["median"] = {"probe": _median_s(neu["fragen"]), "vorher": _median_s(vorher.get("fragen") or [])}
-            e["ohne_suche"] = {"raus": len(raus), "probe": self._je_art(neu["fragen"], raus), "vorher": self._je_art(vorher.get("fragen") or [], raus)}
+            e["ohne_suche"] = {"raus": len(raus), "probe": self._je_art(neu["fragen"], raus), "vorher": self._je_art(vorher.get("fragen") or [], raus),
+                               "probe_klasse": self._je_art(neu["fragen"], raus, feld="klasse"),
+                               "vorher_klasse": self._je_art(vorher.get("fragen") or [], raus, feld="klasse")}
             e["ohne_suche"]["unsicher"] = unsicher(neu["fragen"], raus)
-            if e["ohne_suche"]["unsicher"] and naechte < PROBE_NAECHTE_MAX:
-                morgen = (self._jetzt().astimezone().date() + timedelta(days=1)).isoformat()
-                self.messreihe_nacht_bestellen(morgen)
-                e["nochmal"] = morgen
         return e
 
     @staticmethod
-    def _je_art(fragen: list, raus: set) -> dict:
+    def _je_art(fragen: list, raus: set, *, feld: str = "art") -> dict:
         je_art: dict = {}
         for x in fragen:
-            if not isinstance(x, dict) or x.get("kennung") in raus or "art" not in x:
+            if not isinstance(x, dict) or x.get("kennung") in raus or not x.get(feld):
                 continue
-            a = je_art.setdefault(str(x["art"]), {"richtig": 0, "gesamt": 0})
+            a = je_art.setdefault(str(x[feld]), {"richtig": 0, "gesamt": 0})
             a["gesamt"] += 1
             a["richtig"] += 1 if x.get("richtig") else 0
         return je_art
 
     @staticmethod
-    def nacht_mail(neu: dict, vorher: dict | None) -> tuple[str, str]:
+    def runden_mail(neu: dict, art: str) -> tuple[str, str]:
         import statistics
-        namen = (("wissen", "Wissen"), ("alltag", "Alltag und Praxis"), ("alltag_en", "Alltag und Praxis auf Englisch"), ("erfunden", "Erfundenes erkennen"),
-                 ("rueckfrage", "Nachfragen"), ("grenze", "Formatvorgaben"))
         fr = neu.get("fragen") or []
-        tag = str(neu.get("tag", ""))[:10]
-        try:
-            tag_de = datetime.strptime(tag, "%Y-%m-%d").strftime("%d.%m.%Y")
-        except ValueError:
-            tag_de = tag
-        zuvor = f" (davor {vorher.get('richtig')})" if vorher and vorher.get("gesamt") == neu.get("gesamt") else ""
-        betreff = f"KIplatz Prüfnacht {tag_de}: {neu.get('richtig')} von {neu.get('gesamt')} richtig{zuvor}"
-        zeilen = [f"Die Prüfung von {neu.get('geraet_name') or 'dem Admin-PC'} ist fertig: {neu.get('richtig')} von {neu.get('gesamt')} Fragen richtig{zuvor}.", ""]
-        for art, name in namen:
-            x = (neu.get("je_art") or {}).get(art)
+        rotation = art == "rotation"
+        wer = neu.get("geraet_name") or "dem Admin-PC"
+        bauten = ", ".join(neu.get("bauten") or []) or "unbekannt"
+        if rotation:
+            betreff = f"KIplatz Prüfung: alle {neu.get('gesamt')} Fragen durch, {neu.get('richtig')} richtig"
+            zeilen = [f"Alle Fragen der Prüfsammlung sind einmal beantwortet ({neu.get('runden')} Runden auf {wer}, Bau {bauten}): "
+                      f"{neu.get('richtig')} von {neu.get('gesamt')} richtig.", ""]
+            if len(neu.get("bauten") or []) > 1:
+                zeilen += ["Achtung: die Runden liefen mit verschiedenen Bauten, die Zahlen mischen sie.", ""]
+        else:
+            betreff = f"KIplatz Prüfung: Zwischenstand nach {neu.get('runden')} Runden, {neu.get('richtig')} von {neu.get('gesamt')} richtig"
+            zeilen = [f"Zwischenstand von {wer} (Bau {bauten}) nach {neu.get('runden')} Runden: {neu.get('richtig')} von {neu.get('gesamt')} Fragen richtig. "
+                      "Die Grenzen „gut genug“ gelten erst, wenn alle Fragen einmal dran waren.", ""]
+        aussage = ("wissen", "alltag", "alltag_en", "erfunden")
+        for a, name, feld in [(a, n, "je_art") for a, n in ARTEN_NAMEN] + [(k, n, "je_klasse") for k, n in KLASSEN_NAMEN]:
+            x = (neu.get(feld) or {}).get(a)
             if not x:
                 continue
-            v = ((vorher or {}).get("je_art") or {}).get(art) or {}
-            dazu = f" (davor {v.get('richtig')})" if v.get("gesamt") == x.get("gesamt") else ""
-            zeilen.append(f"{name}: {x.get('richtig')} von {x.get('gesamt')}{dazu}")
+            klein = not rotation and (feld == "je_klasse" or a not in aussage)
+            zeilen.append(f"{name}: {x.get('richtig')} von {x.get('gesamt')}" + (" (zu wenige Fragen für ein Urteil)" if klein else ""))
         ohne = sum(1 for f in fr if suche_aus(f.get("antwort")))
         neu_geschrieben = sum(1 for f in fr if "neu geantwortet" in str(f.get("notiz") or ""))
         mit_notiz = sum(1 for f in fr if f.get("notiz"))
         d = sorted(float(f.get("dauer_s") or 0) for f in fr)
         leer = sum(1 for f in fr if ohne_antwort(f.get("antwort")))
         if leer > max(5, OHNE_ANTWORT_ANTEIL * len(fr)):
-            betreff = betreff.replace("Prüfnacht", "Prüfnacht UNVOLLSTÄNDIG", 1)
+            betreff = betreff.replace("Prüfung", "Prüfung UNVOLLSTÄNDIG", 1)
             zeilen.insert(0, f"Achtung: {leer} von {len(fr)} Fragen blieben ohne Antwort (die KI war aus oder der Lauf brach ab). "
                              "Diese Zahlen messen nicht die KI und zählen nie als Vergleich.")
             zeilen.insert(1, "")
         zeilen += ["", f"Ohne Suche beantwortet: {ohne}"]
+        if any("laenge" in f for f in fr):
+            bekannt = [f for f in fr if f.get("art") in BEKANNT]
+            zeilen.append(f"„Weiß nicht“ bei Bekanntem: {sum(1 for f in bekannt if f.get('weiss_nicht'))} von {len(bekannt)}")
+            laengen = sorted(int(f.get("laenge") or 0) for f in fr if f.get("art") in ("alltag", "alltag_en"))
+            if laengen:
+                zeilen.append(f"Länge der Alltagsantworten: Mitte {laengen[len(laengen) // 2]} Zeichen")
         if mit_notiz:
             zeilen.append(f"Neu geschrieben: {neu_geschrieben} von {mit_notiz} Antworten mit Notiz")
         if d:
             zeilen.append(f"Antwortzeit: die Hälfte unter {statistics.median(d):.1f} s, 9 von 10 unter {d[int(len(d) * 0.9)]:.1f} s".replace(".", ","))
-        zeilen += ["", "Ausgerollt wird damit nichts. Die genaue Auswertung macht der Chat am Morgen (werkzeuge/messnacht_vergleich.py)."]
+        schritte: dict[str, int] = {}
+        for f in fr:
+            for s, n in ((f.get("weg") or {}).get("schritte") or {}).items():
+                schritte[s] = schritte.get(s, 0) + int(n or 0)
+        if schritte:
+            zeilen.append("Zeit je Schritt, zusammen: " + ", ".join(f"{s} {n // 60} min" for s, n in sorted(schritte.items(), key=lambda x: -x[1])[:6]))
+        zeilen += ["", "Ausgerollt wird damit nichts." + (" Die genaue Auswertung: werkzeuge/messnacht_vergleich.py." if rotation else "")]
         return betreff, "\n".join(zeilen)
 
     @staticmethod
     def probe_mail(e: dict) -> tuple[str, str]:
         p, v = e["probe"], e.get("vorher")
-        namen = (("wissen", "Wissen"), ("alltag", "Alltag und Praxis"), ("alltag_en", "Alltag und Praxis auf Englisch"), ("erfunden", "Erfundenes erkennen"),
-                 ("rueckfrage", "Nachfragen"), ("grenze", "Formatvorgaben"))
+        namen = ARTEN_NAMEN
         os_ = e.get("ohne_suche") or {}
         raus = int(os_.get("raus", 0) or 0)
 
-        def zahl(b, art):
-            x = (b or {}).get("je_art", {}).get(art, {})
+        def zahl(b, art, feld="je_art"):
+            x = (b or {}).get(feld, {}).get(art, {})
             return int(x.get("richtig", 0)), int(x.get("gesamt", 0))
 
         if v and raus:
             gesamt_p, gesamt_v = dict(p), dict(v)
-            p = {**p, "je_art": os_["probe"], "richtig": sum(x["richtig"] for x in os_["probe"].values()),
+            p = {**p, "je_art": os_["probe"], "je_klasse": os_.get("probe_klasse") or {}, "richtig": sum(x["richtig"] for x in os_["probe"].values()),
                  "gesamt": sum(x["gesamt"] for x in os_["probe"].values())}
-            v = {**v, "je_art": os_["vorher"], "richtig": sum(x["richtig"] for x in os_["vorher"].values()),
+            v = {**v, "je_art": os_["vorher"], "je_klasse": os_.get("vorher_klasse") or {}, "richtig": sum(x["richtig"] for x in os_["vorher"].values()),
                  "gesamt": sum(x["gesamt"] for x in os_["vorher"].values())}
             p["_alle"], v["_alle"] = gesamt_p, gesamt_v
 
@@ -606,10 +760,12 @@ class Pruefstand:
         zeilen = [f"heute Nacht hat {p.get('geraet_name') or 'der Admin-PC'} die Messreihe mit der nachtrainierten Fassung {p['modell']} beantwortet, "
                   "im echten Programm mit Gemeinschaftswissen und Suche. Ausgerollt ist nichts.", ""]
         schlechter = []
-        for art, name in namen:
-            r, g = zahl(p, art)
+        reihen = [(art, name, "je_art") for art, name in namen]
+        reihen += [(k, name, "je_klasse") for k, name in KLASSEN_NAMEN if k in (p.get("je_klasse") or {}) or k in ((v or {}).get("je_klasse") or {})]
+        for art, name, feld in reihen:
+            r, g = zahl(p, art, feld)
             if v:
-                rv, gv = zahl(v, art)
+                rv, gv = zahl(v, art, feld)
                 zeilen.append(f"{name}: vorher {rv} von {gv}, mit der Fassung {r} von {g}")
                 if gv and g and r / g < rv / gv:
                     schlechter.append(name)
@@ -628,23 +784,17 @@ class Pruefstand:
                 zeilen.append(f"Bei {raus} Frage{'n' if raus != 1 else ''} hätte ein Ausfall der Internetsuche die Fassung besser aussehen lassen. Sie sind oben nicht "
                               f"mitgezählt; Ausfälle, die nur gegen die Fassung sprechen, bleiben drin. Mit allen: vorher {b_.get('richtig')} von {b_.get('gesamt')}, "
                               f"mit der Fassung {a.get('richtig')} von {a.get('gesamt')}.")
-            if e.get("nochmal"):
-                zeilen.append(f"Das sind zu viele für ein sicheres Urteil. Der PC misst die Fassung darum in der Nacht auf den "
-                              f"{e['nochmal'][8:10]}.{e['nochmal'][5:7]}. von selbst noch einmal.")
-                betreff = f"KIplatz-Training: Messung unsicher, die Suche fiel {raus}-mal aus; nächste Nacht noch einmal"
-            elif os_.get("unsicher", raus > PROBE_UNSICHER_AB):
-                zeilen.append(f"Das sind zu viele für ein sicheres Urteil, und die Fassung wurde schon {PROBE_NAECHTE_MAX} Nächte gemessen. "
-                              "Von selbst misst der PC sie nicht mehr; bitte im Chat sagen, wie es weitergeht.")
-                betreff = f"KIplatz-Training: Messung unsicher, die Suche fiel {raus}-mal aus; keine weitere Nacht"
+            if os_.get("unsicher", raus > PROBE_UNSICHER_AB):
+                zeilen.append("Das sind zu viele für ein sicheres Urteil. Von selbst misst der PC die Fassung nicht noch einmal; bitte im Chat sagen, "
+                              "wie es weitergeht.")
+                betreff = f"KIplatz-Training: Messung unsicher, die Suche fiel {raus}-mal aus"
             else:
                 betreff = ("KIplatz-Training: Fassung " + ("besser" if besser and not langsamer else "nicht freigabereif")
                            + f" ({p.get('richtig')} statt {v.get('richtig')}" + (f", ohne {raus} Frage{'n' if raus != 1 else ''} ohne Suche" if raus else "") + ")")
         else:
             zeilen.append(f"Gesamt: {p.get('richtig')} von {p.get('gesamt')}. Einen Lauf mit dem Modell aus dem Katalog in derselben Nacht "
                           "gab es nicht; mit einer anderen Nacht wird nicht verglichen, weil die Suche dort anders lief.")
-            if e.get("nochmal"):
-                zeilen.append(f"Der PC misst die Fassung darum in der Nacht auf den {e['nochmal'][8:10]}.{e['nochmal'][5:7]}. von selbst noch einmal.")
-            betreff = "KIplatz-Training: Fassung gemessen, ohne Vergleich derselben Nacht" + ("; nächste Nacht noch einmal" if e.get("nochmal") else "")
+            betreff = "KIplatz-Training: Fassung gemessen, ohne Vergleich derselben Nacht"
         zeilen += ["", "Soll die Fassung zu allen PCs, sag es im Chat. Von selbst geht sie nirgends hin.", "", "KIplatz"]
         return betreff, "Hallo,\n\n" + "\n".join(zeilen) + "\n"
 
@@ -706,4 +856,4 @@ class Pruefstand:
         return {**self.oeffentlich(), "fragen": self.fragen(), "letzter": self.letzter(), "mitglieder": self.mitglieder_stand()}
 
 
-__all__ = ["Pruefstand", "PruefstandError", "bewerten", "faellig", "START_FRAGEN", "FENSTER", "DECKUNG_AB", "SIEBEN", "DATEI"]
+__all__ = ["Pruefstand", "PruefstandError", "bewerten", "faellig", "runden_reihe", "START_FRAGEN", "DECKUNG_AB", "SIEBEN", "DATEI"]

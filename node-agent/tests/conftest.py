@@ -16,8 +16,10 @@ import ki_laufzeit
 ki_laufzeit.UNTERSCHRIFT_PRUEFEN = False
 ki_laufzeit.KARTE_ZAEHLER = False
 import app_web
+import grafik_last
 
-app_web.PRUEFSTAND_ABSTAND_S = 0.0
+grafik_last.BELEGT_ECHT = grafik_last.belegt
+grafik_last.belegt = lambda **_k: (False, "")
 
 import tempfile
 

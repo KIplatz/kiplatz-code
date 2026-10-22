@@ -831,9 +831,9 @@
               <p class="muted small">Nur Quellen, deren Bedingungen die Weiterverwendung mit Quellenangabe erlauben. robots.txt wird immer beachtet.</p></details></div>
           
           <div class="card" id="pruefstand-card"><h3>Prüfstand</h3>
-            <p class="muted small" style="margin-top:0">Jede Nacht zwischen 2 und 5 Uhr stellt dieses Gerät KIplatz die Prüffragen und meldet dem Server, wie viele richtig waren. Jede freigegebene Berichtigung wird von selbst eine Prüffrage.</p>
+            <p class="muted small" style="margin-top:0">Nebenbei, solange die Grafikkarte sonst frei ist, stellt dieses Gerät KIplatz bis zu 3 Prüfrunden am Tag zu je 100 Fragen und meldet dem Server, wie viele richtig waren. Braucht ein Spiel oder ein Video die Grafikkarte, wartet die Runde und macht danach dort weiter. Jede freigegebene Berichtigung wird von selbst eine Prüffrage.</p>
             <label class="switch"><input type="checkbox" id="pruefstand-an" disabled> <span id="pruefstand-text">Wird geladen …</span></label>
-            <div class="row" style="margin:8px 0;gap:8px"><button class="btn" id="btn-pruefstand-jetzt" type="button">Jetzt prüfen</button><span class="small muted" id="pruefstand-lauf"></span></div>
+            <div class="row" style="margin:8px 0;gap:8px"><button class="btn" id="btn-pruefstand-jetzt" type="button">Prüfrunde jetzt</button><button class="btn" id="btn-probelauf" type="button">Probelauf (24 Fragen)</button><span class="small muted" id="pruefstand-lauf"></span></div>
             <div class="row" style="margin:8px 0;gap:8px"><button class="btn" id="btn-kurztest" type="button">Training kurz testen</button><span class="small muted" id="kurztest-lauf"></span></div>
             <p class="small muted" style="margin:4px 0">Höchstens 10 Minuten. KIplatz gibt dafür die Grafikkarte frei, Fragen beantworten so lange andere PCs, danach startet KIplatz von selbst wieder.</p>
             <pre class="small" id="kurztest-bericht" hidden style="white-space:pre-wrap;margin:4px 0"></pre>
@@ -3265,17 +3265,22 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
   $("#btn-sammler-jetzt").addEventListener("click", () => { sag("Holt Seiten …"); api().sammler_jetzt().then((r) => nach(r, (d) => { zeichneSammler(d); sag(d.satz || "Fertig."); })); });
   $("#btn-sq-hinzu").addEventListener("click", () => { const q = { name: $("#sq-name").value.trim(), art: $("#sq-art").value, land: $("#sq-land").value, adresse: $("#sq-adresse").value.trim(), lizenz: $("#sq-lizenz").value.trim(), fachgebiet: $("#sq-fachgebiet").value, aktiv: true }; if (!q.adresse) { sag("Bitte eine Adresse eintragen."); return; } api().sammler_setzen({ quelle: q }).then((r) => nach(r, (d) => { zeichneSammler(d); ["#sq-name", "#sq-adresse", "#sq-lizenz"].forEach((id) => { $(id).value = ""; }); })); });
 
+  let pruefstandTimer = null;
   function zeichnePruefstand(p) {
     if (!p) return;
     $("#pruefstand-an").checked = !!p.an; $("#pruefstand-an").disabled = false;
     $("#pruefstand-text").textContent = p.an ? "Prüfstand läuft auf diesem Gerät" : "Prüfstand ist auf diesem Gerät aus";
-    $("#pruefstand-lauf").textContent = p.laeuft ? "Läuft gerade …" : "";
+
+    const fs = p.fortschritt;
+    $("#pruefstand-lauf").textContent = p.laeuft ? (fs ? `Frage ${Math.min(fs.n + 1, fs.von)} von ${fs.von} …` : "Läuft gerade …") : (p.an ? `Heute ${p.runden_heute || 0} von ${p.runden_tag || 3} Prüfrunden.` : "");
+    clearTimeout(pruefstandTimer);
+    if (p.laeuft) pruefstandTimer = setTimeout(() => api().pruefstand_stand().then((r) => { if (r.ok) zeichnePruefstand(r.daten); }), 10000);
     const l = p.letzter;
 
     const z = l && l.zufall;
     const zText = z && z.fragen && z.fragen.length ? `<details style="margin-top:6px"><summary style="cursor:pointer">Dazu ${z.fragen.length} Zufallsfragen aus Deutschland, Österreich und der Schweiz: ${z.belegt || 0} belegt, ${z.offen || 0} offen, ${z.fraglich || 0} fraglich${z.richtig || z.falsch ? `, ${z.richtig || 0} richtig, ${z.falsch || 0} falsch` : ""}</summary>${z.fragen.map((x) => `<div class="small" style="margin:4px 0"><b>${esc(x.frage)}</b> · ${esc(x.urteil)}${x.grund ? " (" + esc(x.grund) + ")" : ""}${x.erwartet ? " · richtig wäre: " + esc(x.erwartet) : ""}<br><span class="muted">${esc(x.antwort.length > 240 ? x.antwort.slice(0, 240) + "…" : x.antwort)}</span></div>`).join("")}<div class="muted small">„Belegt“ heißt: die Antwort stützt sich auf gefundene Seiten, und die Prüfung fand keinen Satz ohne Beleg. Nachgeprüft hat das niemand.</div></details>` : "";
-    $("#pruefstand-stand").innerHTML = (l ? `Zuletzt ${esc(wann(l.zeit))}: <b>${l.richtig} von ${l.gesamt}</b> Prüffragen richtig, ${l.wege_ok} von ${l.wege_gesamt} Wege in Ordnung, ${Math.round(l.dauer_s)} s (${esc(l.geraet_name || l.geraet || "")}).` : "Noch keine Nacht gelaufen.") + (p.hinweis ? ` <b>${esc(p.hinweis)}</b>` : ` ${p.naechte || 0} von 7 Nächten für die Website.`) + zText
-      + ((p.mitglieder || []).length ? `<br>PCs von Mitgliedern, die sich nachts prüfen: ${p.mitglieder.length}, davon ${p.mitglieder.filter((m) => m.hinten).length} hinten gereiht.` : "")
+    $("#pruefstand-stand").innerHTML = (l ? `Zuletzt ${esc(wann(l.zeit))}: <b>${l.richtig} von ${l.gesamt}</b> Prüffragen richtig, ${l.wege_ok} von ${l.wege_gesamt} Wege in Ordnung, ${Math.round(l.dauer_s)} s (${esc(l.geraet_name || l.geraet || "")}).` : "Noch keine Prüfung gelaufen.") + (p.hinweis ? ` <b>${esc(p.hinweis)}</b>` : ` ${p.naechte || 0} von 7 Tagen für die Website.`) + zText
+      + ((p.mitglieder || []).length ? `<br>PCs von Mitgliedern, die sich selbst prüfen: ${p.mitglieder.length}, davon ${p.mitglieder.filter((m) => m.hinten).length} hinten gereiht.` : "")
       + (p.training ? `<br>Lernstoff für später: ${p.training.vertiefungen} geprüfte Vertiefungen, ${p.training.daumen_hoch} Antworten mit Daumen hoch, ${p.training.berichtigungen} Berichtigungen.` : "");
 
 
@@ -3283,13 +3288,16 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
     const mit = (p.fragen || []).map((f) => [f, l && (l.fragen || []).find((x) => x.kennung === f.kennung)]);
     const falsch = mit.filter(([, e]) => e && !e.richtig), richtig = mit.filter(([, e]) => e && e.richtig), offen = mit.filter(([, e]) => !e);
     $("#pruefstand-liste").innerHTML = !mit.length ? '<span class="muted small">Keine Prüffragen.</span>'
-      : (falsch.length ? `<div class="pf-titel">Falsch beantwortet (${falsch.length})</div><div class="pf-gitter">${falsch.map(([f, e]) => zeile(f, e)).join("")}</div>` : `<p class="small" style="margin:14px 0 0">${l ? "In der letzten Nacht wurde keine Prüffrage falsch beantwortet." : "Noch keine Nacht gelaufen."}</p>`)
+      : (falsch.length ? `<div class="pf-titel">Falsch beantwortet (${falsch.length})</div><div class="pf-gitter">${falsch.map(([f, e]) => zeile(f, e)).join("")}</div>` : `<p class="small" style="margin:14px 0 0">${l ? "Bei der letzten Prüfung wurde keine Prüffrage falsch beantwortet." : "Noch keine Prüfung gelaufen."}</p>`)
       + (offen.length ? `<div class="pf-titel">Noch nicht gestellt (${offen.length})</div><div class="pf-gitter">${offen.map(([f]) => zeile(f, null)).join("")}</div>` : "")
       + (richtig.length ? `<details class="pf-richtig"><summary>Richtig beantwortet (${richtig.length}) anzeigen</summary><div class="pf-gitter">${richtig.map(([f, e]) => zeile(f, e)).join("")}</div></details>` : "");
     document.querySelectorAll("[data-pf-weg]").forEach((b) => b.addEventListener("click", () => { if (confirm("Diese Prüffrage entfernen?")) api().pruefstand_setzen({ entfernen: b.dataset.pfWeg }).then((r) => nach(r, zeichnePruefstand)); }));
   }
   $("#pruefstand-an").addEventListener("change", () => api().pruefstand_setzen({ an: $("#pruefstand-an").checked }).then((r) => nach(r, zeichnePruefstand)));
-  $("#btn-pruefstand-jetzt").addEventListener("click", () => { api().pruefstand_jetzt().then((r) => nach(r, () => { $("#pruefstand-lauf").textContent = "Läuft gerade …"; })); });
+
+  const pruefenStarten = (probelauf) => api().pruefstand_jetzt(probelauf).then((r) => nach(r, () => { $("#pruefstand-lauf").textContent = "Läuft gerade …"; api().pruefstand_stand().then((r2) => { if (r2.ok) zeichnePruefstand(r2.daten); }); }));
+  $("#btn-pruefstand-jetzt").addEventListener("click", () => pruefenStarten(false));
+  $("#btn-probelauf").addEventListener("click", () => pruefenStarten(true));
 
   function kurztestZeigen() {
     api().kurztest_stand().then((r) => {

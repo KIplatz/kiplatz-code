@@ -62,6 +62,7 @@ import antwortspeicher_basis
 import belege
 import stellen
 import wikipedia
+import grafik_last
 import geheim
 import messwerte
 import vorlesen
@@ -108,7 +109,8 @@ GROUND = "#f4f6f5"
 KI_WARTEN_S = 180
 WARTEN_TAKT_S = 0.7
 ABHOLEN_WARTEN_S = 10.0
-UPDATE_NACHT_HOECHSTENS_S = 12 * 3600
+UPDATE_PRUEFRUNDE_HOECHSTENS_S = 30 * 60
+PRUEFRUNDE_NACH_FEHLER_S = 10 * 60
 UPDATE_ANTWORT_HOECHSTENS_S = 600
 ABHOLEN_FEHLVERSUCHE = 2
 KNAPP_TREFFER = 2
@@ -124,12 +126,14 @@ KURZTEST_HOECHSTENS_S = 9 * 60
 TRAINING_NACHHOLEN_NAECHTE = 2
 TRAINING_NACHHOLEN_BIS = 12
 TRAINING_VERSUCHE = 4
+TRAINING_VORSCHAU = ("Die Zahlen des Trainingswerkzeugs sind eine Vorschau ohne nachgeschlagene Stellen, nicht wie im Programm. "
+                     "Ob eine Fassung besser ist, entscheidet nur die Probe im Programm.")
 TRAINING_OFFEN_TAGE = 2
 PRUEFSTAND_VERSUCHE = 3
-PRUEFSTAND_ABSTAND_S = 12.0
 PRUEFSTAND_HOCHLADEN_VERSUCHE = 3
 PRUEFSTAND_HOCHLADEN_WARTE_S = 60.0
-PRUEFSTAND_NOCHMAL_S = 30 * 60
+PRUEFSTAND_ANHALTEN_S = 10.0
+PRUEFEN_PAUSIERT_TEXT = "Prüfen und Training sind am Server pausiert, bis die Community genug freie Rechner hat."
 MESS_SUCHE_ABSTAND_S = 40.0
 MESS_SUCHEN_NACHT_MAX = 400
 PRUEFSTAND_AB_B = 8.0
@@ -328,25 +332,21 @@ def tagesbilanz_satz(heute: dict, tag=None) -> str:
     return _SATZ_AM_TAG[tag.weekday()].format(tag.strftime("%d.%m."), liste, verdient)
 
 
-ZWISCHENSTAND_GUELTIG_S = 26 * 3600
-
-
 class _Zwischenstand:
 
     def __init__(self, pfad: Path, art: str):
         self.pfad, self.art = Path(pfad), art
 
-    def laden(self) -> tuple[dict, dict, bool]:
+    def laden(self) -> tuple[dict, bool]:
         eintraege: dict = {}
-        memo: dict = {}
         gemeldet = False
         try:
             zeilen = self.pfad.read_text(encoding="utf-8").splitlines()
             kopf = json.loads(zeilen[0]) if zeilen else {}
         except (OSError, ValueError, UnicodeDecodeError):
-            return {}, {}, False
-        if kopf.get("art") != self.art or time.time() - float(kopf.get("begonnen", 0) or 0) > ZWISCHENSTAND_GUELTIG_S:
-            return {}, {}, False
+            return {}, False
+        if kopf.get("art") != self.art:
+            return {}, False
         for z in zeilen[1:]:
             try:
                 d = json.loads(z)
@@ -356,18 +356,13 @@ class _Zwischenstand:
                 gemeldet = True
             elif isinstance(d.get("eintrag"), dict) and d.get("kennung"):
                 eintraege[str(d["kennung"])] = (str(d.get("frage", "")), d["eintrag"])
-                if isinstance(d.get("memo"), list):
-                    memo[str(d["kennung"])] = {tuple(s): t for s, t in d["memo"] if isinstance(s, list)}
-        return eintraege, memo, gemeldet
+        return eintraege, gemeldet
 
     def beginnen(self) -> None:
         self._schreiben(json.dumps({"art": self.art, "begonnen": time.time()}) + "\n", "w")
 
-    def anhaengen(self, kennung: str, frage: str, eintrag: dict, memo: dict | None) -> None:
-        z = {"kennung": kennung, "frage": frage, "eintrag": eintrag}
-        if memo:
-            z["memo"] = [[list(s), t] for s, t in memo.items()]
-        self._schreiben(json.dumps(z, ensure_ascii=False) + "\n", "a")
+    def anhaengen(self, kennung: str, frage: str, eintrag: dict) -> None:
+        self._schreiben(json.dumps({"kennung": kennung, "frage": frage, "eintrag": eintrag}, ensure_ascii=False) + "\n", "a")
 
     def gemeldet(self) -> None:
         self._schreiben(json.dumps({"gemeldet": True}) + "\n", "a")
@@ -751,11 +746,12 @@ class Api:
                                                     frage_laeuft=lambda: getattr(self._rechen, "phase", "") == "antwortet")
         self._ki.pc_quellen = self._weitergeber.quellen
         self._community.bei_weitergeben = self._weitergeber.halter_auftrag
-        self._nacht_memo: dict | None = None
-        self._memo_frage, self._memo_nutzen = "", False
         self._mess_suche_zuletzt, self._mess_suchen, self._mess_suche_gemeldet = 0.0, 0, False
         self._mess_bremse = False
-        self._suche_ausgefallen = False
+        self._pruefrunde: dict | None = None
+        self._ruht_gemeldet = ""
+        self._pruefrunde_pause_bis = 0.0
+        self._runde_ruht_grund = ""
         self._mess_uhr, self._mess_schlafen = time.monotonic, time.sleep
         self._nachschauer = nachschauer or nachschauen.Nachschauer(suche_fn=lambda frage, **kw: self._websuche(frage, **kw))
         self._schnittstelle = schnittstelle.Schnittstelle(self._schnittstelle_antwort, self._schnittstelle_schluessel, log=lambda line: _log(core, line),
@@ -1454,126 +1450,104 @@ class Api:
     def pruefstand_an(self) -> bool:
         return bool(self._ki.einstellung().get("pruefstand_an", False))
 
-    def _pruefstand_lauf(self, *, erzwingen: bool = False) -> dict | None:
-        e = self._ki.einstellung()
-        if not erzwingen and not pruefstand.faellig(str(e.get("pruefstand_zuletzt", "")), datetime.now(), bis=pruefstand.ADMIN_NACHHOLEN_BIS):
-            return None
+    def _pruefrunden_heute(self) -> int:
+        e = self._ki.einstellung().get("pruefrunden")
+        return int(e.get("n", 0) or 0) if isinstance(e, dict) and e.get("tag") == datetime.now().strftime("%Y-%m-%d") else 0
+
+    def _karte_fremd(self) -> str:
+        r = grafik_last.belegt()
+        if r is not None:
+            return r[1] if r[0] else ""
+        try:
+            leer = self._rechen._leerlauf_s()
+        except Exception:
+            leer = None
+        return "" if (leer is not None and leer >= rechenarbeit.LEERLAUF_S) else "jemand arbeitet am PC, und die Last auf der Grafikkarte ist nicht messbar"
+
+    def _runde_ruht(self, grund: str) -> None:
+        if grund != getattr(self, "_ruht_gemeldet", ""):
+            self._ruht_gemeldet = grund
+            _log(self._core, f"INFO pruefstand: die Prüfrunde wartet, {grund}")
+
+    def _pruefstand_lauf(self, *, erzwingen: bool = False, probelauf: bool = False) -> dict | None:
         if self._pruefen_pausiert():
             if erzwingen:
-                raise app_core.AppError("PRUEFEN_PAUSIERT", "Prüfen und Training sind am Server pausiert, bis die Community genug freie Rechner hat.")
+                raise app_core.AppError("PRUEFEN_PAUSIERT", PRUEFEN_PAUSIERT_TEXT)
             return None
-        if not erzwingen and time.time() < float(e.get("pruefstand_nochmal_ab", 0) or 0):
-            return None
-        admin =self._community.ist_admin()
-        if not erzwingen and not admin and not pruefstand.faellig(str(e.get("pruefstand_zuletzt", "")), datetime.now()):
-            return None
+        admin = self._community.ist_admin()
+        e = self._ki.einstellung()
         if admin:
-            if not erzwingen and not self.pruefstand_an():
+            if not erzwingen and (not self.pruefstand_an() or self._pruefrunden_heute() >= pruefstand.DURCHGANG_RUNDEN):
                 return None
-        elif erzwingen or not PRUEFSTAND_MITGLIEDER or modell_stufe(self._ki.wahl.modell.name if self._ki.wahl else "") < PRUEFSTAND_AB_B:
+        elif (erzwingen or not PRUEFSTAND_MITGLIEDER or modell_stufe(self._ki.wahl.modell.name if self._ki.wahl else "") < PRUEFSTAND_AB_B
+              or not pruefstand.faellig(str(e.get("pruefstand_zuletzt", "")), datetime.now())):
             return None
-        self._ki.einstellung_setzen(pruefstand_zuletzt=datetime.now().strftime("%Y-%m-%d"))
-        nacht = admin and not erzwingen
-        probe_wartet = admin and ki_laufzeit.probemodell(self._ki.ordner, datetime.now().strftime("%Y-%m-%d")) is not None
-        probe_jetzt = erzwingen and probe_wartet
+        if not erzwingen:
+            if time.monotonic() < self._pruefrunde_pause_bis:
+                return None
+            fremd = self._karte_fremd()
+            if fremd:
+                self._runde_ruht(fremd)
+                return None
         try:
-            fragen = self._community.pruefstand_holen()
-        except Exception as exc:
-            if nacht:
-                self._probe_ausgefallen(f"die Prüffragen kamen nicht vom Server ({getattr(exc, 'detail', type(exc).__name__)})")
+            if admin:
+                fragen, runde = self._community.pruefrunde_holen(app_core.APP_BUILD, getattr(self._ki, "fassung", "") or "", probelauf=probelauf)
+            else:
+                self._ki.einstellung_setzen(pruefstand_zuletzt=datetime.now().strftime("%Y-%m-%d"))
+                fragen, runde = self._community.pruefstand_holen(), {}
+        except BaseException:
+            self._pruefrunde_fehlschlag("der Server gab keine Prüfrunde")
             raise
         if not fragen:
-            if nacht:
-                self._probe_ausgefallen("der Server gab keine Prüffragen")
+            self._pruefrunde_fehlschlag("der Server hat für dieses Gerät gerade keine Prüffragen")
             return None
-        if erzwingen and not self._rechen.anhalten(hoechstens_s=120.0):
-            raise app_core.AppError("PRUEFSTAND_BESCHAEFTIGT", "Die Rechenarbeit ist gerade mitten in einem Auftrag; bitte in einer Minute noch einmal.")
-        self._nacht_memo = {} if (nacht or probe_jetzt) else None
+        self._ruht_gemeldet = ""
         self._mess_suche_zuletzt, self._mess_suchen, self._mess_suche_gemeldet = 0.0, 0, False
         self._mess_bremse = True
         self._pruefung_seit = time.monotonic()
-        b = None
+        self._pruefrunde = {"n": 0, "von": len(fragen), "nummer": runde.get("nummer"), "runden": runde.get("von"),
+                            "rotation_bis": runde.get("pos_bis"), "rotation_von": runde.get("von_gesamt")}
+        self._runde_ruht_grund = ""
         try:
-            try:
-                b = self._pruefstand_fragen(fragen, erzwingen=erzwingen, probe_wartet=probe_wartet)
-            finally:
-                if erzwingen and not probe_jetzt:
-                    self._rechen.weiter()
+            b = self._pruefstand_fragen(fragen, runde=runde, erzwingen=erzwingen)
+        except BaseException:
+            self._pruefrunde_fehlschlag("die Prüfrunde brach mit einem Fehler ab")
+            raise
         finally:
-            if nacht or probe_jetzt:
-                try:
-                    self._probe_nacht(fragen, jetzt=probe_jetzt)
-                except Exception as exc:
-                    _log(self._core, f"FEHLER probemodell: {type(exc).__name__}: {str(exc)[:120]}")
-                finally:
-                    if probe_jetzt:
-                        self._rechen.weiter()
-            self._nacht_memo, self._memo_frage, self._memo_nutzen = None, "", False
             self._mess_bremse = False
             self._pruefung_seit = 0.0
-            if nacht and self._core.run_state() is not node_local_state.RunState.ACTIVE:
-                self._ki.einstellung_setzen(pruefstand_zuletzt="")
-                _log(self._core, "INFO pruefstand: unterbrochen (Pause oder Programmende), die Nacht wird heute nachgeholt")
-            elif nacht and b is None and not _Zwischenstand(Path(self._ki.ordner.ki_dir) / "pruefstand-zwischenstand.ndjson",
-                                                            f"standard:{app_core.APP_BUILD}").laden()[2]:
-                self._ki.einstellung_setzen(pruefstand_zuletzt="", pruefstand_nochmal_ab=time.time() + PRUEFSTAND_NOCHMAL_S)
-                _log(self._core, f"INFO pruefstand: die Nacht endete ohne Bericht; neuer Versuch in {PRUEFSTAND_NOCHMAL_S // 60} Minuten "
-                                 f"(bis {pruefstand.ADMIN_NACHHOLEN_BIS} Uhr), er setzt beim Zwischenstand fort")
+            self._pruefrunde = None
+        if b is None and self._runde_ruht_grund == "die KI ist ausgefallen":
+            self._pruefrunde_fehlschlag(self._runde_ruht_grund)
+        if b is not None and admin:
+            self._ki.einstellung_setzen(pruefrunden={"tag": datetime.now().strftime("%Y-%m-%d"), "n": self._pruefrunden_heute() + 1})
         return b
 
-    def _probe_ausgefallen(self, warum: str) -> None:
-        nacht = datetime.now().strftime("%Y-%m-%d")
-        probe = ki_laufzeit.probemodell(self._ki.ordner, nacht)
-        if probe is None:
-            return
-        ki_laufzeit.probemodell_erledigt(self._ki.ordner, nacht)
-        _log(self._core, f"ABGELEHNT probemodell {probe[1]['datei']}: {warum}")
-        try:
-            self._community.messreihe_ergebnis([], modell=probe[1]["datei"], fehler=warum)
-        except Exception as exc:
-            _log(self._core, f"FEHLER probemodell melden: {type(exc).__name__}")
+    def _pruefrunde_fehlschlag(self, grund: str) -> None:
+        self._pruefrunde_pause_bis = time.monotonic() + PRUEFRUNDE_NACH_FEHLER_S
+        _log(self._core, f"INFO pruefstand: {grund}; die nächste Prüfrunde frühestens in {PRUEFRUNDE_NACH_FEHLER_S // 60} Minuten")
 
     def _websuche(self, frage: str, **kw) -> list[dict]:
-        memo, k = self._nacht_memo, self._memo_frage
         vorrang = getattr(self._rechen, "vorrang", None)
-        bremse = getattr(self, "_mess_bremse", False)
-        if (getattr(self._rechen, "phase", "") not in ("prueft_selbst", "prueft_probe")
-                or (isinstance(vorrang, threading.Event) and vorrang.is_set())):
-            memo, bremse = None, False
-        schl = (" ".join(str(frage).lower().split()), str(kw.get("sprache", "")), str(kw.get("zeit", "")))
-        if memo is not None and k and self._memo_nutzen:
-            je = memo.get(k) or {}
-            alt = je[schl] if schl in je else (next((v for v in je.values() if v), []) if je else None)
-            if alt is not None:
-                return [dict(t) for t in alt]
-        pruef = (memo is not None or bremse) and not self._memo_nutzen
+        pruef = (getattr(self, "_mess_bremse", False) and getattr(self._rechen, "phase", "") == "prueft_selbst"
+                 and not (isinstance(vorrang, threading.Event) and vorrang.is_set()))
         if pruef:
             try:
                 gemerkt = self._community.websuche(frage, 8, **{**kw, "pruef": True, "nur_gemerkt": True})
             except Exception:
                 gemerkt = None
             if gemerkt is not None:
-                if memo is not None and k and not self._memo_nutzen:
-                    memo.setdefault(k, {})[schl] = [dict(t) for t in gemerkt]
                 return gemerkt
-        try:
-            if pruef:
-                self._mess_suche_budget(vorrang)
-            treffer = self._community.websuche(frage, 8, **({**kw, "pruef": True} if pruef else kw))
-        except Exception:
-            if pruef:
-                self._suche_ausgefallen = True
-            raise
-        if memo is not None and k and not self._memo_nutzen:
-            memo.setdefault(k, {})[schl] = [dict(t) for t in treffer]
-        return treffer
+            self._mess_suche_budget(vorrang)
+            return self._community.websuche(frage, 8, **{**kw, "pruef": True})
+        return self._community.websuche(frage, 8, **kw)
 
     def _mess_suche_budget(self, vorrang) -> None:
         if self._mess_suchen >= MESS_SUCHEN_NACHT_MAX:
             if not self._mess_suche_gemeldet:
                 self._mess_suche_gemeldet = True
-                _log(self._core, f"INFO pruefstand: {MESS_SUCHEN_NACHT_MAX} Internet-Suchen in dieser Nacht erreicht, weitere Prüffragen laufen ohne Suche")
-            raise app_core.AppError("SUCHE_GESCHONT", "Die Messnacht schont die Suchmaschinen; diese Prüffrage läuft ohne Suche.")
+                _log(self._core, f"INFO pruefstand: {MESS_SUCHEN_NACHT_MAX} Internet-Suchen in dieser Runde erreicht, weitere Prüffragen laufen ohne Suche")
+            raise app_core.AppError("SUCHE_GESCHONT", "Die Prüfrunde schont die Suchmaschinen; diese Prüffrage läuft ohne Suche.")
         jetzt = self._mess_uhr()
         ziel = self._mess_suche_zuletzt + MESS_SUCHE_ABSTAND_S if self._mess_suche_zuletzt else jetzt
         while jetzt < ziel:
@@ -1582,149 +1556,6 @@ class Api:
             self._mess_schlafen(min(0.5, ziel - jetzt))
             jetzt = self._mess_uhr()
         self._mess_suche_zuletzt, self._mess_suchen = jetzt, self._mess_suchen + 1
-
-    def _pruefstand_takt(self, letzt: float, *, mitglied: bool = True, abstand: float = PRUEFSTAND_ABSTAND_S) -> float:
-        ziel = letzt + abstand
-        while self._core.run_state() is node_local_state.RunState.ACTIVE and (time.time() < ziel or self._jemand_am_pc()):
-            if mitglied and getattr(self._rechen, "mitglied_jetzt", lambda: False)():
-                continue
-            time.sleep(min(0.5, max(0.0, ziel - time.time())) if time.time() < ziel else 5.0)
-        return time.time()
-
-    def _jemand_am_pc(self) -> bool:
-        if pruefstand.FENSTER[0] <= datetime.now().hour < pruefstand.FENSTER[1]:
-            return False
-        try:
-            leer = self._rechen._leerlauf_s()
-        except Exception:
-            leer = None
-        return leer is None or leer < rechenarbeit.LEERLAUF_S
-
-    def _probe_nacht(self, fragen: list, *, jetzt: bool = False) -> dict | None:
-        mess = [f for f in fragen if str(f.get("kennung", "")).startswith("m-")]
-        nacht = datetime.now().strftime("%Y-%m-%d")
-        probe = ki_laufzeit.probemodell(self._ki.ordner, nacht)
-        if probe is not None and not mess:
-            _log(self._core, f"INFO probemodell {probe[1]['datei']} wartet: in diesem Lauf kam keine Messreihe, nur Zufallsfragen")
-        if not mess or probe is None:
-            return None
-        if self._core.run_state() is not node_local_state.RunState.ACTIVE:
-            return None
-        pfad, info = probe
-        ki_laufzeit.probemodell_erledigt(self._ki.ordner, nacht)
-
-        def gescheitert(warum: str) -> None:
-            _log(self._core, f"ABGELEHNT probemodell {info['datei']}: {warum}")
-            try:
-                self._community.messreihe_ergebnis([], modell=info["datei"], fehler=warum)
-                ki_laufzeit.probemodell_gemeldet(self._ki.ordner, nacht)
-            except Exception as exc:
-                _log(self._core, f"FEHLER probemodell melden: {type(exc).__name__}")
-
-        if not ki_laufzeit.probe_pruefsumme_ok(pfad, info["sha256"]):
-            gescheitert("die Prüfsumme der Datei stimmt nicht")
-            return None
-        rechen = self._rechen
-        abgeben = getattr(rechen, "fragen_abgeben", lambda grund: None)
-        grund = "dieser PC prüft gerade eine nachtrainierte Fassung"
-        abgeben(grund)
-        vorher = rechen.phase
-        rechen.phase, rechen.meldung = "prueft_probe", "Prüft eine nachtrainierte Fassung. Fragen beantworten so lange andere PCs."
-        antworten: list[dict] = []
-        try:
-            self._ki.probe = (pfad, info["basis"])
-            self._ki.ausschalten()
-            try:
-                self._ki_starten_blockierend()
-            except app_core.AppError as exc:
-                gescheitert(f"die Fassung ließ sich nicht laden ({exc.detail})")
-                return None
-            if not self._ki.probe_geladen:
-                gescheitert("geladen wurde das Modell aus dem Katalog, nicht die Fassung (zu wenig Grafikspeicher?)")
-                return None
-            _log(self._core, f"OK probemodell {info['datei']} geladen, {len(mess)} Fragen der Messreihe")
-            takt = 0.0
-            zs = _Zwischenstand(Path(self._ki.ordner.ki_dir) / "probe-zwischenstand.ndjson", f"probe:{info['datei']}:{app_core.APP_BUILD}")
-            fertig, _m, _g = zs.laden()
-            if fertig:
-                _log(self._core, f"OK probemodell {info['datei']}: Zwischenstand gefunden, {len(fertig)} Fragen schon beantwortet; es geht dort weiter")
-            else:
-                zs.beginnen()
-            self._memo_nutzen = self._nacht_memo is not None
-            for f in mess:
-                if self._core.run_state() is not node_local_state.RunState.ACTIVE:
-                    break
-                alt = fertig.get(str(f.get("kennung", "")))
-                if alt is not None and alt[0] == str(f.get("frage", "")):
-                    antworten.append(alt[1])
-                    continue
-                takt = time.time() if jetzt else self._pruefstand_takt(takt, mitglied=False, abstand=0.0)
-                abgeben(grund)
-                t0 = time.time()
-                self._memo_frage = str(f.get("kennung", ""))
-                ki_aus = False
-                try:
-                    for mal in range(2):
-                        try:
-                            text, _schein = self._antwort_fuer_mitglied([{"role": "user", "content": str(f.get("frage", ""))}], [], "Prüfstand")
-                            ki_aus = False
-                            break
-                        except app_core.AppError as exc:
-                            text, ki_aus = f"(keine Antwort: {exc.detail})", exc.code == "KI_AUS"
-                            if not ki_aus or mal:
-                                break
-                            _log(self._core, f"INFO probemodell {info['datei']}: die KI war aus{self._ki_ende_grund()}, sie wird neu geladen")
-                            try:
-                                self._ki_starten_blockierend()
-                            except app_core.AppError:
-                                break
-                            if not self._ki.probe_geladen:
-                                break
-                finally:
-                    self._memo_frage = ""
-                if ki_aus:
-                    _log(self._core, f"ABGELEHNT probemodell {info['datei']}: die KI blieb aus; die Messung gilt als unterbrochen")
-                    break
-                antworten.append({"kennung": str(f.get("kennung", "")), "antwort": text, "dauer_s": round(time.time() - t0, 1)})
-                zs.anhaengen(str(f.get("kennung", "")), str(f.get("frage", "")), antworten[-1], None)
-        finally:
-            self._memo_nutzen = False
-            self._ki.probe = None
-            self._ki.ausschalten()
-            self._ki.probe_geladen = False
-            rechen.phase = vorher
-            try:
-                if self._core.run_state() is node_local_state.RunState.ACTIVE and self._kann_fuer_andere_antworten() and not getattr(self._ki, "gesperrt", ""):
-                    self._ki.einschalten()
-                    _log(self._core, "OK probemodell: das Modell aus dem Katalog lädt wieder")
-            except Exception as exc:
-                _log(self._core, f"INFO probemodell neu laden: {type(exc).__name__}")
-        if len(antworten) < len(mess):
-            if ki_laufzeit.probemodell_freigeben(self._ki.ordner, nacht):
-                _log(self._core, f"INFO probemodell {info['datei']}: unterbrochen nach {len(antworten)} von {len(mess)} Fragen, wird nachgeholt")
-            else:
-                gescheitert(f"die Nacht wurde unterbrochen (Pause oder Programmende) nach {len(antworten)} von {len(mess)} Fragen")
-            return None
-        b = None
-        for versuch in range(2):
-            try:
-                b = self._community.messreihe_ergebnis(antworten, modell=info["datei"])
-                ki_laufzeit.probemodell_gemeldet(self._ki.ordner, nacht)
-                _Zwischenstand(Path(self._ki.ordner.ki_dir) / "probe-zwischenstand.ndjson", "").loeschen()
-                _Zwischenstand(Path(self._ki.ordner.ki_dir) / "pruefstand-zwischenstand.ndjson", "").loeschen()
-                break
-            except app_core.AppError as exc:
-                if versuch:
-                    gescheitert(f"die Antworten kamen nicht am Server an ({exc.detail})")
-                    return None
-                time.sleep(30)
-        _log(self._core, f"OK probemodell {info['datei']}: {b.get('richtig')} von {b.get('gesamt')} richtig")
-        if b.get("nochmal"):
-            if ki_laufzeit.probemodell_nochmal(self._ki.ordner, nacht, str(b["nochmal"])):
-                _log(self._core, f"OK probemodell {info['datei']}: Messung unsicher, noch einmal in der Nacht {str(b['nochmal'])[:10]}")
-            else:
-                gescheitert("die weitere Nacht ließ sich am PC nicht eintragen (ki/probemodell.json)")
-        return b
 
 
     def _pruefen_pausiert(self) -> bool:
@@ -1805,7 +1636,7 @@ class Api:
             t = self._training_einstellung()
             if t is None or not (t["ordner"] / KURZTEST_SKRIPT).is_file():
                 raise app_core.AppError("KURZTEST_FEHLT", f"Training oder {KURZTEST_SKRIPT} fehlen im Trainingsordner (Einstellung „training“).")
-            pruefstand = self._pruefstand_thread is not None and self._pruefstand_thread.is_alive()
+            pruefstand = (self._pruefstand_thread is not None and self._pruefstand_thread.is_alive()) or bool(getattr(self, "_pruefung_seit", 0.0))
             if pruefstand or not self._karte_lock.acquire(blocking=False):
                 raise app_core.AppError("KURZTEST_LAEUFT", "Gerade läuft schon ein Test oder ein Training.")
 
@@ -1933,26 +1764,10 @@ class Api:
             urteil, bericht = str(e.get("urteil", "fehler"))[:20], str(e.get("bericht", ""))[:3500]
         except (OSError, ValueError, AttributeError):
             return self._training_melden("fehler", "Das Trainingswerkzeug hat kein Ergebnis geschrieben.")
-        p = e.get("probemodell") if isinstance(e.get("probemodell"), dict) else None
-        if urteil == "besser" and p:
-            morgen = (jetzt + timedelta(days=1)).strftime("%Y-%m-%d")
-            probe = {"datei": str(p.get("datei", "")), "sha256": str(p.get("sha256", "")).lower(), "basis": str(p.get("basis") or "14B"),
-                     "nacht": morgen, "erledigt": ""}
-            try:
-                sicher_schreiben.json_datei(self._ki.ordner.ki_dir / ki_laufzeit.PROBEMODELL, probe)
-                if ki_laufzeit.probemodell(self._ki.ordner, morgen) is None:
-                    bericht += "\nDie neue Fassung liegt nicht gültig in ki/modelle; die Messung im Programm entfällt."
-                    urteil = "besserohnemessung"
-                else:
-                    self._community.messreihe_nacht(morgen)
-                    bericht += f"\nIn der Nacht auf den {morgen[8:10]}.{morgen[5:7]}. misst dieser PC die Fassung im echten Programm; die Mail dazu kommt danach."
-            except (OSError, app_core.AppError) as exc:
-                bericht += f"\nDie Messung im Programm konnte nicht bestellt werden ({getattr(exc, 'detail', type(exc).__name__)})."
-                urteil = "besserohnemessung"
-        elif urteil == "besser":
-            bericht += "\nDas Werkzeug nannte keine Datei der neuen Fassung; die Messung im Programm entfällt."
+        if urteil == "besser":
+            bericht += "\nDie Probe im echten Programm ruht, bis sie mit dem Trainingsplan zurückkommt; ausgerollt wird nichts."
             urteil = "besserohnemessung"
-        return self._training_melden(urteil, bericht)
+        return self._training_melden(urteil, TRAINING_VORSCHAU + "\n\n" + bericht)
 
     @staticmethod
     def _training_nachholen(zuletzt: str, e: dict, jetzt: datetime) -> bool:
@@ -1977,47 +1792,35 @@ class Api:
             _log(self._core, f"FEHLER training melden: {exc.code}")
         return {"urteil": urteil}
 
-    def _pruefstand_fragen(self, fragen: list, *, erzwingen: bool, probe_wartet: bool = False) -> dict | None:
+    def _pruefstand_fragen(self, fragen: list, *, runde: dict, erzwingen: bool) -> dict | None:
         if erzwingen:
             self._rechen.phase, self._rechen.meldung = "prueft_selbst", ""
-        zs = _Zwischenstand(Path(self._ki.ordner.ki_dir) / "pruefstand-zwischenstand.ndjson", f"standard:{app_core.APP_BUILD}")
-        fertig, fertig_memo, schon = zs.laden()
-        mess_k = {str(f.get("kennung", "")) for f in fragen if str(f.get("kennung", "")).startswith("m-")}
-        if schon and probe_wartet and mess_k and mess_k <= set(fertig):
-            if self._nacht_memo is not None:
-                self._nacht_memo.update(fertig_memo)
-            _log(self._core, "OK pruefstand: die Messreihe ging heute schon an den Server; es geht gleich mit der Probe weiter")
-            return None
+        rid = str(runde.get("id") or "")
+        art = f"runde:{rid}:{app_core.APP_BUILD}" if rid else f"tag:{datetime.now():%Y-%m-%d}:{app_core.APP_BUILD}"
+        zs = _Zwischenstand(Path(self._ki.ordner.ki_dir) / "pruefstand-zwischenstand.ndjson", art)
+        fertig, schon = zs.laden()
         if schon or not fertig:
             zs.beginnen()
-            fertig, fertig_memo = {}, {}
+            fertig = {}
         else:
             _log(self._core, f"OK pruefstand: Zwischenstand gefunden, {len(fertig)} Prüffragen schon beantwortet; es geht dort weiter")
-        unterbrochen = False
         self._ki_starten_blockierend()
-        antworten = []
-        takt = 0.0
-        spaeter: list[tuple[dict, int]] = []
-        reihe: list[tuple[dict, int | None]] = [(f, None) for f in fragen]
-        i = ersetzt = 0
-        while i < len(reihe):
-            f, platz = reihe[i]
-            i += 1
-            if i == len(fragen) + 1 and spaeter:
-                _log(self._core, f"OK pruefstand: {len(spaeter)} Prüffragen ohne Suche kommen jetzt noch einmal")
+        antworten: list[dict] = []
+        ruht = ""
+        for f in fragen:
             if self._core.run_state() is not node_local_state.RunState.ACTIVE:
-                unterbrochen = True
+                ruht = "Pause oder Programmende"
                 break
-            k0 = str(f.get("kennung", ""))
-            alt = fertig.get(k0) if platz is None else None
-            if alt is not None and alt[0] == str(f.get("frage", "")) and not pruefstand.suche_aus(alt[1].get("antwort")):
+            kennung = str(f.get("kennung", ""))
+            alt = fertig.get(kennung)
+            if alt is not None and alt[0] == str(f.get("frage", "")):
                 antworten.append(alt[1])
-                if self._nacht_memo is not None and k0 in fertig_memo:
-                    self._nacht_memo[k0] = fertig_memo[k0]
+                self._pruefrunde_zaehlen(len(antworten))
                 continue
-            if not erzwingen:
-                takt = self._pruefstand_takt(takt)
-            self._suche_ausgefallen = False
+            fremd = self._karte_fremd()
+            if fremd:
+                ruht = fremd
+                break
             for versuch in range(PRUEFSTAND_VERSUCHE):
                 getattr(self._rechen, "mitglied_jetzt", lambda: False)()
                 bis = time.time() + rechenarbeit.VORRANG_WARTEN_MAX_S
@@ -2028,21 +1831,23 @@ class Api:
                 t0 = time.time()
                 schein: dict = {}
                 vorrang = getattr(self._rechen, "vorrang", None)
-                kennung = str(f.get("kennung", ""))
-                self._memo_frage = kennung if self._nacht_memo is not None and kennung.startswith("m-") else ""
                 _VERMISCHT.liste = []
                 _GESTRICHEN.liste = []
+                _MESSWEG.d = {}
+                ablauf: list[tuple[float, str]] = []
                 ki_aus = False
                 try:
                     with ki_laufzeit.abbruch_bei(vorrang) if isinstance(vorrang, threading.Event) else contextlib.nullcontext():
-                        text, schein = self._antwort_fuer_mitglied([{"role": "user", "content": str(f.get("frage", ""))}], [], "Prüfstand")
+                        text, schein = self._antwort_fuer_mitglied([{"role": "user", "content": str(f.get("frage", ""))}], [], "Prüfstand",
+                                                                   schritt_melden=lambda s, _a=ablauf, _t=t0: _a.append((time.time() - _t, str(s))),
+                                                                   messen=True)
                 except app_core.AppError as exc:
                     text = f"(keine Antwort: {exc.detail})"
                     ki_aus = exc.code == "KI_AUS"
                 finally:
-                    self._memo_frage = ""
                     vermischt_liste, _VERMISCHT.liste = list(getattr(_VERMISCHT, "liste", None) or []), None
                     gestrichen_liste, _GESTRICHEN.liste = list(getattr(_GESTRICHEN, "liste", None) or []), None
+                    weg, _MESSWEG.d = getattr(_MESSWEG, "d", None), None
                 if ki_aus:
                     _log(self._core, f"INFO pruefstand: die KI war bei Prüffrage {len(antworten) + 1} aus{self._ki_ende_grund()}; sie wird neu gestartet")
                     if versuch == PRUEFSTAND_VERSUCHE - 1:
@@ -2051,33 +1856,28 @@ class Api:
                         self._ki_starten_blockierend()
                         continue
                     except app_core.AppError as exc:
-                        _log(self._core, f"ABGELEHNT pruefstand: die KI startet nicht ({exc.code}); der Lauf gilt als unterbrochen")
+                        _log(self._core, f"ABGELEHNT pruefstand: die KI startet nicht ({exc.code}); die Runde ruht")
                         break
                 if not (isinstance(vorrang, threading.Event) and vorrang.is_set()) or versuch == PRUEFSTAND_VERSUCHE - 1:
                     break
                 _log(self._core, "OK pruefstand: Prüffrage für eine echte Frage abgebrochen, sie wird wiederholt")
             if ki_aus:
-                unterbrochen = True
+                ruht = "die KI ist ausgefallen"
                 break
             pr = schein.get("pruefung") if isinstance(schein.get("pruefung"), dict) else {}
-            eintrag = {"kennung": str(f.get("kennung", "")), "antwort": text, "dauer_s": round(time.time() - t0, 1),
+            if isinstance(weg, dict):
+                weg["schritte"] = schritte_summe(ablauf, time.time() - t0)
+            eintrag = {"kennung": kennung, "antwort": text, "dauer_s": round(time.time() - t0, 1),
                        "pruefung": {k: pr.get(k, 0) for k in ("gruen", "gelb", "rot")}, "belege": list(schein.get("belege") or [])[:5],
-                       "quellen": str(schein.get("quellen", ""))[:600], "notiz": vermischt_notiz(vermischt_liste) + gestrichen_notiz(gestrichen_liste) + pruefstand.notiz_aus(schein.get("quellen", ""))}
-            zs.anhaengen(kennung, str(f.get("frage", "")), eintrag, self._nacht_memo.get(kennung) if self._nacht_memo is not None else None)
-            if platz is None:
-                antworten.append(eintrag)
-                if self._suche_ausgefallen:
-                    spaeter.append((f, len(antworten) - 1))
-                    reihe.append((f, len(antworten) - 1))
-            elif not self._suche_ausgefallen:
-                antworten[platz] = eintrag
-                ersetzt += 1
-        if unterbrochen:
-            _log(self._core, f"INFO pruefstand: unterbrochen nach {len(antworten)} von {len(fragen)} Prüffragen; der Zwischenstand bleibt, "
-                             "der nächste Lauf setzt dort fort")
+                       "quellen": str(schein.get("quellen", ""))[:600], "notiz": vermischt_notiz(vermischt_liste) + gestrichen_notiz(gestrichen_liste) + pruefstand.notiz_aus(schein.get("quellen", "")),
+                       "weg": mess_weg(schein, weg)}
+            zs.anhaengen(kennung, str(f.get("frage", "")), eintrag)
+            antworten.append(eintrag)
+            self._pruefrunde_zaehlen(len(antworten))
+        if ruht:
+            self._runde_ruht_grund = ruht
+            _log(self._core, f"INFO pruefstand: Runde ruht nach {len(antworten)} von {len(fragen)} Prüffragen ({ruht}); beim nächsten Mal geht es dort weiter")
             return None
-        if spaeter:
-            _log(self._core, f"OK pruefstand: {len(spaeter)} Prüffragen zuerst ohne Suche, {ersetzt} davon am Ende mit Suche beantwortet")
         wege = {}
         for name in self.PRUEFSTAND_WEGE:
             try:
@@ -2087,7 +1887,7 @@ class Api:
                 wege[name] = False
         for versuch in range(PRUEFSTAND_HOCHLADEN_VERSUCHE):
             try:
-                b = self._community.pruefstand_ergebnis(antworten, wege)
+                b = self._community.pruefstand_ergebnis([mess_bericht(a) for a in antworten], wege, runde=rid)
                 break
             except app_core.AppError as exc:
                 _log(self._core, f"FEHLER pruefstand hochladen (Versuch {versuch + 1}): {exc.code}")
@@ -2095,7 +1895,9 @@ class Api:
                     raise
                 self._mess_schlafen(PRUEFSTAND_HOCHLADEN_WARTE_S)
         zs.gemeldet()
-        _log(self._core, f"OK pruefstand {b.get('richtig')} von {b.get('gesamt')} richtig, Wege {b.get('wege_ok')} von {b.get('wege_gesamt')}")
+        r = b.get("runde") if isinstance(b.get("runde"), dict) else None
+        _log(self._core, f"OK pruefstand {b.get('richtig')} von {b.get('gesamt')} richtig, Wege {b.get('wege_ok')} von {b.get('wege_gesamt')}"
+                         + (f"; Runde {r.get('nummer')} von {runde.get('von')}, Messreihe {r.get('richtig')} von {r.get('gesamt')}" if r else ""))
         try:
             self._ki.einstellung_setzen(pruefstand_nacht={"tag": str(b.get("tag", ""))[:10], "richtig": int(b.get("richtig", 0) or 0),
                                                           "gesamt": int(b.get("gesamt", 0) or 0), "hinten": bool(b.get("hinten"))})
@@ -2103,10 +1905,19 @@ class Api:
             pass
         return b
 
+    def _pruefrunde_zaehlen(self, n: int) -> None:
+        p = getattr(self, "_pruefrunde", None)
+        if isinstance(p, dict):
+            p["n"] = n
+
     def pruefstand_stand(self) -> dict:
         def go():
             e = self._ki.einstellung()
-            d = {"an": self.pruefstand_an(), "zuletzt": str(e.get("pruefstand_zuletzt", "")), "laeuft": bool(self._pruefstand_thread and self._pruefstand_thread.is_alive())}
+            laeuft = bool((self._pruefstand_thread and self._pruefstand_thread.is_alive()) or getattr(self, "_pruefung_seit", 0.0))
+            p = getattr(self, "_pruefrunde", None)
+            d = {"an": self.pruefstand_an(), "zuletzt": str(e.get("pruefstand_zuletzt", "")), "laeuft": laeuft,
+                 "runden_heute": self._pruefrunden_heute(), "runden_tag": pruefstand.DURCHGANG_RUNDEN,
+                 **({"fortschritt": dict(p)} if isinstance(p, dict) else {})}
             try:
                 d.update(self._community.pruefstand_stand())
             except app_core.AppError as exc:
@@ -2128,16 +1939,32 @@ class Api:
             return self.pruefstand_stand()["daten"]
         return self._guarded("pruefstand_setzen", go, "Gespeichert.")
 
-    def pruefstand_jetzt(self) -> dict:
+    def pruefstand_jetzt(self, probelauf: bool = False) -> dict:
         def go():
-            if self._pruefstand_thread and self._pruefstand_thread.is_alive():
-                return {"gestartet": False}
+            if (self._pruefstand_thread and self._pruefstand_thread.is_alive()) or getattr(self, "_pruefung_seit", 0.0):
+                raise app_core.AppError("PRUEFSTAND_LAEUFT", "eine Prüfrunde läuft schon")
             if self._kurztest_laeuft():
                 raise app_core.AppError("KURZTEST_LAEUFT", "Gerade läuft schon ein Test oder ein Training.")
-            self._pruefstand_thread = threading.Thread(target=lambda: self._guarded("pruefstand_lauf", lambda: self._pruefstand_lauf(erzwingen=True)), name="pruefstand", daemon=True)
+            if self._pruefen_pausiert():
+                raise app_core.AppError("PRUEFEN_PAUSIERT", PRUEFEN_PAUSIERT_TEXT)
+            fremd = self._karte_fremd()
+            if fremd:
+                _log(self._core, f"ABGELEHNT pruefstand_jetzt: {fremd}")
+                raise app_core.AppError("KARTE_BELEGT", "die Grafikkarte wird gerade von einem anderen Programm gebraucht, zum Beispiel von einem Spiel oder Video"
+                                        if "nicht messbar" not in fremd else "am PC wird gerade gearbeitet, und die Last auf der Grafikkarte ist nicht messbar")
+            if not self._rechen.anhalten(hoechstens_s=PRUEFSTAND_ANHALTEN_S):
+                raise app_core.AppError("PRUEFSTAND_BESCHAEFTIGT", "Die Rechenarbeit ist gerade mitten in einem Auftrag; bitte in einer Minute noch einmal.")
+
+            def lauf():
+                try:
+                    self._guarded("pruefstand_lauf", lambda: self._pruefstand_lauf(erzwingen=True, probelauf=bool(probelauf)))
+                finally:
+                    self._rechen.weiter()
+            self._pruefstand_thread = threading.Thread(target=lauf, name="pruefstand", daemon=True)
             self._pruefstand_thread.start()
             return {"gestartet": True}
-        return self._guarded("pruefstand_jetzt", go, "Der Prüfstand läuft jetzt; das dauert ein paar Minuten.")
+        return self._guarded("pruefstand_jetzt", go, "Der Probelauf läuft: 24 Fragen, rund 5 Minuten. Ist noch eine Prüfrunde offen, geht zuerst sie zu Ende." if probelauf
+                             else "Die Prüfrunde läuft: 100 Fragen, rund 20 Minuten. Du kannst den PC dabei weiter benutzen.")
 
     def vorwaermen_setzen(self, an: bool) -> dict:
         return self._guarded("vorwaermen_setzen", lambda: self._ki.einstellung_setzen(vorwaermen=bool(an)) or {"vorwaermen": bool(an)},
@@ -2210,7 +2037,7 @@ class Api:
 
     def _antwort_fuer_mitglied(self, nachrichten: list[dict], auszuege: list[dict], fuer: str, *, frisch: bool = False, teil_melden=None, schritt_melden=None,
                                skill: dict | None = None, zuhause: dict | None = None, fenster: dict | None = None,
-                               fachgebiete: list | None = None) -> tuple[str, dict]:
+                               fachgebiete: list | None = None, messen: bool = False) -> tuple[str, dict]:
         vorher = getattr(_SCHRITT, "fn", None)
         lauf_vorher = getattr(_SUCHLAUF, "stand", None)
         _SCHRITT.fn = schritt_melden
@@ -2289,7 +2116,8 @@ class Api:
                 if englisch:
                     ki_laufzeit.original_setzen(antwortsprache.letzte_frage(nachrichten))
             text, schein = self._antwort_fuer_mitglied_ohne_schritt(englisch or nachrichten, auszuege, fuer, frisch=frisch,
-                                                                    teil_melden=None if englisch else teil_melden, skill=skill, privat=privat)
+                                                                    teil_melden=None if englisch else teil_melden, skill=skill, privat=privat,
+                                                                    messen=messen)
             if en_frage and ab0.antwort:
                 text = ab0.antwort_en or text
             elif englisch:
@@ -2336,7 +2164,7 @@ class Api:
         return e["text"], ls
 
     def _antwort_fuer_mitglied_ohne_schritt(self, nachrichten: list[dict], auszuege: list[dict], fuer: str, *, frisch: bool = False, teil_melden=None,
-                                            skill: dict | None = None, privat: bool | str = False) -> tuple[str, dict]:
+                                            skill: dict | None = None, privat: bool | str = False, messen: bool = False) -> tuple[str, dict]:
         if not (self._ki.quelle() == "lokal" and self._ki.server.laeuft()):
             raise app_core.AppError("KI_AUS", "KIplatz ist auf diesem Gerät gerade ausgeschaltet")
         _EIGEN.an = bool(privat)
@@ -2360,7 +2188,7 @@ class Api:
             return a4.rueckfrage, {"modell": "nachgefragt, ohne Modell", "geraet": f"{self._geraet_name} (Community) für {fuer}", "dauer_s": 0.0, "wortstuecke": 0, "gelesen": 0,
                                    "quellen": "keine Quelle nötig, das Programm fragt nach.", "quellen_liste": [], "gemacht": "nachgefragt", "erfunden": "nichts, es wurde nur nachgefragt",
                                    "pruefung": pruefung.pruefen("", []).kurz()}
-        if not (frisch or skill or privat):
+        if not (frisch or skill or privat or messen):
             fertig = self._fertig_aus_kopie(nachrichten, fuer_andere=True)
             if fertig is not None:
                 fertig[1]["geraet"] = f"{self._geraet_name} (Community) für {fuer}, aus dem Antwort-Speicher"
@@ -2506,6 +2334,11 @@ class Api:
         elif not frisch and self.nachschauen_an() and _WEISS_NICHT.search(antwort_text):
             antwort_text = _weiss_nicht_anwenden(antwort_text, lieferschein, gesucht=im_netz_gesucht(nachgeholt, quellen, lauf), vorher=vorher_text)
         _woertlich_markieren(antwort_text, quellen, lieferschein)
+        weg = getattr(_MESSWEG, "d", None)
+        if isinstance(weg, dict):
+            weg.update(stellen=sum(1 for q in quellen if q.get("text")), arten=sorted({str(q.get("art") or "") for q in quellen if q.get("text")}),
+                       suchanfragen=len(lauf["gesucht"]) if lauf else 0, suchrunden=int(lauf["runde"]) if lauf else 0,
+                       im_netz=im_netz_gesucht(nachgeholt, quellen, lauf))
         return antwort_text, lieferschein
 
 
@@ -2618,7 +2451,7 @@ class Api:
         vorrang = getattr(self._rechen, "vorrang_aktiv", None)
         if vorrang is not None and vorrang():
             return False
-        return getattr(self._rechen, "phase", "") not in ("aus", "akku", "hitze", "laden", "startet", "fehler", "nicht_angemeldet", "ruht", "antwortet", "prueft_probe", "trainiert")
+        return getattr(self._rechen, "phase", "") not in ("aus", "akku", "hitze", "laden", "startet", "fehler", "nicht_angemeldet", "ruht", "antwortet", "trainiert")
 
     def _ki_starten_blockierend(self) -> None:
         if self._ki.quelle() != "lokal":
@@ -5678,16 +5511,9 @@ class Api:
             _log(self._core, f"HINWEIS update: dieses Gerät antwortet seit über {UPDATE_ANTWORT_HOECHSTENS_S // 60} Minuten, das hängt; das Update geht vor")
             return False
         seit = getattr(self, "_pruefung_seit", 0.0)
-        if seit and time.monotonic() - seit < UPDATE_NACHT_HOECHSTENS_S:
+        if seit and time.monotonic() - seit < UPDATE_PRUEFRUNDE_HOECHSTENS_S:
             return True
         vorrang = bool(getattr(getattr(r, "vorrang", None), "is_set", lambda: False)()) and set(getattr(r, "_vorrang_wer", set()) or ()) != {"karte"}
-        if getattr(r, "phase", "") in ("prueft_selbst", "prueft_probe"):
-            if not getattr(self, "_update_nacht_seit", 0.0):
-                self._update_nacht_seit = time.monotonic()
-            if time.monotonic() - self._update_nacht_seit < UPDATE_NACHT_HOECHSTENS_S:
-                return True
-        else:
-            self._update_nacht_seit = 0.0
         return frage or vorrang
 
     def update_pruefen(self) -> dict:
@@ -5842,6 +5668,35 @@ _VERMISCHT = threading.local()
 
 
 _GESTRICHEN = threading.local()
+
+_MESSWEG = threading.local()
+
+
+def mess_weg(schein: dict, weg: dict | None) -> dict:
+    w = weg if isinstance(weg, dict) else {}
+    return {"gemacht": str(schein.get("gemacht") or schein.get("modell") or "")[:60], "stellen": int(w.get("stellen", 0)),
+            "arten": sorted(str(a) for a in w.get("arten", []))[:8], "suchanfragen": int(w.get("suchanfragen", 0)),
+            "suchrunden": int(w.get("suchrunden", 0)), "im_netz": w.get("im_netz", False),
+            **({"schritte": dict(w["schritte"])} if isinstance(w.get("schritte"), dict) and w["schritte"] else {})}
+
+
+def schritte_summe(ablauf: list[tuple[float, str]], gesamt_s: float) -> dict[str, int]:
+    s: dict[str, float] = {}
+    for name, sek in rechenarbeit.schritt_teile(ablauf, gesamt_s):
+        s[name] = s.get(name, 0.0) + sek
+    return {n: int(round(v)) for n, v in sorted(s.items(), key=lambda x: -x[1])[:8]}
+
+
+def mess_bericht(eintrag: dict) -> dict:
+    e = {**eintrag, "antwort": str(eintrag.get("antwort", ""))[:pruefstand.MESSREIHE_ANTWORT]}
+    if e.get("notiz"):
+        e["notiz"] = str(e["notiz"])[:pruefstand.NOTIZ_MAX]
+    if str(e.get("kennung", "")).startswith("m-"):
+        for k in ("quellen", "pruefung", "belege"):
+            e.pop(k, None)
+    elif isinstance(e.get("belege"), list):
+        e["belege"] = [str(b)[:200] for b in e["belege"][:5]]
+    return e
 
 
 def gestrichen_notiz(liste) -> str:
