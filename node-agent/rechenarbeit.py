@@ -157,6 +157,7 @@ class Rechenarbeit:
         self._karte = kartenteiler if kartenteiler is not None else karten.Kartenteiler()
         self._karten_wache: threading.Thread | None = None
         self._mitglied_frage: dict | None = None
+        self._mitglied_laeuft = False
         self._wache: threading.Thread | None = None
         self._wache_an = threading.Event()
         self._ki_von_uns = False
@@ -323,7 +324,7 @@ class Rechenarbeit:
         t = self._thread
         if t and t.is_alive() and t is not threading.current_thread():
             t.join(timeout=timeout_s)
-        offen, self._mitglied_frage = self._mitglied_frage, None
+        offen = self._frage_nehmen()
         if offen is not None:
             self._frage_zurueck(offen, "das Gerät wurde gerade angehalten")
         self._server_stoppen()
@@ -397,16 +398,18 @@ class Rechenarbeit:
     def _wache_starten(self) -> bool:
         if self._antworten is None or not bool(self._antworten_moeglich()) or not (bool(self._urteil_bereit()) or self._ki_starten is not None):
             return False
-        leistung = self._leistung()
         self._wache_an.set()
         t = self._wache
         if t is not None and t.is_alive():
             return True
 
         def wachen() -> None:
-            while self._wache_an.is_set() and not self._halt.is_set() and self._mitglied_frage is None:
+            while self._wache_an.is_set() and not self._halt.is_set():
+                if self._mitglied_frage is not None or self._mitglied_laeuft:
+                    self._halt.wait(0.2)
+                    continue
                 try:
-                    a = self._community.auftrag_holen(antworten=True, leistung=leistung, warten_s=WACHE_WARTEN_S, nur_fragen=True)
+                    a = self._community.auftrag_holen(antworten=True, leistung=self._leistung(), warten_s=WACHE_WARTEN_S, nur_fragen=True)
                 except Exception as exc:
                     self._log(f"INFO frage-wache: {type(exc).__name__}")
                     self._halt.wait(5)
@@ -417,10 +420,11 @@ class Rechenarbeit:
                     if self._halt.is_set():
                         self._frage_zurueck(a, "das Gerät wurde gerade angehalten")
                         return
-                    self._mitglied_frage = a
+                    with self._vorrang_lock:
+                        self._mitglied_frage = a
                     self.vorrang_beginn("mitglied")
                     self._log(f"OK rechenarbeit frage-wache: Frage {a.get('auftrag')} angenommen, die Hintergrundarbeit macht Pause")
-                    return
+                    continue
                 if a is None and not getattr(self._community, "gewartet", False):
                     self._halt.wait(WARTEN_FRAGEN_S)
 
@@ -443,7 +447,7 @@ class Rechenarbeit:
         t = self._wache
         if t is not None and t.is_alive() and t is not threading.current_thread():
             t.join(WACHE_WARTEN_S + 5)
-        a, self._mitglied_frage = self._mitglied_frage, None
+        a = self._frage_nehmen()
         if a is not None:
             self._frage_zurueck(a, grund)
             self.vorrang_ende("mitglied")
@@ -451,14 +455,23 @@ class Rechenarbeit:
     def mitglied_jetzt(self) -> bool:
         return self._mitglied_beantworten()
 
+    def _frage_nehmen(self, *, beantworten: bool = False) -> dict | None:
+        with self._vorrang_lock:
+            a, self._mitglied_frage = self._mitglied_frage, None
+            if a is not None and beantworten:
+                self._mitglied_laeuft = True
+            return a
+
     def _mitglied_beantworten(self) -> bool:
-        a, self._mitglied_frage = self._mitglied_frage, None
+        a = self._frage_nehmen(beantworten=True)
         if a is None:
             return False
         try:
             self._antwort_geben(a)
         finally:
             self.vorrang_ende("mitglied")
+            with self._vorrang_lock:
+                self._mitglied_laeuft = False
         return True
 
     def vorrang_aktiv(self) -> bool:
