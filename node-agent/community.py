@@ -408,10 +408,10 @@ class Community:
         except app_core.AppError as exc:
             return Stand(False, 0, "Community", exc.detail)
 
-    def pruefen_pausiert(self) -> bool:
+    def pruefen_pausiert(self, *, frisch: bool = False) -> bool:
         jetzt = time.monotonic()
         merk = getattr(self, "_pausiert_merk", None)
-        if merk is not None and jetzt - merk[0] < 600:
+        if merk is not None and jetzt - merk[0] < 600 and not frisch:
             return merk[1]
         try:
             wert = bool(self._anfrage("/hallo").get("pruefen_pausiert"))

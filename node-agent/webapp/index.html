@@ -3272,7 +3272,11 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
     $("#pruefstand-text").textContent = p.an ? "Prüfstand läuft auf diesem Gerät" : "Prüfstand ist auf diesem Gerät aus";
 
     const fs = p.fortschritt;
-    $("#pruefstand-lauf").textContent = p.laeuft ? (fs ? `Frage ${Math.min(fs.n + 1, fs.von)} von ${fs.von} …` : "Läuft gerade …") : (p.an ? `Heute ${p.runden_heute || 0} von ${p.runden_tag || 3} Prüfrunden.` : "");
+
+    const heute = p.an ? `Heute ${p.runden_heute || 0} von ${p.runden_tag || 3} Prüfrunden.` : "";
+    $("#pruefstand-lauf").textContent = p.laeuft
+      ? (fs ? `Frage ${Math.min(fs.n + 1, fs.von)} von ${fs.von} …` : (p.wartet ? "Wartet, bis der laufende Auftrag fertig ist (höchstens 2 Minuten) …" : "Läuft gerade …"))
+      : [p.meldung || "", heute].filter(Boolean).join(" ");
     clearTimeout(pruefstandTimer);
     if (p.laeuft) pruefstandTimer = setTimeout(() => api().pruefstand_stand().then((r) => { if (r.ok) zeichnePruefstand(r.daten); }), 10000);
     const l = p.letzter;

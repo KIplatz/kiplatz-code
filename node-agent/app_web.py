@@ -132,7 +132,7 @@ TRAINING_OFFEN_TAGE = 2
 PRUEFSTAND_VERSUCHE = 3
 PRUEFSTAND_HOCHLADEN_VERSUCHE = 3
 PRUEFSTAND_HOCHLADEN_WARTE_S = 60.0
-PRUEFSTAND_ANHALTEN_S = 10.0
+PRUEFSTAND_ANHALTEN_S = 120.0
 PRUEFEN_PAUSIERT_TEXT = "Prüfen und Training sind am Server pausiert, bis die Community genug freie Rechner hat."
 MESS_SUCHE_ABSTAND_S = 40.0
 MESS_SUCHEN_NACHT_MAX = 400
@@ -752,6 +752,8 @@ class Api:
         self._ruht_gemeldet = ""
         self._pruefrunde_pause_bis = 0.0
         self._runde_ruht_grund = ""
+        self._knopf_wartet = False
+        self._knopf_meldung = ""
         self._mess_uhr, self._mess_schlafen = time.monotonic, time.sleep
         self._nachschauer = nachschauer or nachschauen.Nachschauer(suche_fn=lambda frage, **kw: self._websuche(frage, **kw))
         self._schnittstelle = schnittstelle.Schnittstelle(self._schnittstelle_antwort, self._schnittstelle_schluessel, log=lambda line: _log(core, line),
@@ -1500,6 +1502,9 @@ class Api:
             raise
         if not fragen:
             self._pruefrunde_fehlschlag("der Server hat für dieses Gerät gerade keine Prüffragen")
+            if erzwingen:
+                raise app_core.AppError("KEINE_PRUEFFRAGEN", "Der Server hat gerade keine Prüffragen für diesen PC. Meist kennt er sein Modell "
+                                                             "noch nicht, weil KIplatz eben erst gestartet ist; bitte in einer Minute noch einmal.")
             return None
         self._ruht_gemeldet = ""
         self._mess_suche_zuletzt, self._mess_suchen, self._mess_suche_gemeldet = 0.0, 0, False
@@ -1558,9 +1563,9 @@ class Api:
         self._mess_suche_zuletzt, self._mess_suchen = jetzt, self._mess_suchen + 1
 
 
-    def _pruefen_pausiert(self) -> bool:
+    def _pruefen_pausiert(self, *, frisch: bool = False) -> bool:
         try:
-            pausiert = bool(getattr(self._community, "pruefen_pausiert", lambda: False)())
+            pausiert = bool(getattr(self._community, "pruefen_pausiert", lambda **_k: False)(**({"frisch": True} if frisch else {})))
         except Exception:
             return False
         if pausiert:
@@ -1917,6 +1922,7 @@ class Api:
             p = getattr(self, "_pruefrunde", None)
             d = {"an": self.pruefstand_an(), "zuletzt": str(e.get("pruefstand_zuletzt", "")), "laeuft": laeuft,
                  "runden_heute": self._pruefrunden_heute(), "runden_tag": pruefstand.DURCHGANG_RUNDEN,
+                 "wartet": laeuft and bool(getattr(self, "_knopf_wartet", False)), "meldung": "" if laeuft else str(getattr(self, "_knopf_meldung", "")),
                  **({"fortschritt": dict(p)} if isinstance(p, dict) else {})}
             try:
                 d.update(self._community.pruefstand_stand())
@@ -1945,21 +1951,41 @@ class Api:
                 raise app_core.AppError("PRUEFSTAND_LAEUFT", "eine Prüfrunde läuft schon")
             if self._kurztest_laeuft():
                 raise app_core.AppError("KURZTEST_LAEUFT", "Gerade läuft schon ein Test oder ein Training.")
-            if self._pruefen_pausiert():
+            if self._pruefen_pausiert(frisch=True):
                 raise app_core.AppError("PRUEFEN_PAUSIERT", PRUEFEN_PAUSIERT_TEXT)
             fremd = self._karte_fremd()
             if fremd:
                 _log(self._core, f"ABGELEHNT pruefstand_jetzt: {fremd}")
                 raise app_core.AppError("KARTE_BELEGT", "die Grafikkarte wird gerade von einem anderen Programm gebraucht, zum Beispiel von einem Spiel oder Video"
                                         if "nicht messbar" not in fremd else "am PC wird gerade gearbeitet, und die Last auf der Grafikkarte ist nicht messbar")
-            if not self._rechen.anhalten(hoechstens_s=PRUEFSTAND_ANHALTEN_S):
-                raise app_core.AppError("PRUEFSTAND_BESCHAEFTIGT", "Die Rechenarbeit ist gerade mitten in einem Auftrag; bitte in einer Minute noch einmal.")
 
             def lauf():
+                gehalten = False
                 try:
-                    self._guarded("pruefstand_lauf", lambda: self._pruefstand_lauf(erzwingen=True, probelauf=bool(probelauf)))
+                    gehalten = self._rechen.anhalten(hoechstens_s=PRUEFSTAND_ANHALTEN_S)
+                    self._knopf_wartet = False
+                    if not gehalten:
+                        self._knopf_meldung = (f"Die Rechenarbeit war {int(PRUEFSTAND_ANHALTEN_S // 60)} Minuten lang mitten in einem Auftrag; "
+                                               "bitte noch einmal drücken.")
+                        _log(self._core, "ABGELEHNT pruefstand_lauf: die Rechenarbeit kam nicht zwischen zwei Aufträge")
+                        return
+                    r = self._guarded("pruefstand_lauf", lambda: self._pruefstand_lauf(erzwingen=True, probelauf=bool(probelauf)))
+                    b = r.get("daten") if r.get("ok") else None
+                    rd = b.get("runde") if isinstance(b, dict) and isinstance(b.get("runde"), dict) else {}
+                    if not r.get("ok"):
+                        self._knopf_meldung = str(r.get("text", ""))
+                    elif rd:
+                        self._knopf_meldung = f"Fertig: {rd.get('richtig', 0)} von {rd.get('gesamt', 0)} Fragen richtig, der Bericht ist beim Server."
+                    elif isinstance(b, dict):
+                        self._knopf_meldung = f"Fertig: {b.get('richtig', 0)} von {b.get('gesamt', 0)} Prüffragen richtig, der Bericht ist beim Server."
+                    else:
+                        grund = self._runde_ruht_grund or "sie wurde unterbrochen"
+                        self._knopf_meldung = f"Die Runde wartet ({grund}); beim nächsten Mal geht es dort weiter."
                 finally:
-                    self._rechen.weiter()
+                    self._knopf_wartet = False
+                    if gehalten:
+                        self._rechen.weiter()
+            self._knopf_wartet, self._knopf_meldung = True, ""
             self._pruefstand_thread = threading.Thread(target=lauf, name="pruefstand", daemon=True)
             self._pruefstand_thread.start()
             return {"gestartet": True}
