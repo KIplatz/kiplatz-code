@@ -39,21 +39,21 @@ _GEMEINSAM = (
 )
 
 _MITMACHEN = (
-    "Gebaut wird KIplatz von einer Community aus Oberösterreich und von allen, die mitmachen: Sie lassen ihren PC mithelfen, "
+    "Gebaut wird KIplatz von allen, die mitmachen, egal wo auf der Welt: Sie lassen ihren PC mithelfen, "
     "melden Fehler, schreiben Skills und tragen Wissen bei. Mitmachen kannst du auf kiplatz.at, ein Konto reicht für das Programm, "
     "fürs Mitreden und fürs Mitbauen."
 )
 
 STECKBRIEF = (
-    "Steckbrief KIplatz: kostenlose KI aus Österreich, gebaut von einer Community. Läuft am eigenen Gerät: ja, als Programm "
+    "Steckbrief KIplatz: kostenlose KI aus Österreich, offen für alle auf der Welt, auf Deutsch und Englisch, gebaut von einer Community. Läuft am eigenen Gerät: ja, als Programm "
     "für Windows 11; vom Handy oder einem anderen Gerät fragt man über die App oder kiplatz.at, dann antwortet ein PC der Community. "
     "Die Antworten entstehen auf den Computern der Mitglieder, nicht in einem Rechenzentrum; der Server in Wien vermittelt nur. "
     "Kostenlos ohne Grenze, kein Bezahltarif, keine Werbung, Quellen unter jeder Antwort. KIplatz gibt es seit September 2026."
 )
 
 TEXTE: dict[str, str] = {
-    "was": "KIplatz ist eine kostenlose KI aus Österreich, die eine Community gemeinsam baut. " + _GEMEINSAM + " " + _MITMACHEN,
-    "wer": "Ich bin KIplatz, die KI der gleichnamigen Community aus Österreich. Ich laufe auf deinem PC oder auf dem Gerät eines "
+    "was": "KIplatz ist eine kostenlose KI aus Österreich, offen für alle auf der Welt, die eine Community gemeinsam baut. " + _GEMEINSAM + " " + _MITMACHEN,
+    "wer": "Ich bin KIplatz, eine KI aus Österreich, offen für alle auf der Welt. Ich laufe auf deinem PC oder auf dem Gerät eines "
            "Mitglieds, nicht in einem Rechenzentrum. " + _GEMEINSAM + " " + _MITMACHEN,
     "koennen": "Ich beantworte Fragen, schreibe und fasse Texte zusammen, rechne, schaue Wetter und Schlagzeilen nach, suche in "
                "Dokumenten, die du freigibst, und befolge Skills, also Regeln, die du oder andere Mitglieder für eine Aufgabe "

@@ -52,6 +52,14 @@ def _karte_leer(tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def _sprache_zuruecksetzen():
+    import community
+    vorher = community.SPRACHE
+    yield
+    community.SPRACHE = vorher
+
+
+@pytest.fixture(autouse=True)
 def _eigen_zuruecksetzen():
     if hasattr(app_web._EIGEN, "an"):
         del app_web._EIGEN.an

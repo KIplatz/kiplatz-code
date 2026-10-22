@@ -69,6 +69,7 @@ import vorlesen
 import neuerungen
 import gespraeche_import
 import hausordnung
+import krisenhilfe
 import heimnetz
 import ki_laufzeit
 import modell_katalog
@@ -2064,6 +2065,9 @@ class Api:
     def _antwort_fuer_mitglied(self, nachrichten: list[dict], auszuege: list[dict], fuer: str, *, frisch: bool = False, teil_melden=None, schritt_melden=None,
                                skill: dict | None = None, zuhause: dict | None = None, fenster: dict | None = None,
                                fachgebiete: list | None = None, messen: bool = False) -> tuple[str, dict]:
+        kh = krisenhilfe.antwort(krisenhilfe.letzte_frage(nachrichten)) if fenster is None else None
+        if kh is not None:
+            return kh, {**self._schein_ohne_modell(krisenhilfe.GEMACHT), "geraet": "ein PC der Community", "quellen": krisenhilfe.WOHER}
         vorher = getattr(_SCHRITT, "fn", None)
         lauf_vorher = getattr(_SUCHLAUF, "stand", None)
         _SCHRITT.fn = schritt_melden
@@ -4231,6 +4235,10 @@ class Api:
             if not b.ok:
                 _log(self._core, f"ABGELEHNT HAUSORDNUNG frage: {b.grund}")
                 return ohne_modell(f"Das gehört nicht in diese Community ({b.grund}). {hausordnung.HAUSORDNUNG}", "abgelehnt", "Platzordnung der Community.")
+            kh = krisenhilfe.antwort(str(text))
+            if kh is not None:
+                _log(self._core, "OK frage: Krisenhilfe, ohne Modell")
+                return ohne_modell(kh, krisenhilfe.GEMACHT, krisenhilfe.WOHER, fertig_en=krisenhilfe.TEXT_EN)
             ab = absicht.letzte(g.fuer_modell())
             _ABSICHT.wert = ab
             frisch = frisch or ab.frisch

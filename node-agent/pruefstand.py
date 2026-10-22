@@ -27,8 +27,8 @@ BERICHTIGUNG_MAX = 60
 SIEBEN = 7
 
 START_FRAGEN: tuple[tuple[str, str, tuple[str, ...], str], ...] = (
-    ("Was ist KIplatz?", "KIplatz ist eine kostenlose KI aus Österreich, die eine Community gemeinsam baut; die Antworten kommen von den Computern der Mitglieder, nicht aus einem Rechenzentrum.", ("Österreich", "Community"), "selbstauskunft"),
-    ("Wer bist du?", "Ich bin KIplatz, die KI der gleichnamigen Community aus Österreich; ich laufe auf deinem PC oder auf dem Gerät eines anderen Mitglieds.", ("KIplatz",), "selbstauskunft"),
+    ("Was ist KIplatz?", "KIplatz ist eine kostenlose KI aus Österreich, offen für alle auf der Welt, die eine Community gemeinsam baut; die Antworten kommen von den Computern der Mitglieder, nicht aus einem Rechenzentrum.", ("Österreich", "Community"), "selbstauskunft"),
+    ("Wer bist du?", "Ich bin KIplatz, eine KI aus Österreich, offen für alle auf der Welt; ich laufe auf deinem PC oder auf dem Gerät eines anderen Mitglieds.", ("KIplatz",), "selbstauskunft"),
     ("Was kannst du?", "Ich beantworte Fragen, schreibe und fasse Texte zusammen, rechne, schaue Wetter und Schlagzeilen nach und suche im Wissen der Community.", ("Fragen",), "selbstauskunft"),
     ("Wie funktioniert KIplatz?", "Deine Frage geht zuerst an die KI auf deinem eigenen PC; hat dein Gerät keine passende Grafikkarte, schickt das Programm die Frage an ein anderes Gerät der Community, der Server vermittelt nur.", ("PC",), "selbstauskunft"),
     ("Was kostet KIplatz?", "KIplatz ist kostenlos; es gibt keine Werbung, keinen Datenhandel und kein Abo.", ("kostenlos",), "kiplatz.at"),
