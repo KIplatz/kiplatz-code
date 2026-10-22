@@ -573,38 +573,6 @@ class Community:
         return self._anfrage("/pruefstand-ergebnis", {"antworten": antworten, "wege": wege, **({"runde": str(runde)[:20]} if runde else {})},
                              als_geraet=True, timeout=PRUEFSTAND_ERGEBNIS_TIMEOUT_S)
 
-    def training_bericht(self, urteil: str, text: str) -> dict:
-        return self._anfrage("/training-bericht", {"urteil": str(urteil)[:20], "text": str(text)[:4000]}, als_geraet=True)
-
-    def trainingsliste_holen(self, ziel: Path, *, hoechstens: int = 200 * 1024 * 1024) -> int:
-        s = self.schluessel()
-        if s is not None:
-            kopf = {"User-Agent": _UA, "X-Schluessel": s}
-        elif self.admin_laut_server():
-            kopf = self._geraet_kopf()
-        else:
-            raise CommunityError("COMMUNITY_SCHLUESSEL", "dafür braucht es den Community-Schlüssel oder ein Admin-Gerät")
-        req = urllib.request.Request(f"{self.adresse}/trainingsliste", headers=kopf, method="GET")
-        teil = ziel.with_suffix(ziel.suffix + ".teil")
-        n = zeilen = 0
-        try:
-            with self._roh(req, 600.0) as r, open(teil, "wb") as f:
-                for stueck in iter(lambda: r.read(1024 * 1024), b""):
-                    f.write(stueck)
-                    n += len(stueck)
-                    zeilen += stueck.count(b"\n")
-                    if n > hoechstens:
-                        raise CommunityError("COMMUNITY_LISTE_GROSS", "die Lernliste ist größer als erlaubt")
-        except CommunityError:
-            teil.unlink(missing_ok=True)
-            raise
-        except OSError as exc:
-            teil.unlink(missing_ok=True)
-            raise CommunityError("COMMUNITY_LISTE_SCHREIBEN", f"die Lernliste konnte nicht gespeichert werden ({exc.strerror or type(exc).__name__})") from None
-        import os
-        os.replace(teil, ziel)
-        return zeilen
-
     def messreihe_ergebnis(self, antworten: list[dict], *, modell: str, fehler: str = "") -> dict:
         return self._anfrage("/messreihe-ergebnis", {"antworten": antworten, "modell": str(modell)[:120], "fehler": str(fehler)[:200]},
                              als_geraet=True, timeout=ERGEBNIS_TIMEOUT_S)

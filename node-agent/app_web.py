@@ -119,17 +119,10 @@ KNAPP_ZEICHEN = 500
 WIKI_KANDIDATEN = 8
 PRUEFER_MODELLE = ("14B", "8B")
 PRUEFSTAND_MITGLIEDER = True
-TRAINING_HOECHSTENS_S = 6 * 3600
 TRAINING_TAKT_S = 10.0
 KURZTEST_SKRIPT = "kurztest.py"
 KURZTEST_ART = ("--ohne-systemtext", "--batch", "8")
 KURZTEST_HOECHSTENS_S = 9 * 60
-TRAINING_NACHHOLEN_NAECHTE = 2
-TRAINING_NACHHOLEN_BIS = 12
-TRAINING_VERSUCHE = 4
-TRAINING_VORSCHAU = ("Die Zahlen des Trainingswerkzeugs sind eine Vorschau ohne nachgeschlagene Stellen, nicht wie im Programm. "
-                     "Ob eine Fassung besser ist, entscheidet nur die Probe im Programm.")
-TRAINING_OFFEN_TAGE = 2
 PRUEFSTAND_VERSUCHE = 3
 PRUEFSTAND_HOCHLADEN_VERSUCHE = 3
 PRUEFSTAND_HOCHLADEN_WARTE_S = 60.0
@@ -727,7 +720,7 @@ class Api:
                                                             antworten_moeglich=self._kann_fuer_andere_antworten, fragen_immer=self.fragen_immer,
                                                             vertiefen=self._vertiefen, vertiefen_pruefen=self._vertiefen_pruefen,
                                                             vorwaermen=self._vorwaermen_lauf,
-                                                            pruefstand=self._pruefstand_lauf, training=self._training_lauf,
+                                                            pruefstand=self._pruefstand_lauf,
                                                             karte_vergeben=lambda: self._ki.gesperrt if self._kurztest_laeuft() else "",
                                                             modell_name=lambda: self._ki.wahl.modell.name if (self._ki.wahl and self._ki.quelle() == "lokal"
                                                                                                               and self._ki.ordner.modell_da(self._ki.wahl.modell)) else "",
@@ -1582,13 +1575,11 @@ class Api:
             return None
         try:
             ordner, python = Path(str(t.get("ordner", ""))), Path(str(t.get("python", "")))
-            skript = ordner / Path(str(t.get("skript") or "nachtlauf_woche.py")).name
-            tag, stunde = int(t.get("wochentag", 0)) % 7, int(t.get("stunde", 1)) % 24
         except (TypeError, ValueError):
             return None
-        if not (ordner.is_absolute() and python.is_absolute() and python.is_file() and skript.is_file()):
+        if not (ordner.is_absolute() and python.is_absolute() and python.is_file()):
             return None
-        return {"ordner": ordner, "python": python, "skript": skript, "wochentag": tag, "stunde": stunde}
+        return {"ordner": ordner, "python": python}
 
     def _mit_freier_karte(self, befehl: list[str], ordner, logdatei: Path, hoechstens_s: float, *, grund: str, meldung: str,
                           gesperrt: str):
@@ -1687,116 +1678,6 @@ class Api:
     def _kurztest_laeuft(self) -> bool:
         t = getattr(self, "_kurztest_thread", None)
         return bool(t is not None and t.is_alive())
-
-    def _training_lauf(self) -> dict | None:
-        if not self._karte_lock.acquire(blocking=False):
-            return None
-        try:
-            return self._training_lauf_innen()
-        finally:
-            self._karte_lock.release()
-
-    def _training_lauf_innen(self) -> dict | None:
-        if self._pruefen_pausiert():
-            return None
-        t = self._training_einstellung()
-        jetzt = datetime.now()
-        heute = jetzt.strftime("%Y-%m-%d")
-        roh = self._ki.einstellung().get("training")
-        if t is None and isinstance(roh, dict) and roh.get("an"):
-            try:
-                tag, stunde = int(roh.get("wochentag", 0)) % 7, int(roh.get("stunde", 1)) % 24
-            except (TypeError, ValueError):
-                tag, stunde = 0, 1
-            if (jetzt.weekday() == tag and stunde <= jetzt.hour and str(self._ki.einstellung().get("training_zuletzt", "")) != heute
-                    and self._community.ist_admin()):
-                self._ki.einstellung_setzen(training_zuletzt=heute)
-                r = self._training_melden("fehler", "Das Training ist eingeschaltet, aber Trainingsordner, Python oder Skript fehlen am PC "
-                                                    "(Einstellung „training“). Diese Woche wurde nicht trainiert.")
-                self._ki.einstellung_setzen(training_ergebnis="einstellung")
-                return r
-            return None
-        e_ = self._ki.einstellung()
-        zuletzt = str(e_.get("training_zuletzt", ""))
-        im_fenster = t is not None and t["stunde"] <= jetzt.hour < max(t["stunde"] + 2, TRAINING_NACHHOLEN_BIS)
-        offen = e_.get("training_offen") if isinstance(e_.get("training_offen"), dict) else None
-        if offen is not None and t is not None and self._community.ist_admin():
-            lauf = Path(str(offen.get("lauf", "")))
-            try:
-                tage = (jetzt.date() - type(jetzt.date()).fromisoformat(str(offen.get("seit", "")))).days
-            except ValueError:
-                tage = TRAINING_OFFEN_TAGE + 1
-            versuche = int(offen.get("versuche", 1) or 1)
-            if not (lauf.is_absolute() and lauf.parent == t["ordner"] and lauf.is_dir()) or tage > TRAINING_OFFEN_TAGE \
-                    or versuche >= TRAINING_VERSUCHE:
-                self._ki.einstellung_setzen(training_offen=None)
-                return self._training_melden("fehler", f"Das Training wurde {versuche}-mal unterbrochen (Pause, Programmende oder "
-                                                       "Neustart) und kam nicht zu Ende. Nächste Woche beginnt es neu.")
-            if not im_fenster:
-                return None
-            self._ki.einstellung_setzen(training_offen={**offen, "versuche": versuche + 1})
-            _log(self._core, f"OK training: macht in {lauf.name} weiter (Start {versuche + 1} von höchstens {TRAINING_VERSUCHE})")
-            return self._training_ausfuehren(t, lauf, jetzt)
-        if (t is None or not (t["wochentag"] == jetzt.weekday() or self._training_nachholen(zuletzt, e_, jetzt))
-                or not im_fenster or zuletzt == heute or not self._community.ist_admin()):
-            return None
-        nachgeholt = 0 if t["wochentag"] == jetzt.weekday() else int(e_.get("training_nachgeholt", 0) or 0) + 1
-        self._ki.einstellung_setzen(training_zuletzt=heute, training_nachgeholt=nachgeholt)
-        lauf = t["ordner"] / f"woche-{heute}"
-        try:
-            lauf.mkdir(parents=True, exist_ok=True)
-            n = self._community.trainingsliste_holen(lauf / "lernliste.ndjson")
-        except (OSError, app_core.AppError) as exc:
-            return self._training_melden("fehler", f"Die Lernliste kam nicht an: {getattr(exc, 'detail', type(exc).__name__)}")
-        _log(self._core, f"OK training: Lernliste mit {n} Paaren, das Training beginnt")
-        self._ki.einstellung_setzen(training_offen={"lauf": str(lauf), "seit": heute, "versuche": 1})
-        return self._training_ausfuehren(t, lauf, jetzt)
-
-    def _training_ausfuehren(self, t: dict, lauf: Path, jetzt: datetime) -> dict:
-        proc, unterbrochen = self._mit_freier_karte(
-            [str(t["python"]), str(t["skript"]), "--lauf", str(lauf), "--ki-modelle", str(self._ki.ordner.modelle_dir)], t["ordner"],
-            lauf / "training.log", TRAINING_HOECHSTENS_S, grund="dieser PC trainiert gerade KIplatz",
-            meldung="Trainiert KIplatz. Fragen beantworten so lange andere PCs.",
-            gesperrt="Dieser PC trainiert gerade KIplatz. Bitte frag in ein paar Stunden noch einmal.")
-        if unterbrochen:
-            _log(self._core, "INFO training: unterbrochen (Pause oder Programmende), es macht später im selben Ordner weiter")
-            return {"urteil": "unterbrochen"}
-        self._ki.einstellung_setzen(training_offen=None)
-        if proc is None or proc.returncode != 0:
-            return self._training_melden("fehler", f"Das Trainingswerkzeug endete nicht sauber (Rückgabe {getattr(proc, 'returncode', None)}); "
-                                                   f"Einzelheiten in {lauf / 'training.log'}.")
-        try:
-            e = json.loads((lauf / "ergebnis.json").read_text(encoding="utf-8"))
-            urteil, bericht = str(e.get("urteil", "fehler"))[:20], str(e.get("bericht", ""))[:3500]
-        except (OSError, ValueError, AttributeError):
-            return self._training_melden("fehler", "Das Trainingswerkzeug hat kein Ergebnis geschrieben.")
-        if urteil == "besser":
-            bericht += "\nDie Probe im echten Programm ruht, bis sie mit dem Trainingsplan zurückkommt; ausgerollt wird nichts."
-            urteil = "besserohnemessung"
-        return self._training_melden(urteil, TRAINING_VORSCHAU + "\n\n" + bericht)
-
-    @staticmethod
-    def _training_nachholen(zuletzt: str, e: dict, jetzt: datetime) -> bool:
-        if not zuletzt:
-            return False
-        ergebnis = str(e.get("training_ergebnis", "fehler"))
-        try:
-            tage = (jetzt.date() - type(jetzt.date()).fromisoformat(zuletzt)).days
-        except ValueError:
-            return False
-        return ergebnis == "fehler" and 1 <= tage <= 6 and int(e.get("training_nachgeholt", 0) or 0) < TRAINING_NACHHOLEN_NAECHTE
-
-    def _training_melden(self, urteil: str, text: str) -> dict:
-        try:
-            self._ki.einstellung_setzen(training_ergebnis=urteil)
-        except Exception:
-            pass
-        _log(self._core, f"OK training {urteil}" if urteil != "fehler" else f"ABGELEHNT training: {text[:160]}")
-        try:
-            self._community.training_bericht(urteil, text)
-        except app_core.AppError as exc:
-            _log(self._core, f"FEHLER training melden: {exc.code}")
-        return {"urteil": urteil}
 
     def _pruefstand_fragen(self, fragen: list, *, runde: dict, erzwingen: bool) -> dict | None:
         if erzwingen:

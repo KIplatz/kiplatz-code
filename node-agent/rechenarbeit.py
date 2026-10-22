@@ -119,7 +119,7 @@ class Rechenarbeit:
                  server: ki_laufzeit.KiServer | None = None, herunterladen=ki_laufzeit.herunterladen, geraete_ermitteln=ki_laufzeit.geraete_ermitteln,
                  leerlauf_s=None, schlafen=None, protokoll=None, urteil=None, urteil_bereit=None,
                  antworten=None, ki_starten=None, ki_stoppen=None, antworten_moeglich=None, fragen_immer=None, am_strom=None,
-                 vertiefen=None, vertiefen_pruefen=None, vorwaermen=None, pruefstand=None, training=None, server_geteilt=None, jetzt=None, halter=None, themen=None, hitze_messen=None, ram_messen=None,
+                 vertiefen=None, vertiefen_pruefen=None, vorwaermen=None, pruefstand=None, server_geteilt=None, jetzt=None, halter=None, themen=None, hitze_messen=None, ram_messen=None,
                  modell_name=None, stand=None, kartenteiler=None, kopie=None, speicher_freigeben=None, karte_vergeben=None) -> None:
         self._core = core
         self._gemeinschaft = gemeinschaft if callable(gemeinschaft) else (lambda: gemeinschaft)
@@ -137,7 +137,6 @@ class Rechenarbeit:
         self._vertiefen_pruefen = vertiefen_pruefen
         self._vorwaermen = vorwaermen
         self._pruefstand = pruefstand
-        self._training = training
         self._karte_vergeben = karte_vergeben
         self._server_geteilt = server_geteilt or (lambda: False)
         self._jetzt = jetzt or time.time
@@ -778,11 +777,6 @@ class Rechenarbeit:
             if b is not None:
                 self._log(f"OK rechenarbeit pruefstand: {b.get('richtig')} von {b.get('gesamt')} Prüffragen richtig")
             self.phase = vorher
-        if self._training is not None and self._mitglied_frage is None:
-            try:
-                self._training()
-            except Exception as exc:
-                self._log(f"FEHLER rechenarbeit training: {type(exc).__name__}: {str(exc)[:100]}")
 
     def _schleife_erkannt(self, ziel: tuple) -> None:
         self.phase, self.auftrag_n = "wartet", 0
