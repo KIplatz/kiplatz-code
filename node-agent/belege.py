@@ -210,6 +210,8 @@ def namen(satz: str) -> tuple[list[str], list[str]]:
     for i, (w, pos) in enumerate(toks):
         vorher = satz[:pos].rstrip()
         satzanfang = i == 0 or vorher.endswith((":", "–", "-", "•", "(", "„", "\""))
+        if lauf and i > 0 and re.search(r"[,;/()]", satz[toks[i - 1][1] + len(toks[i - 1][0]):pos]):
+            lauf_ende()
         if w[:1].isupper() and not satzanfang and w.lower() not in _KEIN_NAME:
             if w.upper() in _KUERZEL_KEIN_NAME:
                 lauf_ende()

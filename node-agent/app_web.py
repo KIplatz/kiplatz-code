@@ -14,6 +14,7 @@ import subprocess
 import sys
 import contextlib
 import dataclasses
+import itertools
 import threading
 import time
 import traceback
@@ -1721,10 +1722,12 @@ class Api:
                     time.sleep(0.5)
                 t0 = time.time()
                 self._mess_gewartet = 0.0
+                _SCHATTEN.zeit = 0.0
                 schein: dict = {}
                 vorrang = getattr(self._rechen, "vorrang", None)
                 _VERMISCHT.liste = []
                 _GESTRICHEN.liste = []
+                _SCHATTEN.liste = []
                 _MESSWEG.d = {}
                 ablauf: list[tuple[float, str]] = []
                 ki_aus = False
@@ -1739,6 +1742,7 @@ class Api:
                 finally:
                     vermischt_liste, _VERMISCHT.liste = list(getattr(_VERMISCHT, "liste", None) or []), None
                     gestrichen_liste, _GESTRICHEN.liste = list(getattr(_GESTRICHEN, "liste", None) or []), None
+                    schatten_liste, _SCHATTEN.liste = list(getattr(_SCHATTEN, "liste", None) or []), None
                     weg, _MESSWEG.d = getattr(_MESSWEG, "d", None), None
                 if ki_aus:
                     _log(self._core, f"INFO pruefstand: die KI war bei Prüffrage {len(antworten) + 1} aus{self._ki_ende_grund()}; sie wird neu gestartet")
@@ -1758,11 +1762,15 @@ class Api:
                 break
             pr = schein.get("pruefung") if isinstance(schein.get("pruefung"), dict) else {}
             gewartet = getattr(self, "_mess_gewartet", 0.0)
+            richter_s = float(getattr(_SCHATTEN, "zeit", 0.0) or 0.0)
             if isinstance(weg, dict):
-                weg["schritte"] = ohne_suchbremse(schritte_summe(ablauf, time.time() - t0), gewartet)
-            eintrag = {"kennung": kennung, "antwort": text, "dauer_s": round(max(0.0, time.time() - t0 - gewartet), 1),
+                weg["schritte"] = ohne_suchbremse(ohne_suchbremse(schritte_summe(ablauf, time.time() - t0), gewartet), richter_s,
+                                                  name="Probe: Richter", zuerst=())
+            eintrag = {"kennung": kennung, "antwort": text, "dauer_s": round(max(0.0, time.time() - t0 - gewartet - richter_s), 1),
                        "pruefung": {k: pr.get(k, 0) for k in ("gruen", "gelb", "rot")}, "belege": list(schein.get("belege") or [])[:5],
-                       "quellen": str(schein.get("quellen", ""))[:600], "notiz": vermischt_notiz(vermischt_liste) + gestrichen_notiz(gestrichen_liste) + pruefstand.notiz_aus(schein.get("quellen", "")),
+                       "quellen": str(schein.get("quellen", ""))[:600],
+                       "notiz": notiz_zusammen(vermischt_notiz(vermischt_liste) + schatten_notiz(schatten_liste) + gestrichen_notiz(gestrichen_liste),
+                                               pruefstand.notiz_aus(schein.get("quellen", ""))),
                        "weg": mess_weg(schein, weg)}
             zs.anhaengen(kennung, str(f.get("frage", "")), eintrag)
             antworten.append(eintrag)
@@ -2333,26 +2341,26 @@ class Api:
             self._schritt("lässt das Modell zweifelhafte Sätze noch einmal prüfen …")
             return pruefer(z, saetze)
         bekannt = getattr(self._wiki, "namen_bekannt", None)
-        nachgeschlagen: list = []
-        einleitung = getattr(self._wiki, "einleitung", None)
+        bew = getattr(self, "_bewertung", None)
 
-        def nachschlagen(satz: str) -> str:
-            tr = list(einleitung(satz, hoechstens=5) or []) if einleitung is not None else []
-            nachgeschlagen.extend(tr)
-            return "\n".join(str(x.text) for x in tr)
+        def richter(satz: str, texte: list[str]) -> float | None:
+            vorrang = getattr(getattr(self, "_rechen", None), "vorrang", None)
+            if bew is None or not texte or not bew.server.laeuft() or (isinstance(vorrang, threading.Event) and vorrang.is_set()):
+                return None
+            je_quelle = [richter_stuecke(str(t)) for t in texte]
+            stuecke = [s for reihe in itertools.zip_longest(*je_quelle) for s in reihe if s][:bewertung.MAX_KANDIDATEN]
+            t0 = time.monotonic()
+            try:
+                werte = bew.server.bewerten("Stützt der Text diese Aussage? " + " ".join(satz.split())[:600], stuecke,
+                                            timeout_s=bewertung.TIMEOUT_S)
+            finally:
+                _SCHATTEN.zeit = float(getattr(_SCHATTEN, "zeit", 0.0) or 0.0) + time.monotonic() - t0
+            return round(max(werte), 2) if werte else None
         _FREMD.texte = belege.fremde_texte(quellen)
         neu_text, notizen = belege_anwenden(text, frage, zusatz, quellen, nochmal=neu if nochmal is not None else None,
                                             pruefer=pruefer_mit_schritt if pruefer is not None else None, schreiben=schreiben, bekannt=bekannt,
                                             umschreiben=self._umschreiber() if nochmal is not None else None,
-                                            nachschlagen=nachschlagen if not schreiben else None)
-        neu_text_werte = belege.zahlenwerte(neu_text)
-        for tr in nachgeschlagen:
-            if belege.zahlenwerte(str(tr.text)) & neu_text_werte and not any(q.get("adresse") == tr.quelle.adresse for q in quellen):
-                q = {"nummer": max([int(x.get("nummer") or 0) for x in quellen] + [0]) + 1, "titel": tr.quelle.titel, "adresse": tr.quelle.adresse,
-                     "art": tr.quelle.art, "text": str(tr.text)}
-                quellen.append(q)
-                lieferschein.setdefault("quellen_liste", []).append({k: v for k, v in q.items() if k != "text"})
-                lieferschein.setdefault("nachgeschlagen", []).append(tr.quelle.titel)
+                                            richter=richter if not schreiben else None)
         if notizen:
             _log(self._core, "INFO belege: " + " ".join(notizen))
             lieferschein["belege"] = notizen
@@ -5606,6 +5614,8 @@ _VERMISCHT = threading.local()
 
 _GESTRICHEN = threading.local()
 
+_SCHATTEN = threading.local()
+
 _MESSWEG = threading.local()
 
 
@@ -5624,17 +5634,60 @@ def schritte_summe(ablauf: list[tuple[float, str]], gesamt_s: float) -> dict[str
     return {n: int(round(v)) for n, v in sorted(s.items(), key=lambda x: -x[1])[:8]}
 
 
-def ohne_suchbremse(schritte: dict[str, int], gewartet_s: float) -> dict[str, int]:
+WARTE_SCHRITTE = ("wartet auf die Suchbremse", "Probe: Richter")
+
+
+def ohne_suchbremse(schritte: dict[str, int], gewartet_s: float, *, name: str = "wartet auf die Suchbremse",
+                    zuerst: tuple[str, ...] = ("sucht im Internet", "prüft, welche Fundstellen wirklich passen")) -> dict[str, int]:
     g = int(round(gewartet_s))
     if g < 1:
         return schritte
     s = dict(schritte)
-    for name in ("sucht im Internet", "prüft, welche Fundstellen wirklich passen", *sorted(s, key=lambda n: -s[n])):
-        if s.get(name, 0) >= g:
-            s[name] -= g
+    for schritt in (*zuerst, *sorted((n for n in s if n not in WARTE_SCHRITTE), key=lambda n: -s[n])):
+        if s.get(schritt, 0) >= g:
+            s[schritt] -= g
             break
-    s["wartet auf die Suchbremse"] = g
+    s[name] = g
     return dict(sorted(s.items(), key=lambda x: -x[1])[:8])
+
+
+def richter_stuecke(text: str) -> list[str]:
+    stuecke: list[str] = []
+    jetzt = ""
+    for satz in re.split(r"(?<=[.!?])\s+", " ".join(str(text).split())):
+        teile: list[str] = []
+        for wort in satz.split(" "):
+            if teile and len(teile[-1]) + 1 + len(wort) <= bewertung.MAX_ZEICHEN:
+                teile[-1] += " " + wort
+            else:
+                teile.extend(wort[i:i + bewertung.MAX_ZEICHEN] for i in range(0, max(1, len(wort)), bewertung.MAX_ZEICHEN))
+        for teil in teile:
+            if jetzt and len(jetzt) + 1 + len(teil) > bewertung.MAX_ZEICHEN:
+                stuecke.append(jetzt)
+                jetzt = ""
+            jetzt = (jetzt + " " + teil).strip()
+    if jetzt:
+        stuecke.append(jetzt)
+    return stuecke
+
+
+def schatten_notiz(liste) -> str:
+    def wert(r) -> str:
+        return "-" if r is None else f"{float(r):.2f}".replace(".", ",")
+    teile = []
+    for e in list(liste or [])[:6]:
+        gegen = f"/{wert(e.get('rg'))}" if "rg" in e else ""
+        teile.append(f"Z{int(bool(e.get('z')))} W{int(e.get('w') or 0)} N{int(bool(e.get('n')))} G{int(bool(e.get('g')))} R{wert(e.get('r'))}{gegen}")
+    return f"Richter: {'; '.join(teile)}. " if teile else ""
+
+
+def gegenprobe_satz(satz: str) -> str:
+    return re.sub(r"\d+", lambda m: str((int(m.group(0)[0]) + 3) % 10 or 1) + m.group(0)[1:], satz)
+
+
+def notiz_zusammen(vorne: str, hinten: str) -> str:
+    hinten = hinten[:300]
+    return vorne[:max(0, pruefstand.NOTIZ_MAX - len(hinten))] + hinten
 
 
 def mess_bericht(eintrag: dict) -> dict:
@@ -6171,7 +6224,7 @@ def _ohne_vermittler(zusatz: str, quellen: list[dict], adressen: set[str]) -> st
 
 
 def _streng(t: str, belegtext: str, zusatz: str, rechnen: bool, pruefer, auszuege: list[tuple[int, str]], *, regel: bool = False,
-            beispiele: bool = False, bekannt=None, regelfrage: str = "", nachschlagen=None) -> tuple[str, list[str], int]:
+            beispiele: bool = False, bekannt=None, regelfrage: str = "", richter=None) -> tuple[str, list[str], int]:
     aus_quellen = any(s.farbe == "gruen" for s in pruefung.pruefen(t, auszuege).saetze)
     quelltexte = [x for _n, x in auszuege]
     befunde = belege.streng_pruefen(t, belegtext, zahlen_pruefen=not rechnen, namen_pruefen=None if (aus_quellen or regel) else (lambda s: False),
@@ -6191,25 +6244,11 @@ def _streng(t: str, belegtext: str, zusatz: str, rechnen: bool, pruefer, auszueg
             befunde = [dataclasses.replace(b, namen=tuple(n for n in b.namen if n not in echt), verdacht=tuple(v for v in b.verdacht if v not in echt))
                        if belege.beispiel(b.satz) else b for b in befunde]
         befunde = [b for b in befunde if b.zahlen or b.namen or b.verdacht or b.regel]
-    if nachschlagen is not None and any(b.zahlen and not b.namen and not b.regel for b in befunde):
-        neu_b = []
-        for b in befunde:
-            if b.zahlen and not b.namen and not b.regel:
-                try:
-                    extra = str(nachschlagen(b.satz) or "")
-                except Exception:
-                    extra = ""
-                if extra.strip():
-                    zweit = belege.streng_pruefen(b.satz, belegtext + "\n" + extra, zahlen_pruefen=not rechnen, namen_pruefen=lambda _s: False,
-                                                  regel_frage=regelfrage, regel_quellen=quelltexte + [extra])
-                    if not any(x.zahlen for x in zweit):
-                        b = dataclasses.replace(b, zahlen=())
-            neu_b.append(b)
-        befunde = [b for b in neu_b if b.zahlen or b.namen or b.verdacht or b.regel]
     weg = {b.satz for b in befunde if b.sicher_falsch}
     fraglich_b = [b for b in befunde if not b.sicher_falsch and b.verdacht]
     fraglich = [b.satz for b in fraglich_b]
     vom_pruefer = 0
+    als_name: set = set()
     if fraglich and pruefer is not None:
         try:
             woerter = list(dict.fromkeys(w for b in fraglich_b for w in b.verdacht))
@@ -6219,6 +6258,19 @@ def _streng(t: str, belegtext: str, zusatz: str, rechnen: bool, pruefer, auszueg
         vom_pruefer_weg = {b.satz for b in fraglich_b if als_name & set(b.verdacht)}
         vom_pruefer = len(vom_pruefer_weg)
         weg |= vom_pruefer_weg
+    if richter is not None and isinstance(getattr(_SCHATTEN, "liste", None), list):
+        for b in befunde:
+            if b.regel:
+                continue
+            eintrag = {"z": bool(b.zahlen), "w": len(b.namen) + len(b.verdacht), "n": bool(als_name & set(b.verdacht)), "g": b.satz in weg}
+            for feld, satz in (("r", b.satz), ("rg", gegenprobe_satz(b.satz))):
+                if feld == "rg" and satz == b.satz:
+                    break
+                try:
+                    eintrag[feld] = richter(satz, quelltexte)
+                except Exception:
+                    eintrag[feld] = None
+            _SCHATTEN.liste.append(eintrag)
     if not weg:
         return t, [], 0
     if isinstance(getattr(_GESTRICHEN, "liste", None), list):
@@ -6245,7 +6297,7 @@ def _streng(t: str, belegtext: str, zusatz: str, rechnen: bool, pruefer, auszueg
 
 def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, heute: date | None = None, nochmal=None, pruefer=None,
                     umschreiben=None,
-                    schreiben: bool = False, bekannt=None, nachschlagen=None) -> tuple[str, list[str]]:
+                    schreiben: bool = False, bekannt=None, richter=None) -> tuple[str, list[str]]:
     heute = heute or date.today()
     notizen: list[str] = []
     t, n = belege.ohne_platzhalter(text)
@@ -6293,7 +6345,7 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
     auszuege = [(int(q.get("nummer") or 0), str(q.get("text") or "")) for q in beleg_quellen if q.get("text")]
     beispiele = not (rechnen or regel or belege.zahlenfrage(frage) or belege.preisfrage(frage))
     geprueft, raus, vom_pruefer = _streng(t, belegtext, zusatz, rechnen, pruefer, auszuege, regel=regel, beispiele=beispiele, bekannt=bekannt,
-                                          regelfrage=regelfrage, nachschlagen=nachschlagen)
+                                          regelfrage=regelfrage, richter=richter)
     regel_saetze = {s for s, _g in belege.regel_ungestuetzt(t, regelfrage, [x for _n, x in auszuege])} if regelfrage else set()
     basis = t
     ausloeser = belege.vermischt_ausloeser(geprueft, [(str(q.get("titel") or ""), str(q.get("text") or "")) for q in quellen if q.get("text")])
@@ -6317,7 +6369,7 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
             neu, _ = belege.wochentage_berichtigen(neu, heute)
             neu = ohne_auszuege(ohne_markdown(neu))
             geprueft2, raus2, vom2 = _streng(neu, belegtext, zusatz, rechnen, pruefer, auszuege, regel=regel, beispiele=beispiele, bekannt=bekannt,
-                                             regelfrage=regelfrage, nachschlagen=nachschlagen)
+                                             regelfrage=regelfrage)
             quell_z = belege.zahlenwerte(belegtext + "\n" + "\n".join(x for _n, x in auszuege))
             erste_rest = geprueft == "Das weiß ich noch nicht." or nur_rest(basis, geprueft, raus)
             if (geprueft2.strip() and belege.brauchbar(geprueft2) and not _WEISS_NICHT.search(geprueft2) and not nur_rest(neu, geprueft2, raus2)
@@ -6356,7 +6408,7 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
                 neu, _ = belege.ohne_platzhalter(neu or "")
                 neu, _ = belege.ohne_selbstbezug(neu)
                 neu, _ = belege.wochentage_berichtigen(neu, heute)
-                geprueft3, raus3, vom3 = _streng(neu, belegtext, zusatz, rechnen, pruefer, auszuege, regelfrage=regelfrage, nachschlagen=nachschlagen)
+                geprueft3, raus3, vom3 = _streng(neu, belegtext, zusatz, rechnen, pruefer, auszuege, regelfrage=regelfrage)
                 quell_z = belege.zahlenwerte(belegtext + "\n" + "\n".join(x for _n, x in auszuege))
                 if geprueft3.strip() and geprueft3 != "Das weiß ich noch nicht." and belege.brauchbar(geprueft3) \
                         and len(namen_fehlen(frage, geprueft3)) < len(fehlend) \
