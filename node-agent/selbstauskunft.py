@@ -4,8 +4,40 @@ from __future__ import annotations
 import re
 
 _KIPLATZ = r"(?:kiplatz|ki-platz|ki platz|dieses programm|diese ki|diese community|das hier|dieser chatbot|dieses ding)"
+_ANDERE = re.compile(
+    r"\b(?:google gemini|microsoft copilot|meta ai|le chat|chat ?gpt|gpt[- ]?\d[\w.]*|openai|gemini|google|bard|bing|claude|anthropic|copilot|"
+    r"microsoft|perplexity|deepseek|mistral|llama|grok|siri|alexa|(?:die )?konkurrenz|"
+    r"(?:den |die |der )?(?:anderen?|großen|bekannten|übrigen) (?:kis?|ais?|chatbots?|anbieter|sprachmodelle|assistenten|agenten|"
+    r"ki[- ]?(?:agenten|assistenten|modelle|tools|dienste|anbieter))|(?:einer |eine |einen )?anderen? (?:ki|ai|chatbot|ki[- ]?(?:agent|assistent|modell))|"
+    r"other (?:ais?|ai (?:agents|assistants|models|tools|chatbots)|chatbots|assistants|models|llms)|another (?:ai|chatbot|assistant)|"
+    r"the (?:big|major|large) (?:ai|tech) (?:companies|models|players)|big tech|the competition)\b", re.I)
+_SELBST = re.compile(r"\b(?:du|dich|dir|dein\w*|you|your|yourself|this ai|this chatbot|this app|" + _KIPLATZ[3:-1] + r")\b", re.I)
+_VERGLEICHSWORT = re.compile(
+    r"\b(?:besser|schlechter|klüger|schlauer|schneller|langsamer|genauer|sicherer|intelligenter|stärker|schwächer|gleich gut|so gut|genauso|"
+    r"ähnlich|anders|unterschied\w*|unterscheid\w*|statt|anstatt|anstelle|lieber|ersetz\w*|alternative\w*|vergleich\w*|mehr als|weniger als|"
+    r"oder|und nicht|vs\.?|versus|gegen|so wie|du (?:\w+ )?wie|better|worse|smarter|faster|slower|stronger|more accurate|safer|as good|differ\w*|"
+    r"instead|rather than|replace\w*|compar\w*|more than|less than|similar|the same as|just like|you like|or)\b", re.I)
+_BITTE = re.compile(r"\b(?:kannst|könntest|würdest|magst|willst|weißt|denkst|glaubst|meinst|findest|hältst|siehst|kennst|empfiehlst) du\b|"
+                    r"\b(?:can|could|would|will) you\b|\bdo you (?:know|think|recommend)\b|\bbist du sicher\b|\bare you sure\b", re.I)
+_AUFTRAG = re.compile(r"^(?:schreib\w*|verfass\w*|formulier\w*|erstell\w*|übersetz\w*|dichte|write|draft|create|compose|translate)\b", re.I)
+_SICHER_SELBST = re.compile(
+    r"\b(?:bist|wärst|wärest) du (?:\w+ ){0,2}(?:\w+er|gut|so gut|genauso gut|ähnlich|anders|gleich|eine alternative|ein ersatz) (?:als|wie|zu|für)\b|"
+    r"\bist " + _KIPLATZ + r" (?:\w+ ){0,2}(?:\w+er|gut|so gut|genauso gut|ähnlich|anders|gleich|eine alternative|ein ersatz) (?:als|wie|zu|für)\b|"
+    r"\b(?:unterscheidet|trennt|abhebt) (?:dich|" + _KIPLATZ + r")|\bunterschied\w* zwischen (?:dir|" + _KIPLATZ + r")\b|\bund (?:dir|" + _KIPLATZ + r")\b|"
+    r"\b(?:kannst|weißt|machst) du (?:\w+ )?(?:mehr|weniger|besser|anders)\b|\bkannst du (?:[\w-]+ ){1,3}ersetzen\b|"
+    r"\b(?:are you|is kiplatz) (?:\w+ ){0,2}(?:\w+er than|more \w+ than|less \w+ than|as \w+ as|like|similar to|the same as|an alternative to|a replacement for)\b|"
+    r"\b(?:are you|is kiplatz) (?:\w+ ){0,1}(?:different|differ) from\b|\bhow (?:are|do) you (?:differ|compare)\b|\b(?:different|differ) from you\b|"
+    r"\bbetween you and\b|\band you\b|\bcan you (?:[\w-]+ ){0,2}(?:replace|do more|beat|compete)\b", re.I)
 
-_ARTEN: list[tuple[str, re.Pattern[str]]] = [
+
+def _vergleich(f: str) -> bool:
+    if not _ANDERE.search(f) or _AUFTRAG.search(f):
+        return False
+    if _SICHER_SELBST.search(f):
+        return True
+    return bool(_SELBST.search(_BITTE.sub(" ", f))) and bool(_VERGLEICHSWORT.search(f))
+
+_ARTEN: list[tuple[str, re.Pattern[str] | None]] = [
     ("merken", re.compile(r"\b(merk(e)? dir (das|dies|bitte|folgendes|mal)|kannst du (dir )?(das|dies|es) (merken|speichern|abspeichern)|"
                           r"(speicher|speichere) (das|dies|es)( bitte)?( ab)?$|kannst du das (bitte )?(ab)?speichern)", re.I)),
     ("seit", re.compile(r"\b(seit wann gibt es " + _KIPLATZ + r"|wann (wurde|ist) " + _KIPLATZ + r" (gegründet|entstanden|gestartet)|"
@@ -17,6 +49,7 @@ _ARTEN: list[tuple[str, re.Pattern[str]]] = [
     ("platzordnung", re.compile(r"\b(was (ist|steht in) (die|der) platzordnung|wof[üu]r gibt es (bei " + _KIPLATZ + r" )?(eine|die) platzordnung|"
                                 r"wof[üu]r gibt es bei " + _KIPLATZ + r" (eine|die) hausordnung|(platz|haus)ordnung (von|bei) " + _KIPLATZ +
                                 r"|welche regeln gelten (bei|in|für) " + _KIPLATZ + r")\b", re.I)),
+    ("vergleich", None),
     ("koennen", re.compile(r"\b(was kannst du|was kann " + _KIPLATZ + r"|was kannst du alles|womit kannst du (mir )?helfen|"
                            r"was (machst|tust) du( für mich)?\??$|wobei hilfst du|deine (fähigkeiten|funktionen)|was bietet " + _KIPLATZ + r")", re.I)),
     ("funktion", re.compile(r"\b(wie funktionierst du|wie funktioniert (das|das hier|du)$|wie funktioniert " + _KIPLATZ +
@@ -70,6 +103,11 @@ TEXTE: dict[str, str] = {
     "credits": "Credits sind Anerkennung für Arbeit, die ein Gerät für die Community erledigt hat, zum Beispiel wenn es Fragen "
                "anderer Mitglieder beantwortet. Sie sind kein Geld und keine Kryptowährung, man kann sie nicht kaufen und nicht "
                "verkaufen. Wer Credits hat, bekommt Vorrang, wenn viele Fragen gleichzeitig kommen.",
+    "vergleich": "Ich bin anders gebaut als die großen Anbieter, darum messe ich mich nicht an ihnen. Ich laufe nicht in einem "
+                 "Rechenzentrum, sondern auf den Computern der Mitglieder: auf deinem PC oder auf einem Gerät der Community, das gerade "
+                 "Zeit hat. Unter jeder Antwort stehen die Quellen, und wenn ich etwas nicht weiß, sage ich es, statt zu raten. Ich bin "
+                 "kostenlos, ohne Werbung und ohne Konzern dahinter, und Fragen über dich selbst speichert der Server nie. Am besten "
+                 "probierst du es aus: Frag mich etwas, das du wirklich wissen willst. Und je mehr Mitglieder mitmachen, desto mehr weiß ich.",
     "steckbrief": STECKBRIEF,
     "seit": "KIplatz gibt es seit September 2026: eine KI ohne Rechenzentrum, die auf den Computern der Mitglieder läuft und die die Community seitdem gemeinsam weiterbaut.",
     "merken": "Innerhalb dieses Gesprächs behalte ich, was du mir sagst. Über das Gespräch hinaus kann ich mir nichts merken. "
@@ -88,7 +126,7 @@ def art(frage: str) -> str | None:
     if len(f) > 120 or not f:
         return None
     for name, muster in _ARTEN:
-        if muster.search(f):
+        if (_vergleich(f) if muster is None else muster.search(f)):
             return name
     return None
 
