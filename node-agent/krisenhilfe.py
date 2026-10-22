@@ -45,7 +45,7 @@ TEXT_EN = (
     "I'm sorry you're going through this. You don't have to face it alone. Please talk to someone who will listen, right now, "
     "free and at any hour:\n"
     "– If you are in danger, call your local emergency number: 112 in Europe, 911 in the US and Canada\n"
-    "– US: call or text 988\n"
+    "– US and Canada: call or text 988\n"
     "– UK and Ireland: Samaritans 116 123\n"
     "– Austria 142, Germany 0800 111 0 111, Switzerland 143\n"
     "– Anywhere else: the emergency number or a crisis line in your country\n"

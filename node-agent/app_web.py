@@ -1549,11 +1549,15 @@ class Api:
             raise app_core.AppError("SUCHE_GESCHONT", "Die Prüfrunde schont die Suchmaschinen; diese Prüffrage läuft ohne Suche.")
         jetzt = self._mess_uhr()
         ziel = self._mess_suche_zuletzt + MESS_SUCHE_ABSTAND_S if self._mess_suche_zuletzt else jetzt
-        while jetzt < ziel:
-            if isinstance(vorrang, threading.Event) and vorrang.is_set():
-                raise app_core.AppError("SUCHE_GESCHONT", "Jemand fragt gerade selbst; diese Prüffrage läuft ohne Suche.")
-            self._mess_schlafen(min(0.5, ziel - jetzt))
-            jetzt = self._mess_uhr()
+        beginn = time.monotonic()
+        try:
+            while jetzt < ziel:
+                if isinstance(vorrang, threading.Event) and vorrang.is_set():
+                    raise app_core.AppError("SUCHE_GESCHONT", "Jemand fragt gerade selbst; diese Prüffrage läuft ohne Suche.")
+                self._mess_schlafen(min(0.5, ziel - jetzt))
+                jetzt = self._mess_uhr()
+        finally:
+            self._mess_gewartet = getattr(self, "_mess_gewartet", 0.0) + (time.monotonic() - beginn)
         self._mess_suche_zuletzt, self._mess_suchen = jetzt, self._mess_suchen + 1
 
 
@@ -1716,6 +1720,7 @@ class Api:
                         continue
                     time.sleep(0.5)
                 t0 = time.time()
+                self._mess_gewartet = 0.0
                 schein: dict = {}
                 vorrang = getattr(self._rechen, "vorrang", None)
                 _VERMISCHT.liste = []
@@ -1752,9 +1757,10 @@ class Api:
                 ruht = "die KI ist ausgefallen"
                 break
             pr = schein.get("pruefung") if isinstance(schein.get("pruefung"), dict) else {}
+            gewartet = getattr(self, "_mess_gewartet", 0.0)
             if isinstance(weg, dict):
-                weg["schritte"] = schritte_summe(ablauf, time.time() - t0)
-            eintrag = {"kennung": kennung, "antwort": text, "dauer_s": round(time.time() - t0, 1),
+                weg["schritte"] = ohne_suchbremse(schritte_summe(ablauf, time.time() - t0), gewartet)
+            eintrag = {"kennung": kennung, "antwort": text, "dauer_s": round(max(0.0, time.time() - t0 - gewartet), 1),
                        "pruefung": {k: pr.get(k, 0) for k in ("gruen", "gelb", "rot")}, "belege": list(schein.get("belege") or [])[:5],
                        "quellen": str(schein.get("quellen", ""))[:600], "notiz": vermischt_notiz(vermischt_liste) + gestrichen_notiz(gestrichen_liste) + pruefstand.notiz_aus(schein.get("quellen", "")),
                        "weg": mess_weg(schein, weg)}
@@ -2327,10 +2333,26 @@ class Api:
             self._schritt("lässt das Modell zweifelhafte Sätze noch einmal prüfen …")
             return pruefer(z, saetze)
         bekannt = getattr(self._wiki, "namen_bekannt", None)
+        nachgeschlagen: list = []
+        einleitung = getattr(self._wiki, "einleitung", None)
+
+        def nachschlagen(satz: str) -> str:
+            tr = list(einleitung(satz, hoechstens=5) or []) if einleitung is not None else []
+            nachgeschlagen.extend(tr)
+            return "\n".join(str(x.text) for x in tr)
         _FREMD.texte = belege.fremde_texte(quellen)
         neu_text, notizen = belege_anwenden(text, frage, zusatz, quellen, nochmal=neu if nochmal is not None else None,
                                             pruefer=pruefer_mit_schritt if pruefer is not None else None, schreiben=schreiben, bekannt=bekannt,
-                                            umschreiben=self._umschreiber() if nochmal is not None else None)
+                                            umschreiben=self._umschreiber() if nochmal is not None else None,
+                                            nachschlagen=nachschlagen if not schreiben else None)
+        neu_text_werte = belege.zahlenwerte(neu_text)
+        for tr in nachgeschlagen:
+            if belege.zahlenwerte(str(tr.text)) & neu_text_werte and not any(q.get("adresse") == tr.quelle.adresse for q in quellen):
+                q = {"nummer": max([int(x.get("nummer") or 0) for x in quellen] + [0]) + 1, "titel": tr.quelle.titel, "adresse": tr.quelle.adresse,
+                     "art": tr.quelle.art, "text": str(tr.text)}
+                quellen.append(q)
+                lieferschein.setdefault("quellen_liste", []).append({k: v for k, v in q.items() if k != "text"})
+                lieferschein.setdefault("nachgeschlagen", []).append(tr.quelle.titel)
         if notizen:
             _log(self._core, "INFO belege: " + " ".join(notizen))
             lieferschein["belege"] = notizen
@@ -5602,6 +5624,19 @@ def schritte_summe(ablauf: list[tuple[float, str]], gesamt_s: float) -> dict[str
     return {n: int(round(v)) for n, v in sorted(s.items(), key=lambda x: -x[1])[:8]}
 
 
+def ohne_suchbremse(schritte: dict[str, int], gewartet_s: float) -> dict[str, int]:
+    g = int(round(gewartet_s))
+    if g < 1:
+        return schritte
+    s = dict(schritte)
+    for name in ("sucht im Internet", "prüft, welche Fundstellen wirklich passen", *sorted(s, key=lambda n: -s[n])):
+        if s.get(name, 0) >= g:
+            s[name] -= g
+            break
+    s["wartet auf die Suchbremse"] = g
+    return dict(sorted(s.items(), key=lambda x: -x[1])[:8])
+
+
 def mess_bericht(eintrag: dict) -> dict:
     e = {**eintrag, "antwort": str(eintrag.get("antwort", ""))[:pruefstand.MESSREIHE_ANTWORT]}
     if e.get("notiz"):
@@ -6136,7 +6171,7 @@ def _ohne_vermittler(zusatz: str, quellen: list[dict], adressen: set[str]) -> st
 
 
 def _streng(t: str, belegtext: str, zusatz: str, rechnen: bool, pruefer, auszuege: list[tuple[int, str]], *, regel: bool = False,
-            beispiele: bool = False, bekannt=None, regelfrage: str = "") -> tuple[str, list[str], int]:
+            beispiele: bool = False, bekannt=None, regelfrage: str = "", nachschlagen=None) -> tuple[str, list[str], int]:
     aus_quellen = any(s.farbe == "gruen" for s in pruefung.pruefen(t, auszuege).saetze)
     quelltexte = [x for _n, x in auszuege]
     befunde = belege.streng_pruefen(t, belegtext, zahlen_pruefen=not rechnen, namen_pruefen=None if (aus_quellen or regel) else (lambda s: False),
@@ -6156,6 +6191,21 @@ def _streng(t: str, belegtext: str, zusatz: str, rechnen: bool, pruefer, auszueg
             befunde = [dataclasses.replace(b, namen=tuple(n for n in b.namen if n not in echt), verdacht=tuple(v for v in b.verdacht if v not in echt))
                        if belege.beispiel(b.satz) else b for b in befunde]
         befunde = [b for b in befunde if b.zahlen or b.namen or b.verdacht or b.regel]
+    if nachschlagen is not None and any(b.zahlen and not b.namen and not b.regel for b in befunde):
+        neu_b = []
+        for b in befunde:
+            if b.zahlen and not b.namen and not b.regel:
+                try:
+                    extra = str(nachschlagen(b.satz) or "")
+                except Exception:
+                    extra = ""
+                if extra.strip():
+                    zweit = belege.streng_pruefen(b.satz, belegtext + "\n" + extra, zahlen_pruefen=not rechnen, namen_pruefen=lambda _s: False,
+                                                  regel_frage=regelfrage, regel_quellen=quelltexte + [extra])
+                    if not any(x.zahlen for x in zweit):
+                        b = dataclasses.replace(b, zahlen=())
+            neu_b.append(b)
+        befunde = [b for b in neu_b if b.zahlen or b.namen or b.verdacht or b.regel]
     weg = {b.satz for b in befunde if b.sicher_falsch}
     fraglich_b = [b for b in befunde if not b.sicher_falsch and b.verdacht]
     fraglich = [b.satz for b in fraglich_b]
@@ -6195,7 +6245,7 @@ def _streng(t: str, belegtext: str, zusatz: str, rechnen: bool, pruefer, auszueg
 
 def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, heute: date | None = None, nochmal=None, pruefer=None,
                     umschreiben=None,
-                    schreiben: bool = False, bekannt=None) -> tuple[str, list[str]]:
+                    schreiben: bool = False, bekannt=None, nachschlagen=None) -> tuple[str, list[str]]:
     heute = heute or date.today()
     notizen: list[str] = []
     t, n = belege.ohne_platzhalter(text)
@@ -6243,7 +6293,7 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
     auszuege = [(int(q.get("nummer") or 0), str(q.get("text") or "")) for q in beleg_quellen if q.get("text")]
     beispiele = not (rechnen or regel or belege.zahlenfrage(frage) or belege.preisfrage(frage))
     geprueft, raus, vom_pruefer = _streng(t, belegtext, zusatz, rechnen, pruefer, auszuege, regel=regel, beispiele=beispiele, bekannt=bekannt,
-                                          regelfrage=regelfrage)
+                                          regelfrage=regelfrage, nachschlagen=nachschlagen)
     regel_saetze = {s for s, _g in belege.regel_ungestuetzt(t, regelfrage, [x for _n, x in auszuege])} if regelfrage else set()
     basis = t
     ausloeser = belege.vermischt_ausloeser(geprueft, [(str(q.get("titel") or ""), str(q.get("text") or "")) for q in quellen if q.get("text")])
@@ -6267,7 +6317,7 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
             neu, _ = belege.wochentage_berichtigen(neu, heute)
             neu = ohne_auszuege(ohne_markdown(neu))
             geprueft2, raus2, vom2 = _streng(neu, belegtext, zusatz, rechnen, pruefer, auszuege, regel=regel, beispiele=beispiele, bekannt=bekannt,
-                                             regelfrage=regelfrage)
+                                             regelfrage=regelfrage, nachschlagen=nachschlagen)
             quell_z = belege.zahlenwerte(belegtext + "\n" + "\n".join(x for _n, x in auszuege))
             erste_rest = geprueft == "Das weiß ich noch nicht." or nur_rest(basis, geprueft, raus)
             if (geprueft2.strip() and belege.brauchbar(geprueft2) and not _WEISS_NICHT.search(geprueft2) and not nur_rest(neu, geprueft2, raus2)
@@ -6306,7 +6356,7 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
                 neu, _ = belege.ohne_platzhalter(neu or "")
                 neu, _ = belege.ohne_selbstbezug(neu)
                 neu, _ = belege.wochentage_berichtigen(neu, heute)
-                geprueft3, raus3, vom3 = _streng(neu, belegtext, zusatz, rechnen, pruefer, auszuege, regelfrage=regelfrage)
+                geprueft3, raus3, vom3 = _streng(neu, belegtext, zusatz, rechnen, pruefer, auszuege, regelfrage=regelfrage, nachschlagen=nachschlagen)
                 quell_z = belege.zahlenwerte(belegtext + "\n" + "\n".join(x for _n, x in auszuege))
                 if geprueft3.strip() and geprueft3 != "Das weiß ich noch nicht." and belege.brauchbar(geprueft3) \
                         and len(namen_fehlen(frage, geprueft3)) < len(fehlend) \
