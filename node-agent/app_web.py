@@ -1011,7 +1011,7 @@ class Api:
                 _log(self._core, f"OK unbekannter name: {len(namen)} Name(n) stehen in keinem Wikipedia-Abschnitt, die Suche läuft gleich mit")
             elif listen:
                 _log(self._core, "OK listenfrage: eine Frage nach mehreren Dingen mit Zahlen, die Suche läuft gleich mit")
-            vorab = self._nachschauen_vorab(frage, server + lokal, nachrichten, frisch=frisch)
+            vorab = self._nachschauen_vorab(frage, server + lokal, nachrichten, frisch=frisch, modell=bool(listen))
         if (vorab is None and not frisch and not live and not ergaenzend and not orte and not selbst and self.nachschauen_an() and frage.strip()
                 and massfrage(frage) and nachschauen.erkennen(frage) is None and not _frueher_gefragt(nachrichten)
                 and not nachschauen.richtung(frage)):
@@ -1205,7 +1205,8 @@ class Api:
             return [q for q in anders if q.lower() not in {b.lower() for b in bisher}] or None
         return regel
 
-    def _nachschauen_vorab(self, frage: str, treffer: list[wissen.Treffer], nachrichten: list[dict] | None, *, frisch: bool = True):
+    def _nachschauen_vorab(self, frage: str, treffer: list[wissen.Treffer], nachrichten: list[dict] | None, *, frisch: bool = True,
+                           modell: bool = False):
         fn, lauf, mess = getattr(_SCHRITT, "fn", None), getattr(_SUCHLAUF, "stand", None), ki_laufzeit.messung_liste()
         eigen = getattr(_EIGEN, "an", True)
         original = ki_laufzeit.original()
@@ -1219,7 +1220,7 @@ class Api:
             ki_laufzeit.messung_teilen(mess)
             try:
                 erg["r"] = self._nachschauen(frage, treffer, frisch=True, nachrichten=nachrichten) if frisch else \
-                    self._nachschauen(frage, treffer, suchen=True, nachrichten=nachrichten)
+                    self._nachschauen(frage, treffer, suchen=True, nachrichten=nachrichten, modell_woerter=modell)
             except BaseException as exc:
                 erg["e"] = exc
             finally:
@@ -1280,7 +1281,7 @@ class Api:
             return None
 
     def _nachschauen(self, frage: str, treffer: list[wissen.Treffer], *, frisch: bool = False, nachrichten: list[dict] | None = None,
-                     abgedeckt: bool | None = None, suchen: bool = False) -> tuple[list[wissen.Treffer], str]:
+                     abgedeckt: bool | None = None, suchen: bool = False, modell_woerter: bool = False) -> tuple[list[wissen.Treffer], str]:
         if _dateifrage(frage):
             return [], ""
         deckt_ab = (lambda: abgedeckt) if abgedeckt is not None else (lambda: self._deckt_ab(frage, treffer))
@@ -1311,7 +1312,7 @@ class Api:
             else:
                 lauf["nebenher_leer"] = lauf.pop("nebenher", None)
         if a.art == "suche":
-            if alle is None and not spaeter and not _frueher_gefragt(nachrichten):
+            if alle is None and not spaeter and not _frueher_gefragt(nachrichten) and not modell_woerter:
                 alle = self._suchwoerter(nachrichten, frage, ohne_modell=True)
                 if lauf is not None and alle:
                     lauf["nur_regel"] = True
