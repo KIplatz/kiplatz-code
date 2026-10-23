@@ -393,6 +393,18 @@ def urteil_lesen(text: str, anzahl: int) -> set[int]:
     return name
 
 
+RICHTER_AUFTRAG = ("Prüfe die Aussage unten gegen die Auszüge oben. Antworte mit genau einem Wort: „ja“, wenn die Aussage mit allen Zahlen, Daten "
+                   "und Namen so in einem Auszug steht; „nein“, wenn ein Auszug etwas anderes sagt oder eine Zahl, ein Datum oder ein Name dort anders "
+                   "oder gar nicht steht; „allgemein“, wenn die Aussage Allgemeinwissen ohne bestimmte Zahl ist, das in keinem Auszug stehen muss.\n\nAussage:")
+
+
+def richter_wert(text: str) -> float | None:
+    w = re.findall(r"[a-zäöüß]+", (text or "").lower())
+    if not w:
+        return None
+    return {"ja": 1.0, "allgemein": 0.5, "nein": 0.0}.get(w[0])
+
+
 _TRENNER = re.compile(r"^\s*[-–—*_=]{3,}\s*$")
 _ZAHLENFRAGE = re.compile(r"(?i)\b(?:wie ?viel\w*|wie hoch|wie groß|wie lang\w*|wie weit|wie alt|wie schwer|wie schnell|wie oft|wie tief|wann|"
                           r"seit wann|bis wann|was kostet|kostet|einwohner\w*|bevölkerung|preis\w*|höhe|länge|fläche|entfernung|anzahl|prozent|"

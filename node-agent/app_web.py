@@ -14,7 +14,6 @@ import subprocess
 import sys
 import contextlib
 import dataclasses
-import itertools
 import threading
 import time
 import traceback
@@ -2439,21 +2438,19 @@ class Api:
             self._schritt("lässt das Modell zweifelhafte Sätze noch einmal prüfen …")
             return pruefer(z, saetze)
         bekannt = getattr(self._wiki, "namen_bekannt", None)
-        bew = getattr(self, "_bewertung", None)
 
         def richter(satz: str, texte: list[str]) -> float | None:
             vorrang = getattr(getattr(self, "_rechen", None), "vorrang", None)
-            if bew is None or not texte or not bew.server.laeuft() or (isinstance(vorrang, threading.Event) and vorrang.is_set()):
+            vorrang = vorrang if isinstance(vorrang, threading.Event) else None
+            if pruefer is None or not texte or (vorrang is not None and vorrang.is_set()):
                 return None
-            je_quelle = [richter_stuecke(str(t)) for t in texte]
-            stuecke = [s for reihe in itertools.zip_longest(*je_quelle) for s in reihe if s][:bewertung.MAX_KANDIDATEN]
             t0 = time.monotonic()
             try:
-                werte = bew.server.bewerten("Stützt der Text diese Aussage? " + " ".join(satz.split())[:600], stuecke,
-                                            timeout_s=bewertung.TIMEOUT_S)
+                a = self._ki.server.frage([{"role": "user", "content": belege.RICHTER_AUFTRAG + " " + " ".join(satz.split())[:600]}], zusatz=zusatz,
+                                          max_tokens=4, temperature=0.0, art="richter", abbruch=vorrang)
             finally:
                 _SCHATTEN.zeit = float(getattr(_SCHATTEN, "zeit", 0.0) or 0.0) + time.monotonic() - t0
-            return round(max(werte), 2) if werte else None
+            return None if getattr(a, "abgebrochen", False) else belege.richter_wert(a.text)
         _FREMD.texte = belege.fremde_texte(quellen)
         neu_text, notizen = belege_anwenden(text, frage, zusatz, quellen, nochmal=neu if nochmal is not None else None,
                                             pruefer=pruefer_mit_schritt if pruefer is not None else None, schreiben=schreiben, bekannt=bekannt,
@@ -5571,6 +5568,7 @@ _VERMISCHT = threading.local()
 _GESTRICHEN = threading.local()
 
 _SCHATTEN = threading.local()
+SCHATTEN_HOECHSTENS = 6
 
 _MESSWEG = threading.local()
 
@@ -5607,31 +5605,11 @@ def ohne_suchbremse(schritte: dict[str, int], gewartet_s: float, *, name: str = 
     return dict(sorted(s.items(), key=lambda x: -x[1])[:8])
 
 
-def richter_stuecke(text: str) -> list[str]:
-    stuecke: list[str] = []
-    jetzt = ""
-    for satz in re.split(r"(?<=[.!?])\s+", " ".join(str(text).split())):
-        teile: list[str] = []
-        for wort in satz.split(" "):
-            if teile and len(teile[-1]) + 1 + len(wort) <= bewertung.MAX_ZEICHEN:
-                teile[-1] += " " + wort
-            else:
-                teile.extend(wort[i:i + bewertung.MAX_ZEICHEN] for i in range(0, max(1, len(wort)), bewertung.MAX_ZEICHEN))
-        for teil in teile:
-            if jetzt and len(jetzt) + 1 + len(teil) > bewertung.MAX_ZEICHEN:
-                stuecke.append(jetzt)
-                jetzt = ""
-            jetzt = (jetzt + " " + teil).strip()
-    if jetzt:
-        stuecke.append(jetzt)
-    return stuecke
-
-
 def schatten_notiz(liste) -> str:
     def wert(r) -> str:
         return "-" if r is None else f"{float(r):.2f}".replace(".", ",")
     teile = []
-    for e in list(liste or [])[:6]:
+    for e in list(liste or [])[:SCHATTEN_HOECHSTENS]:
         gegen = f"/{wert(e.get('rg'))}" if "rg" in e else ""
         teile.append(f"Z{int(bool(e.get('z')))} W{int(e.get('w') or 0)} N{int(bool(e.get('n')))} G{int(bool(e.get('g')))} R{wert(e.get('r'))}{gegen}")
     return f"Richter: {'; '.join(teile)}. " if teile else ""
@@ -6281,6 +6259,8 @@ def _streng(t: str, belegtext: str, zusatz: str, rechnen: bool, pruefer, auszueg
         for b in befunde:
             if b.regel:
                 continue
+            if len(_SCHATTEN.liste) >= SCHATTEN_HOECHSTENS:
+                break
             eintrag = {"z": bool(b.zahlen), "w": len(b.namen) + len(b.verdacht), "n": bool(als_name & set(b.verdacht)), "g": b.satz in weg}
             for feld, satz in (("r", b.satz), ("rg", gegenprobe_satz(b.satz))):
                 if feld == "rg" and satz == b.satz:
