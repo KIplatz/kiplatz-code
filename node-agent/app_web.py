@@ -650,8 +650,11 @@ def osm_pfad(ort: str, base_dir: Path) -> Path:
     return (Path(ort) / app_core.SPEICHER_ORDNER / osm_orte.DIRNAME) if ort else (Path(base_dir) / osm_orte.DIRNAME)
 
 
-def wiki_pfad(ort: str, base_dir: Path) -> Path:
-    return (Path(ort) / app_core.SPEICHER_ORDNER / wikipedia.DIRNAME) if ort else (Path(base_dir) / wikipedia.DIRNAME)
+WIKI_ARBEITET = frozenset({"sucht", "laedt", "liest", "ordnet", "merkt", "uebernimmt", "zaehlt", "vektoren", "teilt"})
+
+
+def wiki_pfad(ort: str, base_dir: Path, dirname: str = wikipedia.DIRNAME) -> Path:
+    return (Path(ort) / app_core.SPEICHER_ORDNER / dirname) if ort else (Path(base_dir) / dirname)
 
 
 class Api:
@@ -708,10 +711,17 @@ class Api:
                                          vektoren_bereit=lambda: self._bedeutung.bereit(), log=lambda line: _log(core, line),
                                          gemeinschaft=lambda: self._community if self._community.geraet() is not None else None,
                                          modell=lambda: ki_laufzeit.EMBEDDING.sha256[:16], ablage=lambda: self._halter.dir)
+        self._wiki_en = wikipedia.WikiKopie(lambda: wiki_pfad(self._core.load_freigabe().speicher_ort, self._core.base_dir, wikipedia.SIMPLE.dirname),
+                                            freigabe_mb=lambda: self._core.load_freigabe().speicher_mb,
+                                            darf=lambda: self._wiki_darf() and self._wiki.phase not in WIKI_ARBEITET,
+                                            karte_frei=self._wiki_karte_frei,
+                                            vektoren=lambda texte: self._bedeutung.server.vektoren(texte, timeout_s=300),
+                                            vektoren_bereit=lambda: self._bedeutung.bereit(), log=lambda line: _log(core, line),
+                                            sprache=wikipedia.SIMPLE)
         self._osm = osm_orte.OrteKopie(lambda: osm_pfad(self._core.load_freigabe().speicher_ort, self._core.base_dir),
                                        freigabe_mb=lambda: self._core.load_freigabe().speicher_mb, darf=self._wiki_darf,
                                        vorgesehen=lambda: self._community.ist_admin(), log=lambda line: _log(core, line))
-        self._halter = scheiben_halter.Halter(core.base_dir, lambda: self._community, limit_mb=lambda: max(0, self._core.load_freigabe().speicher_mb - self._wiki.belegt_mb() - self._osm.belegt_mb()), log=lambda line: _log(core, line),
+        self._halter = scheiben_halter.Halter(core.base_dir, lambda: self._community, limit_mb=lambda: max(0, self._core.load_freigabe().speicher_mb - self._wiki.belegt_mb() - self._osm.belegt_mb() - self._wiki_en.belegt_mb()), log=lambda line: _log(core, line),
                                               ordner=lambda: speicher_pfad(self._core.load_freigabe().speicher_ort))
         self._spiegel = gemeinschaft.Spiegel(core.base_dir, lambda: self._community, protokoll=lambda line: _log(core, line)) if wortindex.moeglich() else None
         self._themen = themen.Themen(lambda: self._ki.einstellung(), lambda: self._community, self._wissen, log=lambda line: _log(core, line))
@@ -2827,6 +2837,7 @@ class Api:
             self._weitergeber.starten()
         if not self.spielwiese:
             self._wiki.start()
+            self._wiki_en.start()
             self._osm.start()
         self._quellen_melden_im_hintergrund()
         if not selbst_einrichten:
@@ -2891,7 +2902,7 @@ class Api:
             raise app_core.AppError("FREIGABE_UNGUELTIG", "Prozessor-, Arbeitsspeicher- oder Festplattenwert nicht erlaubt") from None
 
     def _laufwerke(self) -> list[dict]:
-        belegt_mb = self._halter.belegt() // 1_000_000 + self._wiki.belegt_mb() + self._osm.belegt_mb()
+        belegt_mb = self._halter.belegt() // 1_000_000 + self._wiki.belegt_mb() + self._wiki_en.belegt_mb() + self._osm.belegt_mb()
         jetzt = self._core.load_freigabe().speicher_ort
         out = []
         for lw in app_core.laufwerke():
@@ -2905,7 +2916,7 @@ class Api:
             wurzel = Path(ort) if ort else self._core.base_dir
             while not wurzel.exists() and wurzel.parent != wurzel:
                 wurzel = wurzel.parent
-            frei = shutil.disk_usage(wurzel).free // 1_000_000 + ((self._halter.belegt() // 1_000_000 + self._wiki.belegt_mb() + self._osm.belegt_mb()) if ort == self._core.load_freigabe().speicher_ort else 0)
+            frei = shutil.disk_usage(wurzel).free // 1_000_000 + ((self._halter.belegt() // 1_000_000 + self._wiki.belegt_mb() + self._wiki_en.belegt_mb() + self._osm.belegt_mb()) if ort == self._core.load_freigabe().speicher_ort else 0)
         except OSError:
             frei = 0
         return {"max_mb": max(0, min(app_core.SPEICHER_MAX_MB, frei - scheiben_halter.RESERVE_BYTES // 1_000_000)), "empfehlung_mb": app_core.speicher_empfehlung_mb(frei), "frei_mb": frei}
@@ -3156,6 +3167,7 @@ class Api:
             if ort != self._core.load_freigabe().speicher_ort:
                 self._halter.umziehen(neu or (self._core.base_dir / scheiben_halter.DIRNAME))
                 self._wiki.umzug_vormerken(self._wiki.ordner, wiki_pfad(ort, self._core.base_dir))
+                self._wiki_en.umzug_vormerken(self._wiki_en.ordner, wiki_pfad(ort, self._core.base_dir, wikipedia.SIMPLE.dirname))
                 self._osm.umzug_vormerken(self._osm.ordner, osm_pfad(ort, self._core.base_dir))
             self._core.save_freigabe(f)
             try:

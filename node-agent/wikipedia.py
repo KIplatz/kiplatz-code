@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import bz2
+import dataclasses
 import hashlib
 import json
 import math
@@ -53,6 +54,12 @@ TIMEOUT_S = 60.0
 LIZENZ = "CC BY-SA 4.0"
 _UA = "KIplatz-Wikipedia/1 (eine Kopie je Monat für die eigene Suche; https://kiplatz.at)"
 _TEIL = re.compile(r'href="(' + re.escape(NAME) + r'-(\d{8})-(\d{5})\.json\.bz2)"')
+
+
+def _teil_muster(name: str) -> re.Pattern:
+    return _TEIL if name == NAME else re.compile(r'href="(' + re.escape(name) + r'-(\d{8})-(\d{5})\.json\.bz2)"')
+
+
 _AUSGABE = re.compile(r'href="(\d{8})/"')
 
 
@@ -65,6 +72,7 @@ class Unterbrochen(Exception):
 
 
 ANWAERMEN = ("Wie hoch ist der Großglockner?", "Was ist die Hauptstadt von Österreich?", "Wer war Wolfgang Amadeus Mozart?")
+ANWAERMEN_EN = ("How high is Mount Everest?", "What is the capital of Austria?", "Who was Wolfgang Amadeus Mozart?")
 SUCH_FRIST_S = 5.0
 DF_FRIST_S = 0.5
 HAEUFIG_ANTEIL = 0.005
@@ -110,12 +118,16 @@ _BILDWUNSCH = re.compile(r"(?:[a-z]{1,2}\d[a-z0-9]{0,3}|BW)")
 _LEERE_KLAMMER = re.compile(r"\[\s*(?:auch\s*)?\]")
 
 
-def ohne_wartung(text: str, titel: str = "") -> str:
-    t = _KOORDINATEN.sub(" ", _PROJEKT.sub(" ", _WARTUNG.sub(" ", str(text or ""))))
+def ohne_wartung(text: str, titel: str = "", sprache: "Sprache | None" = None) -> str:
+    englisch = sprache is not None and sprache.code != "de"
+    if englisch:
+        t = _LAUTSCHRIFT_EN.sub("", _KOORDINATEN_EN.sub(" ", str(text or "")))
+    else:
+        t = _KOORDINATEN.sub(" ", _PROJEKT.sub(" ", _WARTUNG.sub(" ", str(text or ""))))
     worte = t.split()
     erstes = (titel or "").split(" ")[0].lower()
     i = 0
-    while i < len(worte) - 1 and _BILDWUNSCH.fullmatch(worte[i]) and worte[i].lower() != erstes:
+    while not englisch and i < len(worte) - 1 and _BILDWUNSCH.fullmatch(worte[i]) and worte[i].lower() != erstes:
         i += 1
     t = " ".join(worte[i:])
     t = _LEERE_KLAMMER.sub("", t)
@@ -132,9 +144,9 @@ ANHANG_DICHT = 4
 ANHANG_FENSTER = 2000
 
 
-def ohne_anhang(text: str) -> str:
+def ohne_anhang(text: str, sprache: "Sprache | None" = None) -> str:
     text = text or ""
-    stellen = [m.start() for m in _ANHANG.finditer(text)]
+    stellen = [m.start() for m in (sprache.anhang if sprache else _ANHANG).finditer(text)]
     luecke = max(ANHANG_FENSTER, len(text) // 20)
     if len(stellen) < ANHANG_DICHT or len(text) - stellen[-1] > luecke:
         return text
@@ -155,16 +167,18 @@ _ORDNUNGSZAHL = re.compile(r"(?:^|\s)(?:der|die|das|dem|den|des|im|am|zum|zur|vo
                            r"\s+\d{1,3}\.$", re.I)
 
 
-def _kein_satzende(davor: str, danach: str) -> bool:
+def _kein_satzende(davor: str, danach: str, sprache: "Sprache | None" = None) -> bool:
+    if sprache is not None and sprache.code != "de":
+        return bool(sprache.abkuerzung.search(davor) or re.search(r"(?:^|[\s(])[A-Z]\.$", davor))
     if re.search(r"(?:^|[\s(–-])\d{1,4}\.$", davor) and _MONAT.match(danach):
         return True
     return bool(_ORDNUNGSZAHL.search(davor) or _ABKUERZUNG.search(davor) or re.search(r"(?:^|[\s(])[A-ZÄÖÜ]\.$", davor))
 
 
-def saetze(text: str) -> list[str]:
+def saetze(text: str, sprache: "Sprache | None" = None) -> list[str]:
     out: list[str] = []
     for s in _SATZENDE.split(text or ""):
-        if out and _kein_satzende(out[-1], s):
+        if out and _kein_satzende(out[-1], s, sprache):
             out[-1] += " " + s
         else:
             out.append(s)
@@ -185,8 +199,9 @@ def stuecke(text: str, zeichen: int = ABSCHNITT) -> list[str]:
     return out
 
 
-def abschnitte(text: str, *, zeichen: int = ABSCHNITT, titel: str = "") -> list[str]:
-    gute = [s for s in saetze(ohne_anhang(ohne_wartung(text, titel))) if not _BELEG.search(s)]
+def abschnitte(text: str, *, zeichen: int = ABSCHNITT, titel: str = "", sprache: "Sprache | None" = None) -> list[str]:
+    beleg = sprache.beleg if sprache else _BELEG
+    gute = [s for s in saetze(ohne_anhang(ohne_wartung(text, titel, sprache), sprache), sprache) if not beleg.search(s)]
     out, aktuell = [], ""
     for s in gute:
         while len(s) > zeichen:
@@ -209,8 +224,8 @@ _BELEG = re.compile(r"abgerufen am|\bISBN\b|\bdoi:|Archiviert vom Original|Memen
                     r"|Archivlink|Vorlage:|\bIABot\b|@1@2", re.I)
 
 
-def ist_beleg(stueck: str) -> bool:
-    n = len(_BELEG.findall(stueck or ""))
+def ist_beleg(stueck: str, sprache: "Sprache | None" = None) -> bool:
+    n = len((sprache.beleg if sprache else _BELEG).findall(stueck or ""))
     return n >= 3 or (n >= 1 and len(stueck) < 250)
 
 
@@ -222,20 +237,23 @@ _INFOBOX_WORT = re.compile(r"\b(?:Basisdaten|Einwohner|Fläche|Höhe|Koordinaten
 _JAHRESKLAMMER = re.compile(r"\(\d{4}[–-]\d{4}\)")
 
 
-def kurzdaten(aux: list[str], *, liste: bool = False) -> list[str]:
+def kurzdaten(aux: list[str], *, liste: bool = False, sprache: "Sprache | None" = None) -> list[str]:
+    sp = sprache or DE
     wert = []
     gesehen: set[tuple[int, str, str]] = set()
     for a in aux:
         a = " ".join(_VORLAGE_WORT.sub(" ", _WARTUNG.sub(" ", str(a or ""))).split())
-        if len(a) < KURZDATEN_MIN_ZEICHEN or sum(c.isdigit() for c in a) < KURZDATEN_MIN_ZIFFERN or ist_beleg(a):
+        if len(a) < KURZDATEN_MIN_ZEICHEN or sum(c.isdigit() for c in a) < KURZDATEN_MIN_ZIFFERN or ist_beleg(a, sp):
             continue
-        if len(_JAHRESKLAMMER.findall(a)) >= 3 and not _INFOBOX_WORT.search(a):
+        if sp is not DE and re.match(r"(?:v t e|vte)\b", a):
+            continue
+        if len(_JAHRESKLAMMER.findall(a)) >= 3 and not sp.infobox_wort.search(a):
             continue
         schluessel = (len(a), a[:120], a[-80:])
         if schluessel in gesehen:
             continue
         gesehen.add(schluessel)
-        wert.append((0 if _INFOBOX_WORT.search(a[:200]) and not liste else 1, len(wert), a))
+        wert.append((0 if sp.infobox_wort.search(a[:200]) and not liste else 1, len(wert), a))
     wert.sort()
     out: list[str] = []
     rest = KURZDATEN_LISTE_ZEICHEN if liste else KURZDATEN_ZEICHEN
@@ -243,31 +261,98 @@ def kurzdaten(aux: list[str], *, liste: bool = False) -> list[str]:
         if rest <= 0:
             break
         for stueck in stuecke(a[:rest]):
-            out.append("Kurzdaten: " + stueck)
+            out.append(sp.kurz + stueck)
         rest -= len(a)
     return out
 
 
-def dokument_lesen(d: dict) -> dict | None:
+@dataclasses.dataclass(frozen=True)
+class Sprache:
+    code: str
+    name: str
+    dirname: str
+    adresse: str
+    titel: str
+    anhang: re.Pattern
+    beleg: re.Pattern
+    abkuerzung: re.Pattern
+    infobox_wort: re.Pattern
+    begriffsklaerung: frozenset
+    kurz: str
+    liste: str
+    min_freigabe_mb: int
+    platz_mb: int
+    einlese_stand: int
+
+
+_ANHANG_EN = re.compile(r"\bRetrieved\b|Archived from the original|Archived copy|\bISBN\b|\bISSN\b|\bdoi:|\{\{cite|CS1 maint|at Wikimedia Commons|"
+                        r"from Wikivoyage|University Press\b|\bpp?\.\s?\d|\((?:in [A-Z][a-z]+|PDF)\)|\(Accessed \d|\bThe World Factbook\b|"
+                        r"\"\.\s+[A-Z][^\"]{1,50}?\.(?=\s|$)")
+_BELEG_EN = re.compile(r"\bRetrieved\b|Archived from the original|Archived copy|\bISBN\b|\bdoi:|\{\{cite|CS1 maint|Wikimedia Commons|\bIABot\b", re.I)
+_ABKUERZUNG_EN = re.compile(r"(?:^|[\s(])(?:[a-z]|e\.g|i\.e|etc|vs|approx|ca|No|Nos|St|Mt|Dr|Mr|Mrs|Ms|Jr|Sr|Prof|Gen|Lt|Col|Capt|Inc|Ltd|Corp|Co|"
+                            r"Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|U\.S|U\.K)\.$")
+_INFOBOX_WORT_EN = re.compile(r"\b(?:Population|Area|Elevation|Coordinates|Length|Capital|Height)\b")
+_KOORDINATEN_EN = re.compile(r"^[\s﻿ ]*\d{1,3}°[\d°′″.\s﻿ ]*[NS][\s﻿ ]+\d{1,3}°[\d°′″.\s﻿ ]*[EW]"
+                             r"[\s﻿ ]*/[\s﻿ ]*-?[\d.]+°[NS][\s﻿ ]+-?[\d.]+°[EW][\s﻿ ]*/[\s﻿ ]*"
+                             r"-?[\d.]+;[\s﻿ ]*-?[\d.]+")
+_LAUTSCHRIFT_EN = re.compile(r"[/\[][^/\[\]\s]{0,20}[ˈˌːəɐɪʊɔæɒʃʒθðŋɛʁøœɑɹʌɜɚɝɡ][^/\[\]]{0,40}[/\]]|\(\s*listen\s*\)")
+
+DE = Sprache("de", "dewiki_content", "wikipedia", "https://de.wikipedia.org/wiki/", "Wikipedia", _ANHANG, _BELEG, _ABKUERZUNG, _INFOBOX_WORT,
+             BEGRIFFSKLAERUNG_VORLAGEN, "Kurzdaten: ", "Liste ", 100_000, 80_000, EINLESE_STAND)
+SIMPLE = Sprache("simple", "simplewiki_content", "wikipedia-simple", "https://simple.wikipedia.org/wiki/", "Simple English Wikipedia", _ANHANG_EN,
+                 _BELEG_EN, _ABKUERZUNG_EN, _INFOBOX_WORT_EN,
+                 frozenset({"Template:Disambiguation", "Template:Disambig", "Template:Dab", "Template:Geodis", "Template:Hndis",
+                            "Template:Disambiguation page"}), "Key facts: ", "List of ", 5_000, 8_000, 1)
+
+
+_STOPP_EN = frozenset("""the and for with that this from are was were has have had which who whom whose what where when why how its his her
+their they them not but also been into than then there these those about more most such only other some can will would could should
+may might must did does doing done any all each both very one two after before over under between during while because since until
+being out off our your you she him theirs ours yours just like than""".split())
+_WORT_EN = re.compile(r"[a-z0-9]+")
+
+
+def woerter_en(text: str) -> list[str]:
+    import unicodedata
+    roh = unicodedata.normalize("NFKD", str(text or "").lower().replace("’", "'"))
+    roh = "".join(c for c in roh if not unicodedata.combining(c)).replace("'s ", " ")
+    out = []
+    for w in _WORT_EN.findall(roh):
+        if len(w) < 3 or w in _STOPP_EN:
+            continue
+        if len(w) > 4 and w.endswith("ies"):
+            w = w[:-3] + "y"
+        elif len(w) > 4 and w.endswith(("ches", "shes", "sses", "xes", "zes")):
+            w = w[:-2]
+        elif len(w) > 3 and w.endswith("s") and not w.endswith(("ss", "us", "is")):
+            w = w[:-1]
+        out.append(w)
+    return out
+
+
+def dokument_lesen(d: dict, sprache: Sprache | None = None) -> dict | None:
+    sp = sprache or DE
     if str(d.get("namespace", "")) != "0" or d.get("page_type", "primary") != "primary":
         return None
     text = str(d.get("text") or "").strip()
     titel = str(d.get("title") or "").strip()
     if not text or not titel:
         return None
-    if any(str(v).strip() in BEGRIFFSKLAERUNG_VORLAGEN for v in (d.get("template") or [])):
+    if any(str(v).strip() in sp.begriffsklaerung for v in (d.get("template") or [])):
+        return None
+    if sp is not DE and any("disambiguation pages" in str(k).lower() for k in (d.get("category") or [])):
         return None
     aux_alle = [str(a or "").strip() for a in (d.get("auxiliary_text") or [])]
-    teile = [t for t in abschnitte(text, titel=titel) if not ist_beleg(t)][:MAX_ABSCHNITTE]
+    teile = [t for t in abschnitte(text, titel=titel, sprache=sp) if not ist_beleg(t, sp)][:MAX_ABSCHNITTE]
     if not teile:
         return None
-    kurz = kurzdaten(aux_alle, liste=titel.startswith("Liste "))
+    kurz = kurzdaten(aux_alle, liste=titel.startswith(sp.liste), sprache=sp)
     if kurz:
         teile[1:1] = kurz
     else:
         aux = " ".join(aux_alle[:3])[:1500].strip()
         if aux:
-            teile.insert(min(1, len(teile)), "Kurzdaten: " + aux)
+            teile.insert(min(1, len(teile)), sp.kurz + aux)
     umleitungen = [str(r.get("title")) for r in (d.get("redirect") or []) if isinstance(r, dict) and str(r.get("namespace", "0")) == "0" and r.get("title")]
     try:
         beliebt = float(d.get("popularity_score") or 0.0)
@@ -308,8 +393,10 @@ def _kosinus(a: list[float], b: list[float]) -> float:
 
 class Datenbank:
 
-    def __init__(self, pfad: Path, *, schreiben: bool = False) -> None:
+    def __init__(self, pfad: Path, *, schreiben: bool = False, sprache: Sprache | None = None) -> None:
         self.pfad = Path(pfad)
+        self.sprache = sprache or DE
+        self._woerter = wissen.woerter if self.sprache is DE else woerter_en
         self._lock = threading.RLock()
         self._c = sqlite3.connect(str(self.pfad), check_same_thread=False, isolation_level=None, timeout=30)
         self._c.execute("PRAGMA journal_mode=WAL")
@@ -343,7 +430,7 @@ class Datenbank:
         if self._leser is None:
             with self._leser_anlegen:
                 if self._leser is None:
-                    self._leser = Datenbank(self.pfad)
+                    self._leser = Datenbank(self.pfad, sprache=self.sprache)
         return self._leser
 
     def schliessen(self) -> None:
@@ -376,11 +463,11 @@ class Datenbank:
                     self._c.execute("INSERT INTO artikel VALUES (?, ?, ?, ?, ?)", (a["id"], a["titel"], a["beliebt"], a["geaendert"], nr))
                     for t in [a["titel"]] + a["umleitungen"]:
                         self._c.execute("INSERT OR IGNORE INTO titel VALUES (?, ?)", (_titel_norm(t), a["id"]))
-                    tw = " ".join(wissen.woerter(a["titel"]))
+                    tw = " ".join(self._woerter(a["titel"]))
                     for i, t in enumerate(a["teile"]):
                         cur = self._c.execute("INSERT INTO abschnitt (artikel, nr, text) VALUES (?, ?, ?)", (a["id"], i, zlib.compress(t.encode("utf-8"), 6)))
                         self._c.execute("INSERT INTO abschnitt_hash VALUES (?, ?)", (cur.lastrowid, _hash(a["titel"], t)))
-                        self._c.execute("INSERT INTO suche (rowid, titel, woerter) VALUES (?, ?, ?)", (cur.lastrowid, tw, " ".join(wissen.woerter(t))))
+                        self._c.execute("INSERT INTO suche (rowid, titel, woerter) VALUES (?, ?, ?)", (cur.lastrowid, tw, " ".join(self._woerter(t))))
                         n_s += 1
                     n_a += 1
                 self._c.execute("COMMIT")
@@ -405,7 +492,7 @@ class Datenbank:
             for sid in ids:
                 r = self._c.execute("SELECT a.titel, s.text FROM abschnitt s JOIN artikel a ON a.id = s.artikel WHERE s.id = ?", (sid,)).fetchone()
                 self._c.execute("INSERT INTO suche (suche, rowid, titel, woerter) VALUES ('delete', ?, ?, ?)",
-                                (sid, " ".join(wissen.woerter(r[0])), " ".join(wissen.woerter(zlib.decompress(r[1]).decode("utf-8")))))
+                                (sid, " ".join(self._woerter(r[0])), " ".join(self._woerter(zlib.decompress(r[1]).decode("utf-8")))))
             self._c.execute("DELETE FROM abschnitt_hash WHERE id IN (SELECT s.id FROM abschnitt s JOIN artikel a ON a.id = s.artikel WHERE a.teil = ?)", (nr,))
             self._c.execute("DELETE FROM abschnitt WHERE artikel IN (SELECT id FROM artikel WHERE teil = ?)", (nr,))
             self._c.execute("DELETE FROM titel WHERE artikel IN (SELECT id FROM artikel WHERE teil = ?)", (nr,))
@@ -605,7 +692,7 @@ class Datenbank:
         out: set[str] = set()
         for n in namen:
             worte = [w for w in re.split(r"[\s\-]+", str(n)) if w]
-            stamm = wissen.woerter(str(n))
+            stamm = self._woerter(str(n))
             if worte and stamm and all(self._df(s) > 0 for s in stamm) and not any(self._erfundene_zusammensetzung(w) for w in worte):
                 out.add(n)
         return out
@@ -622,7 +709,7 @@ class Datenbank:
             vorne = text[:treffer[i].start()].rstrip()
             if (not vorne or vorne[-1] in ".!?:;\n") and not any(c.isupper() or c.isdigit() for c in w[1:]):
                 continue
-            stamm = wissen.woerter(w)
+            stamm = self._woerter(w)
             if not stamm or (any(self._df(s) > 0 for s in stamm) and not self._erfundene_zusammensetzung(w)):
                 continue
             von = i
@@ -646,7 +733,7 @@ class Datenbank:
             return False
         for t in teile:
             if len(t) >= 4 and t[:1].isupper():
-                stamm = wissen.woerter(t)
+                stamm = self._woerter(t)
                 if stamm and all(self._df(s) == 0 for s in stamm):
                     return True
         return teile[-1].lower() in _FACHBEGRIFF_ENDE and self.artikel_zu(wort) is None
@@ -704,14 +791,14 @@ class Datenbank:
         return (listen + namen if listen or namen else [t for t, _ in treffer])[:3]
 
     def _listen_artikel(self, worte: list[str]) -> list[int]:
-        stamm = set(wissen.woerter(" ".join(worte)))
+        stamm = set(self._woerter(" ".join(worte)))
         for s in list(stamm):
             stamm.add(s + "land")
             if s.endswith("isch") and len(s) >= 7:
                 stamm |= {s[:-4], s[:-4] + "land"}
         if stamm & {"welt", "erde"}:
             stamm |= {"welt", "erde"}
-        namen = {s for w in worte[1:] if w[:1].isupper() and not _SACHWORT.fullmatch(w.strip(".-")) for s in wissen.woerter(w)}
+        namen = {s for w in worte[1:] if w[:1].isupper() and not _SACHWORT.fullmatch(w.strip(".-")) for s in self._woerter(w)}
 
         def gleich(a: str, b: str) -> bool:
             return a == b or (min(len(a), len(b)) >= 5 and abs(len(a) - len(b)) <= 2 and (a.startswith(b) or b.startswith(a)))
@@ -730,7 +817,7 @@ class Datenbank:
                     if norm in gesehen:
                         continue
                     gesehen.add(norm)
-                    t = set(wissen.woerter(norm)) - {"list", "liste"}
+                    t = set(self._woerter(norm)) - {"list", "liste"}
                     if len(t) < 2 or not all(gedeckt(x) for x in t):
                         continue
                     fehlt = sum(1 for n in namen if not any(gleich(n, x) for x in t))
@@ -829,7 +916,7 @@ class Datenbank:
     def _suchen(self, frage: str, vektor: list[float] | None, n: int) -> list[tuple[float, int, str, int, str]]:
         z = self.zeiten = {}
         t0 = time.monotonic()
-        fw = list(dict.fromkeys(wissen.woerter(frage)))
+        fw = list(dict.fromkeys(self._woerter(frage)))
         if not fw:
             return []
         gesamt = self._anzahl()
@@ -875,7 +962,7 @@ class Datenbank:
         wertung = []
         for sid, aid, nr, blob, titel, beliebt, vb in rows:
             text = zlib.decompress(blob).decode("utf-8")
-            abgedeckt = len(fs & set(wissen.woerter(titel + " " + text))) / len(fs)
+            abgedeckt = len(fs & set(self._woerter(titel + " " + text))) / len(fs)
             s = 0.35 * kandidaten.get(sid, 0.0) + 0.35 * abgedeckt + bonus.get(sid, 0.0) + 0.02 * math.log10(1 + beliebt * 1e7)
             if mass is not None:
                 if aid in subjekte:
@@ -944,9 +1031,15 @@ def _name_kandidat(wort: str, *, nachbar: bool = False) -> bool:
 
 class WikiKopie:
 
+    sprache: Sprache = DE
+
     def __init__(self, ordner, *, freigabe_mb, darf, karte_frei=lambda: True, vektoren=None, vektoren_bereit=lambda: False,
-                 oeffner=None, log=None, schlafen=None, jetzt=time.time, platte_frei_mb=None, gemeinschaft=None, modell=None, ablage=None) -> None:
+                 oeffner=None, log=None, schlafen=None, jetzt=time.time, platte_frei_mb=None, gemeinschaft=None, modell=None, ablage=None,
+                 sprache: Sprache | None = None) -> None:
         self._ordner_fn = ordner
+        self.sprache = sprache or DE
+        if self.sprache is not DE:
+            gemeinschaft = ablage = None
         self._gemeinschaft = gemeinschaft
         self._modell = modell or (lambda: "")
         self._ablage = ablage
@@ -959,7 +1052,9 @@ class WikiKopie:
         self._vektoren_bereit = vektoren_bereit
         self._zahlen_merk: dict | None = None
         self._oeffner = oeffner
-        self._log = log or (lambda z: None)
+        self._name = "wikipedia" if self.sprache is DE else f"wikipedia-{self.sprache.code}"
+        _log_roh = log or (lambda z: None)
+        self._log = _log_roh if self.sprache is DE else (lambda z: _log_roh(z.replace("wikipedia:", self._name + ":", 1)))
         self._halt = threading.Event()
         self._schlafen = schlafen or (lambda s: self._halt.wait(s))
         self._jetzt = jetzt
@@ -996,8 +1091,11 @@ class WikiKopie:
             self._belegt_mb_cache = (self._jetzt(), mb)
         return mb
 
+    def _quelle_kennung(self, aid: int) -> str:
+        return f"wikipedia-{aid}" if self.sprache is DE else f"wikipedia-{self.sprache.code}-{aid}"
+
     def darf_halten(self) -> bool:
-        return int(self._freigabe_mb() or 0) >= MIN_FREIGABE_MB
+        return int(self._freigabe_mb() or 0) >= self.sprache.min_freigabe_mb
 
     def bereit(self) -> bool:
         return self._db is not None
@@ -1020,7 +1118,7 @@ class WikiKopie:
                 return False
             self._halt.clear()
             self._oeffnen()
-            self._thread = threading.Thread(target=self._schleife, name="wikipedia", daemon=True)
+            self._thread = threading.Thread(target=self._schleife, name=self._name, daemon=True)
             self._thread.start()
             return True
 
@@ -1036,7 +1134,7 @@ class WikiKopie:
             return
         if self._db is None and pfad.exists() and self._stand().get("fertig_ausgabe"):
             try:
-                self._db = Datenbank(pfad)
+                self._db = Datenbank(pfad, sprache=self.sprache)
                 self._db_pfad = pfad
                 self._zahlen_holen()
             except sqlite3.Error as exc:
@@ -1084,7 +1182,7 @@ class WikiKopie:
     def neueste_ausgabe(self) -> tuple[str, list[tuple[int, str, int]]] | None:
         uebersicht = self._seite(QUELLE)
         for ausgabe in sorted(set(_AUSGABE.findall(uebersicht)), reverse=True)[:4]:
-            basis = f"{QUELLE}{ausgabe}/index_name={NAME}/"
+            basis = f"{QUELLE}{ausgabe}/index_name={self.sprache.name}/"
             try:
                 liste = self._seite(basis)
             except WikiError:
@@ -1092,7 +1190,7 @@ class WikiKopie:
             if "_SUCCESS" not in liste:
                 continue
             teile = []
-            for m in _TEIL.finditer(liste):
+            for m in _teil_muster(self.sprache.name).finditer(liste):
                 groesse = re.search(re.escape(m.group(1)) + r'</a>\s+\S+\s+\S+\s+(\d+)', liste)
                 teile.append((int(m.group(3)), basis + m.group(1), int(groesse.group(1)) if groesse else 0))
             if teile:
@@ -1158,14 +1256,14 @@ class WikiKopie:
         if umzug.offen(self.ordner):
             self.phase, self.meldung = "zieht_um", ""
         w = umzug.schritt(self.ordner, behalten=self.darf_halten(), schliessen=self._schliessen, oeffnen=self._oeffnen,
-                          halt=self._halt.is_set, log=self._log, name="wikipedia", platte_frei_mb=self._platte_frei_mb)
+                          halt=self._halt.is_set, log=self._log, name=self._name, platte_frei_mb=self._platte_frei_mb)
         if w is not None:
             self.phase, self.meldung = "zieht_um", ""
             return w
         self._umzug_wartet = False
         if not self.darf_halten():
             if self.ordner.exists() and (self.ordner / STAND).exists():
-                self._log("OK wikipedia: Freigabe unter 100 GB, Kopie gelöscht")
+                self._log(f"OK wikipedia: Freigabe unter {self.sprache.min_freigabe_mb // 1000} GB, Kopie gelöscht")
                 self.loeschen()
             self.phase = "zu_wenig_platz"
             return 300
@@ -1180,7 +1278,7 @@ class WikiKopie:
             return 30
         st = self._stand()
         if not st.get("bau_ausgabe"):
-            veraltet = bool(st.get("fertig_ausgabe")) and int(st.get("einlese_stand", 1)) < EINLESE_STAND
+            veraltet = bool(st.get("fertig_ausgabe")) and int(st.get("einlese_stand", 1)) < self.sprache.einlese_stand
             faellig = not st.get("fertig_ausgabe") or veraltet or (self._jetzt() - float(st.get("fertig_um", 0))) > NEU_NACH_TAGE * 86400
             if not faellig or (self._jetzt() - float(st.get("zuletzt_gesucht", 0))) < 6 * 3600 and st.get("fertig_ausgabe") and not veraltet:
                 return self._vektor_schritt()
@@ -1194,7 +1292,8 @@ class WikiKopie:
                 return self._vektor_schritt()
             gesamt_gb = sum(g for _, _, g in teile) / 1e9
             frei_mb = int(self._platte_frei_mb(self.ordner.parent if not self.ordner.exists() else self.ordner))
-            bedarf_mb = max(self.belegt_mb(), PLATZ_MB // 2) if st.get("fertig_ausgabe") else PLATZ_MB // 2
+            halb = self.sprache.platz_mb // 2
+            bedarf_mb = max(self.belegt_mb(), halb) if st.get("fertig_ausgabe") else halb
             if frei_mb - FREI_RESERVE_MB < bedarf_mb:
                 self.phase = "zu_wenig_platz"
                 self.meldung = (f"auf dem Laufwerk sind nur {frei_mb // 1000} GB frei, zum Neu-Einlesen braucht die Kopie noch einmal "
@@ -1203,10 +1302,10 @@ class WikiKopie:
                 self._log(f"OK wikipedia: zu wenig Platz ({frei_mb // 1000} GB frei, Bedarf {(bedarf_mb + FREI_RESERVE_MB) // 1000} GB), nächster Blick in einer Stunde")
                 return 3600
             self._stand_setzen(bau_ausgabe=ausgabe, bau_teile=[[n, a, g] for n, a, g in teile], bau_gb=round(gesamt_gb, 1), bau_seit=_jetzt(),
-                               bau_stand=EINLESE_STAND)
+                               bau_stand=self.sprache.einlese_stand)
             self._log(f"OK wikipedia: Ausgabe {ausgabe} mit {len(teile)} Teilen ({gesamt_gb:.1f} GB) wird geholt")
             return 0
-        if int(st.get("bau_stand", 0)) != EINLESE_STAND:
+        if int(st.get("bau_stand", 0)) != self.sprache.einlese_stand:
             self._bau_verwerfen(st)
             return 0
         return self._bau_schritt(st)
@@ -1217,7 +1316,7 @@ class WikiKopie:
             p.unlink(missing_ok=True)
         self._stand_setzen(bau_ausgabe="", bau_teile=[], bau_vorrat="", bau_uebernommen="", einlesen_teil=-1, einlesen_zeile=0, bau_stand=0)
         self._log(f"OK wikipedia: Bau der Ausgabe {st['bau_ausgabe']} mit Einleseregeln {st.get('bau_stand', 'vor 23j')} verworfen, "
-                  f"beginnt neu mit Stand {EINLESE_STAND}")
+                  f"beginnt neu mit Stand {self.sprache.einlese_stand}")
 
     def _bau_pfad(self, ausgabe: str) -> Path:
         return self.ordner / f"wikipedia-{ausgabe}.bau.sqlite"
@@ -1225,7 +1324,7 @@ class WikiKopie:
     def _vektoren_uebernehmen(self, neu: "Datenbank", alt_pfad: Path) -> int:
         s = time.monotonic()
         try:
-            alt_db = Datenbank(alt_pfad)
+            alt_db = Datenbank(alt_pfad, sprache=self.sprache)
             try:
                 nach = alt_db.hashes_sicherstellen()
             finally:
@@ -1246,7 +1345,7 @@ class WikiKopie:
             self._log(f"OK wikipedia: Bau der Ausgabe {ausgabe} wartet, nur {frei_mb // 1000} GB frei")
             return 3600
         teile = [(int(n), str(a), int(g)) for n, a, g in st.get("bau_teile", [])]
-        db = Datenbank(self._bau_pfad(ausgabe), schreiben=True)
+        db = Datenbank(self._bau_pfad(ausgabe), schreiben=True, sprache=self.sprache)
         db._abbrechen = self._umzug_unterbricht
         try:
             offen = [(n, a, g) for n, a, g in teile if not db.teil_fertig(n)]
@@ -1307,8 +1406,8 @@ class WikiKopie:
             for rest in (self._bau_pfad(ausgabe).with_name(self._bau_pfad(ausgabe).name + s) for s in ("-wal", "-shm")):
                 rest.unlink(missing_ok=True)
             self._stand_setzen(fertig_ausgabe=ausgabe, fertig_um=self._jetzt(), bau_ausgabe="", bau_teile=[], vektor_pos=0, bau_vorrat="", bau_uebernommen="",
-                               einlese_stand=EINLESE_STAND)
-            self._db = Datenbank(ziel)
+                               einlese_stand=self.sprache.einlese_stand)
+            self._db = Datenbank(ziel, sprache=self.sprache)
             self._db_pfad = ziel
         self.phase, self.meldung = "bereit", ""
         self._log(f"OK wikipedia: Ausgabe {ausgabe} ist jetzt die Kopie für die Suche")
@@ -1328,7 +1427,7 @@ class WikiKopie:
                     continue
                 if not zeile.startswith('{"index"'):
                     try:
-                        a = dokument_lesen(json.loads(zeile))
+                        a = dokument_lesen(json.loads(zeile), self.sprache)
                     except ValueError:
                         a = None
                     if a:
@@ -1347,12 +1446,12 @@ class WikiKopie:
         s = time.monotonic()
         w: Datenbank | None = None
         try:
-            w = Datenbank(pfad)
+            w = Datenbank(pfad, sprache=self.sprache)
             for sql in ("SELECT count(*) FROM wortzahl", "SELECT count(*) FROM titel"):
                 if self._halt.is_set():
                     return
                 w._c.execute(sql).fetchone()
-            for frage in ANWAERMEN:
+            for frage in (ANWAERMEN if self.sprache is DE else ANWAERMEN_EN):
                 if self._halt.is_set():
                     return
                 try:
@@ -1571,8 +1670,8 @@ class WikiKopie:
             self._log(f"ABGELEHNT wikipedia suchen: {type(exc).__name__}")
             return []
         for punkte, aid, titel, _nr, text in gefunden:
-            adresse = "https://de.wikipedia.org/wiki/" + urllib.parse.quote(titel.replace(" ", "_"))
-            q = wissen.Quelle(f"wikipedia-{aid}", "wikipedia", f"Wikipedia: {titel} ({LIZENZ})", adresse, datum, len(text))
+            adresse = self.sprache.adresse + urllib.parse.quote(titel.replace(" ", "_"))
+            q = wissen.Quelle(self._quelle_kennung(aid), "wikipedia", f"{self.sprache.titel}: {titel} ({LIZENZ})", adresse, datum, len(text))
             out.append(wissen.Treffer(q, text, punkte))
         return out
 
@@ -1641,8 +1740,8 @@ class WikiKopie:
                 gewaehlt.append(aid)
                 if len(gewaehlt) > hoechstens:
                     break
-                adresse = "https://de.wikipedia.org/wiki/" + urllib.parse.quote(titel.replace(" ", "_"))
-                q = wissen.Quelle(f"wikipedia-{aid}", "wikipedia", f"Wikipedia: {titel} ({LIZENZ})", adresse, datum, len(text))
+                adresse = self.sprache.adresse + urllib.parse.quote(titel.replace(" ", "_"))
+                q = wissen.Quelle(self._quelle_kennung(aid), "wikipedia", f"{self.sprache.titel}: {titel} ({LIZENZ})", adresse, datum, len(text))
                 out.append(wissen.Treffer(q, text, 1.0))
         except (sqlite3.Error, sqlite3.ProgrammingError) as exc:
             self._log(f"ABGELEHNT wikipedia einleitung: {type(exc).__name__}")
