@@ -24,6 +24,15 @@ _JAHR_WORT = re.compile(r"\b(?P<dieses>heuer|heurig\w*|diesjährig\w*|dies(?:es|
                         r"\b(?P<letztes>(?:im )?letzte[nms]? jahr|vorige[nms]? jahr|vergangene[nms]? jahr|last year|last year's)\b", re.I)
 
 
+def _heute_frager():
+    try:
+        import ki_laufzeit
+        return ki_laufzeit.heute()
+    except Exception:
+        from datetime import date as _d
+        return _d.today()
+
+
 def _letzter_sonntag(jahr: int, monat: int) -> date:
     ende = date(jahr + (monat == 12), monat % 12 + 1, 1) - timedelta(days=1)
     return ende - timedelta(days=(ende.weekday() + 1) % 7)
@@ -64,7 +73,7 @@ def _tag(d: date) -> str:
 
 
 def jahre(frage: str, heute: date | None = None) -> list[int]:
-    h = heute or date.today()
+    h = heute or _heute_frager()
     gefunden = []
     for m in re.finditer(_JAHR.pattern + "|" + _JAHR_WORT.pattern, frage or "", re.I):
         if m.group(1):
@@ -91,7 +100,7 @@ def _gefragt(frage: str, name: str) -> bool:
 
 
 def text(frage: str, heute: date | None = None) -> str:
-    h = heute or date.today()
+    h = heute or _heute_frager()
     gefragt = jahre(frage, h)
     if gefragt:
         eintraege = [x for j in gefragt for x in tage(j)]
@@ -141,7 +150,7 @@ def zeitumstellung_welt(frage: str, heute: date | None = None) -> tuple[str, str
     code = laender.erkennen(frage)
     if code not in _REGELN and code not in _KEINE:
         return None
-    h = heute or date.today()
+    h = heute or _heute_frager()
     name = laender.DEUTSCH.get(code, code)
     if code in _KEINE:
         return (f"Zeitumstellung in {name} (vom Programm)", f"In {name} gibt es keine Zeitumstellung{_KEINE[code]}; die Uhrzeit bleibt das "

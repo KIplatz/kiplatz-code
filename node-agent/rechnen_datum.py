@@ -61,7 +61,11 @@ def _fest_name(s: str) -> str:
 
 
 def heute() -> date:
-    return date.today()
+    try:
+        import ki_laufzeit
+        return ki_laufzeit.heute()
+    except Exception:
+        return date.today()
 
 
 def _gueltig(j: int, m: int, t: int) -> bool:

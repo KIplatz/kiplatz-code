@@ -32,6 +32,15 @@ class Fund:
     text: str
 
 
+def _heute_frager():
+    try:
+        import ki_laufzeit
+        return ki_laufzeit.heute()
+    except Exception:
+        from datetime import date as _d
+        return _d.today()
+
+
 def _tag(d: date) -> str:
     return f"{WOCHENTAGE[d.weekday()]}, {d.day:02d}.{d.month:02d}.{d.year}"
 
@@ -371,7 +380,7 @@ NAMEN = {"bundesliga": "bundesliga.at", "ezb": "ecb.europa.eu", "klimaticket": "
 
 
 def lesen_fuer(frage: str, *, vorher: str = "", heute: date | None = None, lesen=None) -> tuple[list[Fund], list[str]]:
-    heute = heute or date.today()
+    heute = heute or _heute_frager()
     lesen = lesen or _LESER
     funde, fehler = [], []
     for k in passend(frage, vorher):

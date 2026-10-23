@@ -1058,19 +1058,35 @@ def _stand_de(q: "Quelle") -> str:
 WOCHENTAGE_DE = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
 
 
+def _jetzt_frager() -> datetime:
+    try:
+        import ki_laufzeit
+        return ki_laufzeit.jetzt()
+    except Exception:
+        return datetime.now(timezone.utc).astimezone()
+
+
+def _ortszeit_wort() -> str:
+    try:
+        import ki_laufzeit
+        return "Ortszeit der fragenden Person" if ki_laufzeit.zone() is not None else "Ortszeit des Geräts"
+    except Exception:
+        return "Ortszeit des Geräts"
+
+
 def zeit_zeile(jetzt: datetime | None = None) -> str:
-    t = (jetzt or datetime.now(timezone.utc)).astimezone()
-    return f"Heute ist {WOCHENTAGE_DE[t.weekday()]}, der {t.strftime('%d.%m.%Y')}, es ist {t.strftime('%H:%M')} Uhr (Ortszeit des Geräts). Daraus ergeben sich Fragen nach Datum, Wochentag, Uhrzeit, Jahr oder Alter; rechne damit, nicht mit deinem Trainingsstand."
+    t = jetzt.astimezone() if jetzt else _jetzt_frager()
+    return f"Heute ist {WOCHENTAGE_DE[t.weekday()]}, der {t.strftime('%d.%m.%Y')}, es ist {t.strftime('%H:%M')} Uhr ({_ortszeit_wort()}). Daraus ergeben sich Fragen nach Datum, Wochentag, Uhrzeit, Jahr oder Alter; rechne damit, nicht mit deinem Trainingsstand."
 
 
 def datum_zeile(jetzt: datetime | None = None) -> str:
-    t = (jetzt or datetime.now(timezone.utc)).astimezone()
+    t = jetzt.astimezone() if jetzt else _jetzt_frager()
     return f"Heute ist {WOCHENTAGE_DE[t.weekday()]}, der {t.strftime('%d.%m.%Y')}."
 
 
 def uhrzeit_zeile(jetzt: datetime | None = None) -> str:
-    t = (jetzt or datetime.now(timezone.utc)).astimezone()
-    return (f"Es ist {t.strftime('%H:%M')} Uhr (Ortszeit des Geräts). Aus Datum und Uhrzeit ergeben sich Fragen nach Datum, Wochentag, Uhrzeit, "
+    t = jetzt.astimezone() if jetzt else _jetzt_frager()
+    return (f"Es ist {t.strftime('%H:%M')} Uhr ({_ortszeit_wort()}). Aus Datum und Uhrzeit ergeben sich Fragen nach Datum, Wochentag, Uhrzeit, "
             "Jahr oder Alter; rechne damit, nicht mit deinem Trainingsstand.")
 
 

@@ -953,6 +953,8 @@ class Rechenarbeit:
                 extra["fenster"] = auftrag["fenster"]
             if "schritt_melden" in parameter and hasattr(self._community, "antwort_schritt"):
                 extra["schritt_melden"] = melder.schritt
+            if ki_laufzeit.zone_pruefen(auftrag.get("zone")) is not None and "zone" in parameter:
+                extra["zone"] = ki_laufzeit.zone_pruefen(auftrag.get("zone"))
             if isinstance(auftrag.get("fachgebiete"), list) and "fachgebiete" in parameter:
                 extra["fachgebiete"] = [f for f in auftrag["fachgebiete"] if isinstance(f, str)]
         except (TypeError, ValueError):
@@ -971,6 +973,7 @@ class Rechenarbeit:
                     self._log(f"FEHLER frage zurück: {type(exc2).__name__}")
             raise
         finally:
+            ki_laufzeit.zone_setzen(None)
             aufrufe = ki_laufzeit.messung_ende()
             t_ende = time.monotonic()
             melder.ende()

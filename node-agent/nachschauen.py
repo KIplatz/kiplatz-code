@@ -553,7 +553,7 @@ class Nachschauer:
                     ziel: tuple = (None, None)) -> tuple[list[Ergebnis], list[str], str]:
         from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
         from datetime import date as _date
-        heute = heute or _date.today()
+        heute = heute or _heute_frager()
         r = richtung(frage)
         anfragen = anfragen_aufteilen([q for q in anfragen if q and q.strip()], frage)[:4] or [frage]
         auftraege = [(q, zeit) for q in anfragen if zeit] + [(q, "") for q in anfragen]
@@ -735,13 +735,22 @@ def _mit_original(frage: str) -> str:
     return (frage or "") + ("\n" + original if original else "")
 
 
+def _heute_frager():
+    try:
+        import ki_laufzeit
+        return ki_laufzeit.heute()
+    except Exception:
+        from datetime import date as _d
+        return _d.today()
+
+
 def richtung(frage: str) -> str:
     f = frage or ""
     g = _mit_original(f)
     if _LETZT.search(g) or (_THE_LAST.search(g) and _EREIGNIS.search(g)):
         import kalender_tage
         from datetime import date as _date
-        if any(j < (_date.today() - timedelta(days=45)).year for j in kalender_tage.jahre(f)):
+        if any(j < (_heute_frager() - timedelta(days=45)).year for j in kalender_tage.jahre(f)):
             return ""
         return "letzt"
     if _NAECHST.search(f):
@@ -776,7 +785,7 @@ _MONATE_EN = ("January", "February", "March", "April", "May", "June", "July", "A
 
 def ereignis_tag(frage: str, heute=None):
     from datetime import date as _date
-    h = heute or _date.today()
+    h = heute or _heute_frager()
     if richtung(frage) != "letzt":
         return None
     f = _mit_original(frage)

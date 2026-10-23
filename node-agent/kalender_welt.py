@@ -29,6 +29,15 @@ _FEIERTAG = re.compile(r"feiertag|holiday|nationalfeiertag|unabhängigkeitstag|i
 WOCHENTAGE = kalender_at.WOCHENTAGE
 
 
+def _heute_frager():
+    try:
+        import ki_laufzeit
+        return ki_laufzeit.heute()
+    except Exception:
+        from datetime import date as _d
+        return _d.today()
+
+
 def land(frage: str) -> str | None:
     c = laender.erkennen(frage)
     return c if c and c not in DACH else None
@@ -87,12 +96,12 @@ def betrifft(frage: str) -> bool:
 
 
 def jahre(frage: str, heute: date | None = None) -> list[int]:
-    h = heute or date.today()
+    h = heute or _heute_frager()
     return kalender_tage.jahre(frage, h) or [h.year, h.year + 1]
 
 
 def text(code: str, je_jahr: dict[int, list[dict]], frage: str, heute: date | None = None) -> str:
-    h = heute or date.today()
+    h = heute or _heute_frager()
     name = laender.DEUTSCH.get(code, code)
     gefragt = bool(kalender_tage.jahre(frage, h))
     feiertage = gefragte_feiertage(frage)

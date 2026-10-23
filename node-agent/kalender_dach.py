@@ -17,6 +17,15 @@ _FERIEN = re.compile(r"ferien", re.I)
 DE_LAENDER = {k: n for land, k, n, _ in region_mod.GEBIETE if land == "de"}
 
 
+def _heute_frager():
+    try:
+        import ki_laufzeit
+        return ki_laufzeit.heute()
+    except Exception:
+        from datetime import date as _d
+        return _d.today()
+
+
 def _buss_und_bettag(jahr: int) -> date:
     d = date(jahr, 11, 22)
     return d - timedelta(days=(d.weekday() - 2) % 7)
@@ -113,7 +122,7 @@ def quelle(frage: str, heute: date | None = None) -> tuple[str, str, bool] | Non
         return None
     if kalender_welt.land(frage) is not None:
         return None
-    h = heute or date.today()
+    h = heute or _heute_frager()
     jahre = kalender_tage.jahre(frage, h)
     feiertag = _feiertage(frage, h, jahre) if BETRIFFT.search(frage or "") else None
     if not kalender_tage.betrifft(frage):

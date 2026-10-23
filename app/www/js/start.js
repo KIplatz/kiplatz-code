@@ -22,6 +22,9 @@ import * as anhang from "./anhang.js";
 import { Sprechen, anhaengen as sprAnhaengen, GROESSE_MB as SPRACHE_MB } from "./sprache.js";
 import * as zuhause from "./zuhause.js";
 
+
+function zeitzone() { const z = -new Date().getTimezoneOffset(); return Number.isInteger(z) ? z : null; }
+
 const $ = (s) => document.querySelector(s);
 const ENTWICKLUNG = !nativ && ["localhost", "127.0.0.1"].includes(location.hostname);
 
@@ -245,7 +248,7 @@ async function dateienFragen(text, pcs) {
   const nachrichten = [{ role: "user", content: text }];
   const eins = async (pc) => {
     try {
-      const body = { nachrichten, auszuege: [], frisch: false, zuhause: await zuhause.unterschreiben(pc, nachrichten, undefined, "dateien") };
+      const body = { nachrichten, auszuege: [], frisch: false, zone: zeitzone(), zuhause: await zuhause.unterschreiben(pc, nachrichten, undefined, "dateien") };
       const kennung = (await holen("/frage-stellen", { body, geraet: z.geraet })).kennung;
       const t0 = Date.now();
       while (Date.now() - t0 < 120000 && !z.laufend?.abbrechen) {
@@ -282,7 +285,7 @@ async function dateienHolen(n, auswahl) {
       for (let runde = 0; runde < 10 && offen.length; runde++) {
         if (runde) status(offen.length === 1 ? "Holt 1 weitere Datei von daheim …" : `Holt ${offen.length} weitere Dateien von daheim …`);
         const nachrichten = [{ role: "user", content: JSON.stringify({ holen: offen }) }];
-        const body = { nachrichten, auszuege: [], frisch: false, zuhause: await zuhause.unterschreiben(pc, nachrichten, undefined, "holen") };
+        const body = { nachrichten, auszuege: [], frisch: false, zone: zeitzone(), zuhause: await zuhause.unterschreiben(pc, nachrichten, undefined, "holen") };
         const kennung = (await holen("/frage-stellen", { body, geraet: z.geraet })).kennung;
         let r = null; const t0 = Date.now();
         while (Date.now() - t0 < 360000) {
@@ -567,7 +570,7 @@ async function fragen(text, { frisch = false, wiederholen = false, anhaenge = nu
 
 
     const fg = skillAblage.holen(meineKi.NAME) ? meineKi.fachgebiete(z.einst.meineKi) : [];
-    const body = { nachrichten: verlauf, auszuege: [], frisch, ...(sk ? { skill: { name: sk.name, text: sk.text } } : {}), ...(vorige ? { vorige } : {}), ...(fg.length ? { fachgebiete: fg } : {}) };
+    const body = { nachrichten: verlauf, auszuege: [], frisch, zone: zeitzone(), ...(sk ? { skill: { name: sk.name, text: sk.text } } : {}), ...(vorige ? { vorige } : {}), ...(fg.length ? { fachgebiete: fg } : {}) };
 
 
     void netz;

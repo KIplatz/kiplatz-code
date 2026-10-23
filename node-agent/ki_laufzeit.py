@@ -47,6 +47,42 @@ def original_setzen(text: str) -> None:
 
 def original() -> str:
     return getattr(_ORIGINAL_FADEN, "text", "")
+
+
+_ZONE_FADEN = threading.local()
+ZONE_MINUTEN = (-12 * 60, 14 * 60)
+
+
+def zone_pruefen(wert) -> int | None:
+    if isinstance(wert, bool) or not isinstance(wert, (int, float)):
+        return None
+    try:
+        w = int(wert)
+    except (ValueError, OverflowError):
+        return None
+    if w != wert:
+        return None
+    return w if ZONE_MINUTEN[0] <= w <= ZONE_MINUTEN[1] else None
+
+
+def zone_setzen(minuten) -> None:
+    _ZONE_FADEN.minuten = zone_pruefen(minuten)
+
+
+def zone() -> int | None:
+    return getattr(_ZONE_FADEN, "minuten", None)
+
+
+def jetzt() -> datetime:
+    from datetime import timedelta, timezone
+    z = zone()
+    if z is None:
+        return datetime.now(timezone.utc).astimezone()
+    return datetime.now(timezone(timedelta(minutes=z)))
+
+
+def heute():
+    return jetzt().date()
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable

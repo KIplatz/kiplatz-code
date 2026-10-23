@@ -933,7 +933,7 @@ class Api:
         erkannt = nachschauen.erkennen(frage)
         if richtung and not (erkannt is not None and erkannt.art in ("wetter", "schlagzeilen")):
             grenze = (datetime.now(timezone.utc) - timedelta(hours=12)).strftime("%Y-%m-%dT%H:%M:%SZ")
-            heute_ = date.today()
+            heute_ = ki_laufzeit.heute()
             fenster_ = nachschauen.letzt_fenster(frage)
 
             def vorbei(t: wissen.Treffer) -> bool:
@@ -1199,11 +1199,13 @@ class Api:
         fn, lauf, mess = getattr(_SCHRITT, "fn", None), getattr(_SUCHLAUF, "stand", None), ki_laufzeit.messung_liste()
         eigen = getattr(_EIGEN, "an", True)
         original = ki_laufzeit.original()
+        zone = ki_laufzeit.zone()
         erg: dict = {}
 
         def suchen() -> None:
             _SCHRITT.fn, _SUCHLAUF.stand, _EIGEN.an = fn, lauf, eigen
             ki_laufzeit.original_setzen(original)
+            ki_laufzeit.zone_setzen(zone)
             ki_laufzeit.messung_teilen(mess)
             try:
                 erg["r"] = self._nachschauen(frage, treffer, frisch=True, nachrichten=nachrichten) if frisch else \
@@ -1232,8 +1234,11 @@ class Api:
         erg: dict = {}
 
         sprache = such_sprache(frage)
+        original, zone = ki_laufzeit.original(), ki_laufzeit.zone()
 
         def suchen() -> None:
+            ki_laufzeit.original_setzen(original)
+            ki_laufzeit.zone_setzen(zone)
             try:
                 erg["r"] = self._nachschauer.suche_runde(anfragen, frage, sprache=sprache, zeit=nachschauen.zeitraum(frage),
                                                           ausser=frozenset(), ziel=zeitziel(frage))
@@ -1969,7 +1974,8 @@ class Api:
 
     def _antwort_fuer_mitglied(self, nachrichten: list[dict], auszuege: list[dict], fuer: str, *, frisch: bool = False, teil_melden=None, schritt_melden=None,
                                skill: dict | None = None, zuhause: dict | None = None, fenster: dict | None = None,
-                               fachgebiete: list | None = None, messen: bool = False) -> tuple[str, dict]:
+                               fachgebiete: list | None = None, messen: bool = False, zone: int | None = None) -> tuple[str, dict]:
+        ki_laufzeit.zone_setzen(zone)
         vorher = getattr(_SCHRITT, "fn", None)
         lauf_vorher = getattr(_SUCHLAUF, "stand", None)
         _SCHRITT.fn = schritt_melden
@@ -2064,6 +2070,7 @@ class Api:
         finally:
             _SCHRITT.fn = vorher
             ki_laufzeit.original_setzen("")
+            ki_laufzeit.zone_setzen(None)
             _SUCHLAUF.stand = lauf_vorher
             _NETZ.an = False
             _FENSTERFRAGE.an = False
@@ -5891,7 +5898,7 @@ _ZEITGEBUNDEN_JAHR = re.compile(r"\btermine?\b|veranstaltungskalender|\bfahrplan
 
 def saison_jetzt(heute=None) -> str:
     from datetime import date
-    h = heute or date.today()
+    h = heute or ki_laufzeit.heute()
     j = h.year if h.month >= 7 else h.year - 1
     return f"{j}/{str(j + 1)[2:]}"
 
@@ -5917,7 +5924,7 @@ SUCHWORT_ENGLISCH = ("Die Person hat auf Englisch gefragt, und die Frage betriff
 
 def zeitziel(frage: str, heute=None) -> tuple[int | None, int | None]:
     from datetime import date
-    h = heute or date.today()
+    h = heute or ki_laufzeit.heute()
     if re.search(r"\b20\d\d\b", frage or ""):
         return None, None
     if _ZEITGEBUNDEN_SAISON.search(frage or ""):
@@ -5943,7 +5950,7 @@ _AUSGABE_ZEITWORT = re.compile(r"\b(?:letzte[nrms]?|zuletzt|vorige[nrms]?|vergan
 
 def suchwoerter_ordnen(liste: list[str], frage: str, frueher: str = "", heute=None) -> list[str]:
     from datetime import date
-    h = heute or date.today()
+    h = heute or ki_laufzeit.heute()
     eigen = set(wissen.woerter(frage))
     alt = set(wissen.woerter(frueher))
     fremd = (alt - eigen) if (eigen & alt) and (eigen - alt) else set()
@@ -6281,7 +6288,7 @@ def _streng(t: str, belegtext: str, zusatz: str, rechnen: bool, pruefer, auszueg
 def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, heute: date | None = None, nochmal=None, pruefer=None,
                     umschreiben=None,
                     schreiben: bool = False, bekannt=None, richter=None) -> tuple[str, list[str]]:
-    heute = heute or date.today()
+    heute = heute or ki_laufzeit.heute()
     notizen: list[str] = []
     t, n = belege.ohne_platzhalter(text)
     if n:
@@ -6321,7 +6328,7 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
     vermittler = nachschauen.vermittler_adressen(quellen)
     beleg_quellen = [q for q in quellen if str(q.get("adresse") or "") not in vermittler]
     belegtext = (_ohne_vermittler(zusatz or "", quellen, vermittler) + "\n" + (frage or "") + "\n"
-                 + wissen.zeit_zeile(None if heute == date.today() else datetime(heute.year, heute.month, heute.day, 12).astimezone()))
+                 + wissen.zeit_zeile(None if heute == ki_laufzeit.heute() else datetime(heute.year, heute.month, heute.day, 12).astimezone()))
     rechnen = belege.rechnet(frage)
     regel = not schreiben and belege.regelfrage(frage) and not belege.preisfrage(frage)
     regelfrage = frage if (not schreiben and belege.regelfrage(frage)) else ""
