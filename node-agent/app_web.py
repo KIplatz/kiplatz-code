@@ -6190,6 +6190,27 @@ BELEGE_ZUSATZ = ("Prüfung: Eine erste Fassung dieser Antwort nannte eine Zahl, 
                  "Fehler oder eine Korrektur. Schreib nie „Quellen“ oder „Auszüge“.")
 
 
+NAME_OHNE_BELEG_ZUSATZ = ("Prüfung: Eine erste Fassung dieser Antwort nannte {namen}; das steht in keiner Quelle. Schreib die Antwort ganz neu, als wäre es "
+                          "die erste, und lass genau diese Namen weg; sag dasselbe mit allgemeinen Worten. Nenne nur Namen, Zahlen und Daten, die genau so in den "
+                          "Quellen stehen; die Sätze schreibst du in eigenen Worten, nie mehr als 6 Wörter am Stück aus einer Quelle. Erwähne nie eine erste "
+                          "Fassung, einen Fehler oder eine Korrektur. Schreib nie „Quellen“ oder „Auszüge“.")
+
+
+def nur_namen_fiel(info: dict, raus: list[str]) -> bool:
+    return bool(raus) and len(info.get("namen") or {}) == 1 and not info.get("andere")
+
+
+_NAMENSFRAGE = re.compile(r"(?i)^\W*(?:wer|wem|wen|wessen|welche[rsmn]?|wie (?:heißt|hieß|heissen|heißen|nennt man)|was ist der name|who|whom|whose|"
+                          r"which|what(?:'s| is| was) the name|what is called)\b")
+_REST_HAENGT = re.compile(r"^\W*(?:er|sie|es|ihr|ihre[mnrs]?|sein|seine[mnrs]?|dies|diese[mnrs]?|dort|damit|daher|deshalb|he|she|it|its|his|her|"
+                          r"they|their|this|these|there)\b", re.I)
+
+
+def namen_ausnahme(frage: str, info: dict, raus: list[str], rest: str) -> bool:
+    return (nur_namen_fiel(info, raus) and not _NAMENSFRAGE.search(" ".join(str(frage or "").split()))
+            and not _REST_HAENGT.match(str(rest or "").lstrip()))
+
+
 REGEL_OHNE_QUELLE = "Eine Regel ohne Quelle wurde nicht ausgegeben: Regeln, Pflichten und Fristen sind je Land anders und ändern sich, ohne Quelle nennt KIplatz keine."
 REGEL_ZUSATZ = ("Eine Regel (was man braucht, muss, darf oder nicht darf) schreibst du nur so, wie sie in einer Quelle steht, mit derselben Aussage; "
                 "sagt keine Quelle etwas dazu, lass sie weg.")
@@ -6226,7 +6247,7 @@ def _ohne_vermittler(zusatz: str, quellen: list[dict], adressen: set[str]) -> st
 
 def _streng(t: str, belegtext: str, zusatz: str, rechnen: bool, pruefer, auszuege: list[tuple[int, str]], *, regel: bool = False,
             beispiele: bool = False, bekannt=None, regelfrage: str = "", richter=None, ableitung: bool = False, einspruch: bool = False,
-            einspruch_zaehler: list[int] | None = None, schatten: bool = True) -> tuple[str, list[str], int]:
+            einspruch_zaehler: list[int] | None = None, schatten: bool = True, namen_info: dict | None = None) -> tuple[str, list[str], int]:
     aus_quellen = any(s.farbe == "gruen" for s in pruefung.pruefen(t, auszuege).saetze)
     quelltexte = [x for _n, x in auszuege]
     befunde = belege.streng_pruefen(t, belegtext, zahlen_pruefen=not rechnen, namen_pruefen=None if (aus_quellen or regel) else (lambda s: False),
@@ -6305,6 +6326,15 @@ def _streng(t: str, belegtext: str, zusatz: str, rechnen: bool, pruefer, auszueg
         vom_pruefer = len(vom_pruefer_weg - gerettet)
     if not weg:
         return t, [], 0
+    if namen_info is not None:
+        for b in befunde:
+            if b.satz not in weg:
+                continue
+            namen = tuple(b.namen) + tuple(v for v in b.verdacht if v in als_name)
+            if namen and not b.zahlen and not b.regel:
+                namen_info.setdefault("namen", {})[b.satz] = namen
+            else:
+                namen_info["andere"] = True
     if isinstance(getattr(_GESTRICHEN, "liste", None), list):
         _GESTRICHEN.liste.extend((b.satz, tuple(b.zahlen) + tuple(b.namen) + tuple(b.verdacht)) for b in befunde if b.satz in weg)
     teilweise: dict[str, str] = {}
@@ -6379,8 +6409,14 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
     regelfrage = frage if (not schreiben and belege.regelfrage(frage)) else ""
     auszuege = [(int(q.get("nummer") or 0), str(q.get("text") or "")) for q in beleg_quellen if q.get("text")]
     beispiele = not (rechnen or regel or belege.zahlenfrage(frage) or belege.preisfrage(frage))
+    namen1: dict = {}
     geprueft, raus, vom_pruefer = _streng(t, belegtext, zusatz, rechnen, pruefer, auszuege, regel=regel, beispiele=beispiele, bekannt=bekannt, ableitung=ableitung,
-                                          regelfrage=regelfrage, richter=richter, einspruch=einspruch, einspruch_zaehler=einspruch_zaehler)
+                                          regelfrage=regelfrage, richter=richter, einspruch=einspruch, einspruch_zaehler=einspruch_zaehler,
+                                          namen_info=namen1)
+    alltag = not (belege.preisfrage(frage) or belege.regelfrage(frage) or belege.zahlenfrage(frage) or rechnen
+                  or _NAMENSFRAGE.search(" ".join(str(frage or "").split())))
+    namen_fall = alltag and nur_namen_fiel(namen1, raus)
+    namen_jetzt = namen1
     regel_saetze = {s for s, _g in belege.regel_ungestuetzt(t, regelfrage, [x for _n, x in auszuege])} if regelfrage else set()
     basis = t
     ausloeser = belege.vermischt_ausloeser(geprueft, [(str(q.get("titel") or ""), str(q.get("text") or "")) for q in quellen if q.get("text")])
@@ -6390,6 +6426,7 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
             _VERMISCHT.liste.extend((n, w) for _s, n, w in ausloeser)
         geprueft, raus_misch = belege.saetze_streichen(geprueft, lambda s: s in misch, mitnehmen=True)
         raus = raus + raus_misch
+        namen_fall = namen_fall and not raus_misch
         notizen.append("1 Satz, der einer Quelle etwas aus einer anderen Quelle zuschreibt, vom Programm gestrichen." if len(raus_misch) == 1
                        else f"{len(raus_misch)} Sätze, die einer Quelle etwas aus einer anderen Quelle zuschreiben, vom Programm gestrichen.")
     if raus and geprueft != "Das weiß ich noch nicht." and not belege.brauchbar(geprueft):
@@ -6398,25 +6435,35 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
     if raus and nochmal is not None:
         try:
             regel_vorher = bool(regel_saetze & set(raus))
-            neu = nochmal(BELEGE_ZUSATZ.format(saetze=" ".join(raus)[:400]) + (" " + REGEL_ZUSATZ if regel_vorher else "") + " " + frage_fokus(frage))
+            if namen_fall:
+                namen = list(dict.fromkeys(n for ns in namen1["namen"].values() for n in ns))[:8]
+                neu = nochmal(NAME_OHNE_BELEG_ZUSATZ.format(namen=", ".join(f"„{n}“" for n in namen)) + " " + frage_fokus(frage))
+            else:
+                neu = nochmal(BELEGE_ZUSATZ.format(saetze=" ".join(raus)[:400]) + (" " + REGEL_ZUSATZ if regel_vorher else "") + " " + frage_fokus(frage))
             neu, _ = belege.ohne_platzhalter(neu or "")
             neu, _ = belege.ohne_selbstbezug(neu)
             neu, _ = belege.wochentage_berichtigen(neu, heute)
             neu = ohne_auszuege(ohne_markdown(neu))
+            namen2: dict = {}
             geprueft2, raus2, vom2 = _streng(neu, belegtext, zusatz, rechnen, pruefer, auszuege, regel=regel, beispiele=beispiele, bekannt=bekannt, ableitung=ableitung,
                                              regelfrage=regelfrage, richter=richter if einspruch else None, einspruch=einspruch,
-                                             einspruch_zaehler=einspruch_zaehler, schatten=False)
+                                             einspruch_zaehler=einspruch_zaehler, schatten=False,
+                                             namen_info=namen2)
+            namen_rest2 = namen_fall and namen_ausnahme(frage, namen2, raus2, geprueft2)
             quell_z = belege.zahlenwerte(belegtext + "\n" + "\n".join(x for _n, x in auszuege))
             erste_rest = geprueft == "Das weiß ich noch nicht." or nur_rest(basis, geprueft, raus)
-            if (geprueft2.strip() and belege.brauchbar(geprueft2) and not _WEISS_NICHT.search(geprueft2) and not nur_rest(neu, geprueft2, raus2)
+            if (geprueft2.strip() and belege.brauchbar(geprueft2) and not _WEISS_NICHT.search(geprueft2)
+                    and (not nur_rest(neu, geprueft2, raus2) or namen_rest2)
                     and (erste_rest or len(belege.zahlenwerte(geprueft2) & quell_z) >= len(belege.zahlenwerte(geprueft) & quell_z))):
                 geprueft, raus, vom_pruefer, basis = geprueft2, raus2, vom2, neu
+                namen_fall, namen_jetzt = alltag and nur_namen_fiel(namen2, raus2), namen2
                 regel_saetze = {s for s, _g in belege.regel_ungestuetzt(neu, regelfrage, [x for _n, x in auszuege])} if regelfrage else set()
                 notizen.append("Die erste Fassung nannte eine Regel, die keine Quelle so sagt; KIplatz hat neu geantwortet." if regel_vorher
                                else "Die erste Fassung nannte Zahlen, Daten oder Namen, die in keiner Quelle stehen; KIplatz hat neu geantwortet.")
         except app_core.AppError:
             pass
-    if raus and geprueft != "Das weiß ich noch nicht." and nur_rest(basis, geprueft, raus):
+    if (raus and geprueft != "Das weiß ich noch nicht." and nur_rest(basis, geprueft, raus)
+            and not (namen_fall and namen_ausnahme(frage, namen_jetzt, raus, geprueft))):
         notizen.append("Nach dem Streichen fehlte der Anfang der Antwort; ein Rest wird nicht ausgegeben.")
         geprueft = "Das weiß ich noch nicht."
     n_regel = sum(1 for s in raus if s in regel_saetze)

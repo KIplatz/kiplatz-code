@@ -2357,7 +2357,9 @@ function wischenVerdrahten() {
     w = null;
     if (e.touches.length !== 1 || !schmal() || !z.geraet || e.target.closest?.("input, textarea, pre, table, dialog, .seite")) return;
     const t = e.touches[0];
-    if (amBrowserRand(t.clientX)) return;
+
+
+    if (amBrowserRand(t.clientX) && verlauf.tiefe() > 0) return;
     w = { x0: t.clientX, y0: t.clientY, start: offen() ? 1 : 0, breite: leiste.getBoundingClientRect().width || 300, zieht: false, punkte: [[e.timeStamp, t.clientX]] };
   }, { passive: true });
 
