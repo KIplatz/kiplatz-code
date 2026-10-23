@@ -319,6 +319,23 @@ _ENDUNG_WEB = frozenset("com org net info gov edu int eu app dev io biz online s
 _ADRESSE = re.compile(r"(?i)(?<![@\w.-])((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+([a-z]{2,6}))(?![\w-])")
 
 
+_LINK = re.compile(r"https?://[^\s<>\"“”„()\[\]]+", re.I)
+
+
+def links_in(satz: str) -> list[str]:
+    return list(dict.fromkeys(m.group(0).rstrip(".,;:!?»'’") for m in _LINK.finditer(satz or "")))
+
+
+def link_norm(adresse: str) -> str:
+    import html as _html
+    import urllib.parse as _up
+    u = _up.unquote(_html.unescape(str(adresse or ""))).strip().rstrip("/.,;:!?»'’").lower()
+    u = re.sub(r"^https?://", "", u)
+    u = re.sub(r"^(?:www|m)\.", "", u)
+    m = re.match(r"youtu\.be/([\w-]+)", u) or re.match(r"youtube\.com/watch\?(?:[^#]*&)?v=([\w-]+)", u)
+    return f"youtube.com/watch?v={m.group(1)}" if m else u
+
+
 def adressen_in(satz: str) -> list[str]:
     out = []
     for m in _ADRESSE.finditer(satz or ""):
@@ -338,6 +355,7 @@ def streng_pruefen(antwort: str, belege: str, *, zahlen_pruefen: bool = True, na
     belegt_z = zahlenwerte(belege)
     staemme = _wortstaemme(belege)
     quell_laender = laender_in(belege)
+    quell_links = {link_norm(u) for u in links_in(belege)}
 
     def land_belegt(name: str) -> bool:
         c = laender_in(name)
@@ -357,8 +375,10 @@ def streng_pruefen(antwort: str, belege: str, *, zahlen_pruefen: bool = True, na
             sicher, lauf = namen(s) if pruefe_namen else ([], [])
             n = [x for x in sicher if not name_belegt(x, staemme) and not land_belegt(x)]
             v = [x for x in lauf if not name_belegt(x, staemme) and not land_belegt(x)]
+            belegte_hosts = set(adressen_in(" ".join(u for u in links_in(s) if link_norm(u) in quell_links)))
             if pruefe_namen:
-                n += [x for x in adressen_in(s) if x not in belege_klein]
+                n += [x for x in adressen_in(s) if x not in belege_klein and x not in belegte_hosts]
+            n += [u for u in links_in(s) if link_norm(u) not in quell_links and u not in n]
             r = regel_raus.get(s, ())
             if z or n or v or r:
                 out.append(Befund(s, tuple(z), tuple(n), tuple(v), tuple(r)))

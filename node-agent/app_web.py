@@ -5673,14 +5673,39 @@ def suchauftrag(text: str, *, hat_vorige_antwort: bool = True) -> tuple[bool, st
     return a.frisch, absicht.rest(text, a), a.korrektur
 
 
+_VERWEISWORT = re.compile(r"(?i)\b(?:davon|dazu|daraus|dort|dorthin|darüber|darueber|dafür|dafuer|dies|diese[mnrs]?|that|this|those|these|there)\b")
+_ARTIKEL_VOR = re.compile(r"(?i)\b(?:der|die|das|den|dem|des|the)\s+([\wäöüÄÖÜß-]+)(?:\s+([\wäöüÄÖÜß-]+))?")
+
+
+def nachfrage_mit_bezug(letzte: str, vorige_frage: str, vorige_antwort: str) -> bool:
+    if not vorige_frage or not vorige_antwort or len(letzte.split()) > 16:
+        return False
+    if _VERWEISWORT.search(letzte):
+        return True
+    neu_in_antwort = set(wissen.woerter(vorige_antwort)) - set(wissen.woerter(vorige_frage))
+    for m in _ARTIKEL_VOR.finditer(letzte):
+        nach = [w for w in m.groups() if w]
+        if re.match(r"(?i)links?$|urls?$|adresse$", nach[0]) or set(wissen.woerter(" ".join(nach))) & neu_in_antwort:
+            return True
+    return False
+
+
+def _vorige(nachrichten: list[dict]) -> tuple[str, str]:
+    davor = nachrichten[:-1] if nachrichten and nachrichten[-1].get("role") == "user" else []
+    antwort = next((str(n.get("content", "")) for n in reversed(davor) if n.get("role") == "assistant"), "")
+    frage = next((" ".join(str(n.get("content", "")).split()) for n in reversed(davor) if n.get("role") == "user"), "")
+    return frage, antwort
+
+
 def suchfrage(nachrichten: list[dict]) -> str:
     letzte = next((str(n.get("content", "")) for n in reversed(nachrichten) if n.get("role") == "user"), "")
     a = _absicht_von(nachrichten) if nachrichten and nachrichten[-1].get("role") == "user" else absicht.Absicht()
     if a.frisch:
         hier = absicht.erkennen(letzte)
         rest = absicht.rest(letzte, hier) if hier.frisch else (letzte if a.sache else "")
+        vf, va = _vorige(nachrichten)
         if not a.korrektur and len(wissen.woerter(rest)) >= 2:
-            return rest
+            return f"{vf[:300]} {rest}" if nachfrage_mit_bezug(rest, vf, va) else rest
         davor = [n for n in nachrichten[:-1] if n.get("role") == "user"]
         frueher = " ".join(" ".join(str(n.get("content", "")).split())[:200] for n in davor[-2:]
                            if not absicht.erkennen(str(n.get("content", ""))).art).strip()
@@ -5694,7 +5719,8 @@ def suchfrage(nachrichten: list[dict]) -> str:
         if auftrag:
             return f"{auftrag[:300]} {letzte}".strip()
     if len(letzte.split()) >= 3 or len(letzte.strip()) > 40:
-        return letzte
+        vf, va = _vorige(nachrichten)
+        return f"{vf[:300]} {letzte}" if nachfrage_mit_bezug(letzte, vf, va) else letzte
     teile = []
     gesehen = 0
     for n in reversed(nachrichten[:-1] if nachrichten and nachrichten[-1].get("role") == "user" else nachrichten):
@@ -5804,9 +5830,21 @@ ZAHLEN_NUR_AUS_QUELLEN = ("Nenne nur Zahlen, Daten, Uhrzeiten, Beträge und Name
                           "der dort nicht steht, lässt du weg, auch wenn du ihn zu wissen glaubst.")
 
 
+_LINKFRAGE = re.compile(r"(?i)\b(?:links?|urls?|webadresse\w*|internetadresse\w*|youtube\w*|video-?link\w*)\b")
+LINK_FOKUS = ("Die Person will einen Link. Schreib die Adresse genau so, wie sie bei einer Quelle oben in Klammern oder in den Suchergebnissen steht, "
+              "vollständig mit https://; erfinde nie eine Adresse und kürze keine. Steht keine passende Adresse dort, sag das in einem Satz und nenne die "
+              "Seite aus den Quellen, die das Video oder die Anleitung erwähnt.")
+
+
+def linkfrage(frage: str) -> bool:
+    return bool(_LINKFRAGE.search(str(frage or "")))
+
+
 def mit_fokus(zusatz: str, frage: str) -> str:
     if ERSTE_FASSUNG_STRENG and zusatz.strip():
         zusatz = zusatz + "\n\n" + ZAHLEN_NUR_AUS_QUELLEN
+    if linkfrage(frage):
+        zusatz = (zusatz + "\n\n" if zusatz else "") + LINK_FOKUS
     if not (massfrage(frage) or belege.preisfrage(frage) or belege.regelfrage(frage)):
         return zusatz
     return (zusatz + "\n\n" if zusatz else "") + frage_fokus(frage)

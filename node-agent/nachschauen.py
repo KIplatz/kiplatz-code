@@ -643,7 +643,7 @@ class Nachschauer:
             teile += [x.text for x in tr]
             out.append(Ergebnis("suche", f"Nachgeschaut: {q.titel}"[:160], q.adresse, "\n\n".join(teile)[:MAX_TEXT], gueltig, f"im Internet gesucht ({woher}) und die Seiten gelesen"))
             seiten += 1
-        zeilen = [trefferzeile(i + 1, _host(t["adresse"]), " ".join(str(t.get("titel", "")).split())[:160], " ".join(str(t.get("text", "")).split())[:500],
+        zeilen = [trefferzeile(i + 1, _zeilen_adresse(t["adresse"]), " ".join(str(t.get("titel", "")).split())[:160], " ".join(str(t.get("text", "")).split())[:500],
                                vermittler_hosts) for i, t in enumerate(reihe[:RUNDE_UEBERSICHT])]
         uebersicht = Ergebnis("suche", SUCHERGEBNISSE_TITEL, reihe[0]["adresse"], "\n\n".join(
             [frage_kennung(frage), f"Suchergebnisse ({woher}), gelesen am {tag}."] + zeilen)[:MAX_TEXT],
@@ -966,8 +966,16 @@ def gefunden_zeile(titel: str, adresse: str, tag: str, seitentext: str) -> str:
     return zeile + " " + VERMITTLER_SATZ if vermittler(seitentext, adresse) else zeile
 
 
+_VIDEO_HOSTS = ("youtube.com", "youtu.be", "vimeo.com", "dailymotion.com", "tiktok.com")
+
+
+def _zeilen_adresse(adresse: str) -> str:
+    host = _host(adresse)
+    return adresse if any(host == h or host.endswith("." + h) for h in _VIDEO_HOSTS) else host
+
+
 def trefferzeile(i: int, host: str, kopf: str, auszug: str, vermittler_hosts: set[str]) -> str:
-    if host in vermittler_hosts or (auszug and vermittler(auszug, "https://" + host)):
+    if host in vermittler_hosts or (auszug and vermittler(auszug, host if host.startswith("http") else "https://" + host)):
         return f"{i}. {host}" + (f" – {kopf}" if kopf else "") + f" ({VERMITTLER_ZEILE})"
     return f"{i}. {host}" + (f" – {kopf}" if kopf else "") + (f": {auszug}" if auszug else "")
 
