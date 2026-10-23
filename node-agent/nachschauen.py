@@ -770,6 +770,33 @@ def juengstes_ereignis(frage: str) -> bool:
     return bool((_JUENGST.search(g) or _THE_LAST.search(g)) and _EREIGNIS.search(g))
 
 
+_LISTE_ANZAHL = (r"(?:\d{1,3}|zwei|drei|vier|f[üu]nf|sechs|sieben|acht|neun|zehn|elf|zw[öo]lf|f[üu]nfzehn|zwanzig|"
+                 r"two|three|four|five|six|seven|eight|nine|ten|twelve|fifteen|twenty)")
+_LISTE_MASS = (r"(?:gr[öo][ßs]+t|l[äa]ngst|h[öo]chst|kleinst|k[üu]rzest|niedrigst|meist|wenigst|teuerst|billigst|g[üu]nstigst|reichst|[äa]rmst|[äa]ltest|"
+               r"j[üu]ngst|bev[öo]lkerungsreichst|einwohnerst[äa]rkst|st[äa]rkst|schnellst|langsamst|tiefst|breitest|schwerst|leichtest|hei[ßs]+est|"
+               r"k[äa]ltest|w[äa]rmst|erfolgreichst|largest|biggest|longest|shortest|highest|tallest|lowest|smallest|most|fewest|richest|poorest|"
+               r"oldest|youngest|deepest|fastest|slowest|heaviest|lightest|hottest|coldest|warmest|cheapest|most\s+(?:populous|expensive|successful|visited))")
+_LISTENFRAGE = re.compile(rf"(?i)\b{_LISTE_ANZAHL}\s+{_LISTE_MASS}\w*|\btop[\s-]*{_LISTE_ANZAHL}\b|"
+                          rf"\b{_LISTE_ANZAHL}\s+\w+\s+(?:sind|are|haben|hat|have|has)\s+(?:die|the)\s+{_LISTE_MASS}\w*")
+_LISTE_FORM = re.compile(r"(?i)\b(?:tabelle|liste|rangliste|rangfolge|reihung|[üu]bersicht|aufstellung|auflistung|ranking|table|list|overview)\b")
+_LISTE_ZAHLWORT = re.compile(r"(?i)\b(?:einwohner\w*|bev[öo]lkerung\w*|fl[äa]che\w*|l[äa]nge\w*|h[öo]he\w*|preis\w*|umsatz\w*|gewicht\w*|anzahl|"
+                             r"prozent\w*|temperatur\w*|einwohnerzahl\w*|population\w*|inhabitants|area|length|height|price\w*|revenue|weight|"
+                             r"percent\w*|temperature\w*)\b")
+_LISTE_RAUM = re.compile(r"(?i)\b(?:der welt|weltweit|der erde|of the world|worldwide|on earth|in the world|europas?|asiens?|afrikas?|amerikas?|australiens?|"
+                         r"in (?:europe|asia|africa|america|australia|oceania)|(?:in|of) (?:north|south|latin) america)\b")
+_LISTE_PERSOENLICH = re.compile(r"(?i)\b(?:ich|mein\w*|unser\w*|i|my|mine|our|ours)\b")
+
+
+def listenfrage(frage: str) -> bool:
+    import belege
+    g = _mit_original(frage)
+    if not g.strip() or _LISTE_PERSOENLICH.search(g) or belege.rechenaufgabe(g):
+        return False
+    if _LISTE_FORM.search(g) and _LISTE_ZAHLWORT.search(g):
+        return True
+    return bool(_LISTENFRAGE.search(g) and (_LISTE_ZAHLWORT.search(g) or _LISTE_RAUM.search(g) or belege.gefragtes_land(g)))
+
+
 def zeitraum(frage: str) -> str:
     if richtung(frage) != "letzt":
         return ""

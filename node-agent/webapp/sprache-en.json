@@ -838,6 +838,8 @@
  "die vorige Antwort, ins Englische übertragen.": "the previous answer, translated into English.",
  "Die Werkstatt öffnet sich im Browser": "The workshop opens in the browser",
  "Die Wikipedia wurde übersprungen: so etwas steht in keinem Lexikon, darum gleich im Internet gesucht.": "Wikipedia was skipped: this is not in any encyclopedia, so KIplatz searched the internet right away.",
+ "Eine Rechenaufgabe mit den Zahlen der Frage: nicht in der Wikipedia nachgeschlagen und nicht im Internet gesucht.": "A calculation with the numbers from the question: nothing was looked up in Wikipedia or on the internet.",
+ "Eine Frage nach mehreren Dingen mit Zahlen: die Suche im Internet lief gleich mit.": "A question about several things with numbers: the internet search ran alongside right away.",
  "die Word-Datei ist beschädigt": "the Word file is damaged",
  "Die Zahlen des Netzes kommen vom Community-Server, sobald dieses Gerät angemeldet ist.": "The network's numbers come from the community server as soon as this device is signed in.",
  "die ZIP-Datei enthält einen unzulässigen Pfad; verworfen": "the ZIP file contains a path that isn't allowed; discarded",

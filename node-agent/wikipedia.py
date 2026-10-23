@@ -34,7 +34,7 @@ FREI_RESERVE_MB = 20_000
 NEU_NACH_TAGE = 30
 ABSCHNITT = 900
 BEGRIFFSKLAERUNG_VORLAGEN = frozenset({"Vorlage:Begriffsklärung", "Template:Begriffsklärung"})
-EINLESE_STAND = 2
+EINLESE_STAND = 3
 MAX_ABSCHNITTE = 60
 NAMEN_WARTEN_S = 2.0
 VEKTOR_ZUERST_JE_ARTIKEL = 3
@@ -92,8 +92,32 @@ _SACHBEGRIFFE = frozenset(_titel_norm(t) for t in ("Einwohner", "Bevölkerung", 
                                                     "Kilometer", "Meter", "Euro", "Gründung"))
 
 
+_WARTUNG = re.compile(r"Vorlage:[^\s/]+(?: [^\s/]+){0,4}/Wartung/\S*(?:\s+(?:fehlt|unpassend))?")
+_VORLAGE_WORT = re.compile(r"Vorlage:\S+(?: \S+){0,2}(?= |$)")
+_PLATZHALTER_ANFANG = re.compile(r"^(?:(?:pd\d|p\d|BW)\s+)+")
+
+
+def ohne_wartung(text: str) -> str:
+    t = _WARTUNG.sub(" ", str(text or ""))
+    return _PLATZHALTER_ANFANG.sub("", t.lstrip())
+
+
+def stuecke(text: str, zeichen: int = ABSCHNITT) -> list[str]:
+    worte = " ".join(str(text or "").split())
+    out = []
+    while len(worte) > zeichen:
+        schnitt = worte.rfind(" ", zeichen // 2, zeichen)
+        if schnitt < 0:
+            schnitt = zeichen
+        out.append(worte[:schnitt].strip())
+        worte = worte[schnitt:].strip()
+    if worte:
+        out.append(worte)
+    return out
+
+
 def abschnitte(text: str, *, zeichen: int = ABSCHNITT) -> list[str]:
-    saetze = re.split(r"(?<=[.!?])\s+(?=[A-ZÄÖÜ0-9„\"(])", " ".join((text or "").split()))
+    saetze = re.split(r"(?<=[.!?])\s+(?=[A-ZÄÖÜ0-9„\"(])", " ".join(ohne_wartung(text).split()))
     saetze = [s for s in saetze if not _BELEG.search(s)]
     out, aktuell = [], ""
     for s in saetze:
@@ -122,6 +146,39 @@ def ist_beleg(stueck: str) -> bool:
     return n >= 3 or (n >= 1 and len(stueck) < 250)
 
 
+KURZDATEN_MIN_ZEICHEN = 120
+KURZDATEN_MIN_ZIFFERN = 10
+KURZDATEN_ZEICHEN = 6000
+_INFOBOX_WORT = re.compile(r"\b(?:Basisdaten|Einwohner|Fläche|Höhe|Koordinaten|Länge)\b")
+_JAHRESKLAMMER = re.compile(r"\(\d{4}[–-]\d{4}\)")
+
+
+def kurzdaten(aux: list[str]) -> list[str]:
+    wert = []
+    gesehen: set[tuple[int, str, str]] = set()
+    for a in aux:
+        a = " ".join(_VORLAGE_WORT.sub(" ", _WARTUNG.sub(" ", str(a or ""))).split())
+        if len(a) < KURZDATEN_MIN_ZEICHEN or sum(c.isdigit() for c in a) < KURZDATEN_MIN_ZIFFERN or ist_beleg(a):
+            continue
+        if len(_JAHRESKLAMMER.findall(a)) >= 3 and not _INFOBOX_WORT.search(a):
+            continue
+        schluessel = (len(a), a[:120], a[-80:])
+        if schluessel in gesehen:
+            continue
+        gesehen.add(schluessel)
+        wert.append((0 if _INFOBOX_WORT.search(a[:200]) else 1, len(wert), a))
+    wert.sort()
+    out: list[str] = []
+    rest = KURZDATEN_ZEICHEN
+    for _, _, a in wert:
+        if rest <= 0:
+            break
+        for stueck in stuecke(a[:rest]):
+            out.append("Kurzdaten: " + stueck)
+        rest -= len(a)
+    return out
+
+
 def dokument_lesen(d: dict) -> dict | None:
     if str(d.get("namespace", "")) != "0" or d.get("page_type", "primary") != "primary":
         return None
@@ -131,12 +188,17 @@ def dokument_lesen(d: dict) -> dict | None:
         return None
     if any(str(v).strip() in BEGRIFFSKLAERUNG_VORLAGEN for v in (d.get("template") or [])):
         return None
-    aux = " ".join(str(a) for a in (d.get("auxiliary_text") or [])[:3])[:1500].strip()
+    aux_alle = [str(a or "").strip() for a in (d.get("auxiliary_text") or [])]
     teile = [t for t in abschnitte(text) if not ist_beleg(t)][:MAX_ABSCHNITTE]
     if not teile:
         return None
-    if aux:
-        teile.insert(min(1, len(teile)), "Kurzdaten: " + aux)
+    kurz = kurzdaten(aux_alle)
+    if kurz:
+        teile[1:1] = kurz
+    else:
+        aux = " ".join(aux_alle[:3])[:1500].strip()
+        if aux:
+            teile.insert(min(1, len(teile)), "Kurzdaten: " + aux)
     umleitungen = [str(r.get("title")) for r in (d.get("redirect") or []) if isinstance(r, dict) and str(r.get("namespace", "0")) == "0" and r.get("title")]
     try:
         beliebt = float(d.get("popularity_score") or 0.0)

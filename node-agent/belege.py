@@ -676,6 +676,7 @@ _MASS = (r"(?:zenti|milli|kilo)?meter|(?:milli)?liter|(?:kilo)?gramm|minuten|stu
          r"minutes|hours|seconds|days|weeks|months|years")
 _UMRECHNEN = re.compile(rf"(?i)\bumrechn|\bconvert|\bwie viele?\s+(?:{_MASS})\s+(?:sind|ergeben|macht|machen|hat|haben|liegen)\b|"
                         rf"\bhow many\s+(?:{_MASS})\s+(?:are|is|make|in)\b")
+_ZAHL_MIT_EINHEIT = re.compile(rf"(?i)\d[\d.,]*\s*(?:{_MASS}|m|l|g|mg|dl|ha|lbs?|oz|ft|st|stones?|kcal|kwh|mph|km/h|°\s*[cf]|m²|km²)\b")
 
 
 _PREISFRAGE = re.compile(r"(?i)\b(?:was kostet|kostet|kosten|preis\w*|gebühr\w*|maut\w*|vignette\w*|tarif\w*|ticket\w*|eintritt\w*|"
@@ -698,7 +699,8 @@ def rechenaufgabe(frage: str) -> bool:
     if len({_WAEHRUNG_GLEICH.get(w.lower(), w.lower()) for w in _WAEHRUNG.findall(f) if w} | {_WAEHRUNG_GLEICH.get(s, s) for s in re.findall(r"[€$£]", f)}) >= 2:
         return False
     zahlen = [z for z in _ZAHL.findall(f) if not _JAHRESZAHL.fullmatch(z)]
-    return len(zahlen) >= 2 or bool(_RECHENZEICHEN.search(f) or _UMRECHNEN.search(f))
+    alle = _ZAHL.findall(f)
+    return len(zahlen) >= 2 or bool(_RECHENZEICHEN.search(f) or (_UMRECHNEN.search(f) and (_ZAHL_MIT_EINHEIT.search(f) or len(alle) >= 2)))
 
 
 def preisfrage(frage: str) -> bool:

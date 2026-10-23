@@ -1002,10 +1002,15 @@ class Api:
                            else "In den Orten aus OpenStreetMap auf dem PC, der geantwortet hat, nachgeschlagen. ") + hinweis
         vorab = None
         ohne_wiki = not selbst and not frisch and nachschauen.nicht_im_lexikon(frage)
-        namen = [] if (selbst or live or ergaenzend or orte or frisch or ohne_wiki) else self._unbekannte_namen(frage)
-        if (frisch or ohne_wiki or namen) and not live and not selbst and self.nachschauen_an() and frage.strip():
+        rechen = not selbst and not frisch and belege.rechenaufgabe(frage)
+        listen = (not selbst and not frisch and not ohne_wiki and not rechen and nachschauen.listenfrage(frage) and suche_denkbar(frage)
+                  and not _frueher_gefragt(nachrichten))
+        namen = [] if (selbst or live or ergaenzend or orte or frisch or ohne_wiki or rechen) else self._unbekannte_namen(frage)
+        if (frisch or ohne_wiki or namen or listen) and not live and not selbst and self.nachschauen_an() and frage.strip():
             if namen:
                 _log(self._core, f"OK unbekannter name: {len(namen)} Name(n) stehen in keinem Wikipedia-Abschnitt, die Suche läuft gleich mit")
+            elif listen:
+                _log(self._core, "OK listenfrage: eine Frage nach mehreren Dingen mit Zahlen, die Suche läuft gleich mit")
             vorab = self._nachschauen_vorab(frage, server + lokal, nachrichten, frisch=frisch)
         if (vorab is None and not frisch and not live and not ergaenzend and not orte and not selbst and self.nachschauen_an() and frage.strip()
                 and massfrage(frage) and nachschauen.erkennen(frage) is None and not _frueher_gefragt(nachrichten)
@@ -1018,17 +1023,22 @@ class Api:
         bewerten = self._bewertung.bereit()
         if ohne_wiki and vorab is not None:
             hinweis = "Die Wikipedia wurde übersprungen: so etwas steht in keinem Lexikon, darum gleich im Internet gesucht. " + hinweis
-        if not live and not selbst and not (ohne_wiki and vorab is not None) and self._wiki.bereit() and not (art is not None and art.art in ("wetter", "schlagzeilen")):
+        elif rechen:
+            hinweis = "Eine Rechenaufgabe mit den Zahlen der Frage: nicht in der Wikipedia nachgeschlagen und nicht im Internet gesucht. " + hinweis
+        elif listen and vorab is not None:
+            hinweis = "Eine Frage nach mehreren Dingen mit Zahlen: die Suche im Internet lief gleich mit. " + hinweis
+        if (not live and not selbst and not rechen and not (ohne_wiki and vorab is not None) and self._wiki.bereit()
+                and not (art is not None and art.art in ("wetter", "schlagzeilen"))):
             self._schritt("schlägt in der Wikipedia nach …")
             t_wiki = time.time()
             try:
                 teile = nachschauen.teilfragen(frage)
                 if teile:
                     je = max(2, (WIKI_KANDIDATEN if bewerten else 3) // len(teile) + 1)
-                    listen = [self._wiki.suchen(tf, vektor=self._bedeutung.frage_vektor(tf), n=je, abbrechen=lambda: self.abbruch_gewuenscht) for _d, tf in teile]
+                    wiki_listen = [self._wiki.suchen(tf, vektor=self._bedeutung.frage_vektor(tf), n=je, abbrechen=lambda: self.abbruch_gewuenscht) for _d, tf in teile]
                     gesehen_w: set[tuple[str, str]] = set()
-                    for i in range(max((len(x) for x in listen), default=0)):
-                        for liste in listen:
+                    for i in range(max((len(x) for x in wiki_listen), default=0)):
+                        for liste in wiki_listen:
                             if i < len(liste) and (liste[i].quelle.kennung, liste[i].text[:80]) not in gesehen_w:
                                 gesehen_w.add((liste[i].quelle.kennung, liste[i].text[:80]))
                                 wiki.append(liste[i])
@@ -2274,7 +2284,7 @@ class Api:
             pr = pruefung.pruefen(a.text, [])
             strom.neu()
         verworfen = False
-        if not fern and erfunden_verdacht(pr, quellen, schrift):
+        if not fern and erfunden_verdacht(pr, quellen, schrift, suchfrage(nachrichten)):
             melden("Die erste Antwort enthielt Erfundenes; KIplatz antwortet noch einmal, kurz und ehrlich …")
             try:
                 a = modell(zusatz + "\n\n" + ERFUNDEN_ZUSATZ, None, max_tokens_=160)
@@ -5694,8 +5704,8 @@ def suchfrage(nachrichten: list[dict]) -> str:
 _ERFUNDEN_MIN_SAETZE = 3
 
 
-def erfunden_verdacht(pr, quellen: list[dict], schrift) -> bool:
-    if schrift is not None or not quellen:
+def erfunden_verdacht(pr, quellen: list[dict], schrift, frage: str = "") -> bool:
+    if schrift is not None or not quellen or belege.rechenaufgabe(frage):
         return False
     return pr.rot >= _ERFUNDEN_MIN_SAETZE and pr.gruen == 0 and pr.gelb == 0
 
