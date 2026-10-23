@@ -6213,7 +6213,8 @@ def nur_namen_fiel(info: dict, raus: list[str]) -> bool:
 
 
 _NAMENSFRAGE = re.compile(r"(?i)^\W*(?:wer|wem|wen|wessen|welche[rsmn]?|wie (?:heißt|hieß|heissen|heißen|nennt man)|was ist der name|who|whom|whose|"
-                          r"which|what(?:'s| is| was) the name|what is called)\b")
+                          r"which|what(?:'s| is| was) the name|what is called|"
+                          r"what(?:'s| is| was| are| were) the (?:\w+est|capital|plural|past participle|opposite)\b|what is .{1,30} called)\b")
 _REST_HAENGT = re.compile(r"^\W*(?:er|sie|es|ihr|ihre[mnrs]?|sein|seine[mnrs]?|dies|diese[mnrs]?|dort|damit|daher|deshalb|he|she|it|its|his|her|"
                           r"they|their|this|these|there)\b", re.I)
 

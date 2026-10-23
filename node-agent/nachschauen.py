@@ -709,7 +709,9 @@ GESPERRT_S = 1800.0
 _GESPERRT: dict[str, float] = {}
 
 _NAECHST = re.compile(r"n[äa]chste[nrms]?\b|als n[äa]chstes|kommende[nrms]?\b|demn[äa]chst|\bwann (?:spielt|ist|findet|kommt|beginnt|startet|öffnet|oeffnet)\b|"
-                      r"spielplan|\btermine?\b|\bbald\b|übermorgen|\bmorgen\b|am wochenende|diese woche|ab wann", re.I)
+                      r"spielplan|\btermine?\b|\bbald\b|übermorgen|\bmorgen\b|am wochenende|diese woche|ab wann|"
+                      r"\bnext\b(?!\s+to\b)|\bupcoming\b|\bwhen (?:is|are)\b|\bwhen (?:does|do|will) .{1,40}\b(?:play|open|start|begin|take place|"
+                      r"come out|release)\w*|\bschedule\b|\bfixtures?\b|this weekend|this week\b|\btomorrow\b|\bsoon\b|from when", re.I)
 _AUSGANG_DE = r"(?:gespielt|gewonnen|verloren|ausgegangen|geendet|gewählt)"
 _AUSGANG_EN = r"(?:won|lost|play(?:ed)?|beat|ended|end|finish(?:ed)?|score|result|game|match|race|election)"
 _LETZT = re.compile(r"\bletzte[nrms]?\b(?!\s+mal\b)|\bzuletzt\b|\bgestern\b|\bgestrig\w*|\bvorige[nrms]?\b|\bvergangene[nrms]?\b|"

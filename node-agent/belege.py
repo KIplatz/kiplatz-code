@@ -408,7 +408,10 @@ def richter_wert(text: str) -> float | None:
 _TRENNER = re.compile(r"^\s*[-–—*_=]{3,}\s*$")
 _ZAHLENFRAGE = re.compile(r"(?i)\b(?:wie ?viel\w*|wie hoch|wie groß|wie lang\w*|wie weit|wie alt|wie schwer|wie schnell|wie oft|wie tief|wann|"
                           r"seit wann|bis wann|was kostet|kostet|einwohner\w*|bevölkerung|preis\w*|höhe|länge|fläche|entfernung|anzahl|prozent|"
-                          r"gehalt|lohn|temperatur|umsatz|gewicht)\b")
+                          r"gehalt|lohn|temperatur|umsatz|gewicht|"
+                          r"how (?:many|much|high|tall|big|large|long|far|old|heavy|fast|often|deep|wide)|when|since when|until when|"
+                          r"what does .{1,40} cost|cost of|population|prices?|height|length|area|distance|number of|percent(?:age)?|"
+                          r"salary|wages?|temperature|revenue|weight)\b")
 
 
 def zahlenfrage(frage: str) -> bool:
@@ -684,11 +687,13 @@ _RECHNET_ZWEI = re.compile(r"(?i)\bplus\b|\bminus\b|\bweniger\b|\babzüglich\b|\
 _JAHRESZAHL = re.compile(r"1[0-9]{3}|20[0-9]{2}")
 _RECHENZEICHEN = re.compile(r"(?i)\d\s*(?:[+×*/−]|-(?=\s*\d)|\bplus\b|\bminus\b|\bmal\b|\bgeteilt durch\b|\bdurch\b|\btimes\b|\bdivided by\b)\s*\d")
 _MASS = (r"(?:zenti|milli|kilo)?meter|(?:milli)?liter|(?:kilo)?gramm|minuten|stunden|sekunden|tage|wochen|monate|jahre|cm|mm|km|kg|ml|"
-         r"inch(?:es)?|feet|foot|cups?|ounces?|pounds?|gallons?|miles?|yards?|(?:centi|milli|kilo)?met(?:er|re)s?|lit(?:er|re)s?|(?:kilo)?grams?|"
+         r"inch(?:es)?|feet|foot|cups?|ounces?|pounds?|gallons?|miles?|yards?|(?:centi|milli|kilo)?met(?:er|re)s?|(?:milli|centi|deci)?lit(?:er|re)s?|(?:kilo)?grams?|"
          r"minutes|hours|seconds|days|weeks|months|years")
+_MASS_UM = _MASS + r"|fu[ßs]|zoll|meilen?|hektar"
 _UMRECHNEN = re.compile(rf"(?i)\bumrechn|\bconvert|\bwie viele?\s+(?:{_MASS})\s+(?:sind|ergeben|macht|machen|hat|haben|liegen)\b|"
+                        rf"\bwie viele?\s+(?:sind|ist|ergeben|ergibt|macht|machen)\s+[\d.,]+\s*(?:{_MASS_UM})\w*(?:\s+[\d.,]+\s*(?:{_MASS_UM})\w*)?\s+in\s+(?:{_MASS_UM})\w*|"
                         rf"\bhow many\s+(?:{_MASS})\s+(?:are|is|make|in)\b")
-_ZAHL_MIT_EINHEIT = re.compile(rf"(?i)\d[\d.,]*\s*(?:{_MASS}|m|l|g|mg|dl|ha|lbs?|oz|ft|st|stones?|kcal|kwh|mph|km/h|°\s*[cf]|m²|km²)\b")
+_ZAHL_MIT_EINHEIT = re.compile(rf"(?i)\d[\d.,]*\s*(?:{_MASS_UM}|m|l|g|mg|dl|ha|lbs?|oz|ft|st|stones?|kcal|kwh|mph|km/h|°\s*[cf]|m²|km²)\b")
 
 
 _PREISFRAGE = re.compile(r"(?i)\b(?:was kostet|kostet|kosten|preis\w*|gebühr\w*|maut\w*|vignette\w*|tarif\w*|ticket\w*|eintritt\w*|"
@@ -720,20 +725,26 @@ def preisfrage(frage: str) -> bool:
 
 
 _REGEL_WORT = re.compile(r"(?i)\b(?:\w*pflicht\w*|vorgeschrieben\w*|gesetzlich\w*|verordnung\w*|erlaubt|verboten|strafe\w*|bu[ßs]geld\w*|"
-                         r"\w*frist(?!ig)\w*|mindestalter|altersgrenze|\w*vignette\w*|\w*maut\w*|\w*pickerl\w*|\w*tempolimit\w*|\w*höchstgeschwindigkeit\w*|"
+                         r"\w*frist(?!ig)\w*|mindestalter|altersgrenze|\w*vignette\w*|\w*maut\w*|\w*pickerl\w*|t[üu]v|hauptuntersuchung|"
+                         r"\w*tempolimit\w*|\w*höchstgeschwindigkeit\w*|"
                          r"mandatory|required by law|is it legal|legally|illegal|penalt\w+|speed limit\w*|minimum age|"
                          r"visum|visa|visas|\w*einreise\w*|esta|aufenthaltstitel|aufenthaltsgenehmigung|\w*reisepass\w*|passport\w*|"
-                         r"entry requirements?|travel authori[sz]ation|work permit|residence permit)\b")
+                         r"entry requirements?|travel authori[sz]ation|work permit|residence permit|"
+                         r"by law|compulsory|notice period|blood alcohol|drink[- ]driving|public holidays?|bank holidays?|legal (?:age|limit|requirement)s?|"
+                         r"allowed|forbidden|prohibited|deadline)\b")
 _REGEL_GESETZ = re.compile(r"(?i)\b(?!natur|gesetzmäßig)\w*gesetz\w*\b")
 _KEIN_RECHT = re.compile(r"(?i)\b(?:ohm\w*|newton\w*|kepler\w*|gravitation\w*|fallgesetz\w*|hebelgesetz\w*|energieerhaltung\w*|mendel\w*|murphy\w*|moore\w*|"
                          r"physik\w*|chemie\w*|chemisch\w*|mathemati\w*|naturwissenschaft\w*|thermodynami\w*|elektri\w*|strom|spannung|widerstand)\b")
 _REGEL_KEINE = re.compile(r"(?i)^\s*(?:was (?:muss|soll|sollte|müssen|sollten|kann) (?:ich|man|wir)\b.*\b(?:essen|trinken|probieren|sehen|anschauen|"
                           r"besichtigen|besuchen|erleben|unternehmen)|what (?:must|should|can) (?:i|we|one)\b.*\b(?:eat|drink|try|see|visit|do))\b")
 _REGEL_VERKEHR = re.compile(r"(?i)\b(?:fahren|f[äa]hrt|parken|überholen|ueberholen|ortsgebiet\w*|autobahn\w*|freiland\w*|schnellstra[ßs]e\w*|radweg\w*|"
-                            r"gehsteig\w*|führerschein\w*|fuehrerschein\w*|kindersitz\w*|gurt\w*|alkohol am steuer|promille)\b")
+                            r"gehsteig\w*|führerschein\w*|fuehrerschein\w*|kindersitz\w*|gurt\w*|alkohol am steuer|promille|"
+                            r"drive|driving|motorways?|highways?|parking|overtak\w+|driving licen[cs]e|seat ?belts?|child seats?)\b")
 _REGEL_MODAL = re.compile(r"(?i)\b(?:muss ich|muss man|müssen wir|darf ich|darf man|dürfen wir|ab wann|bis wann|ab welchem alter|"
+                          r"mindestens|"
                           r"brauch(?:e|st|t|en)|benötig(?:e|st|t|en)|kann ich|kann man|"
-                          r"do i (?:have|need) to|needs?|must|am i allowed|can i|from what age)\b")
+                          r"do i (?:have|need) to|needs?|must|am i allowed|can i|from what age|"
+                          r"may (?:i|you|one|we)|are you allowed|is it allowed|have to|do you need|how fast may)\b")
 _REGEL_STELLE = re.compile(r"(?i)\b(?:eu|behörde\w*|polizei)\b")
 
 

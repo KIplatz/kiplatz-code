@@ -41,10 +41,15 @@ def test_ein_hauptschluessel_nur_fuer_mich_und_nie_ein_zweiter(eigener_ordner):
 def test_ein_fremder_oder_beschaedigter_wert_gibt_nie_klartext(eigener_ordner):
     w = geheim.schuetzen("abc")
     art, _, rest = w.partition(":")
-    kaputt = art + ":" + rest[:-4] + ("AAAA" if not rest.endswith("AAAA") else "BBBB")
-    with pytest.raises(geheim.GeheimError) as e:
-        geheim.lesen(kaputt)
-    assert "abc" not in e.value.detail
+    import base64
+    roh = base64.b64decode(rest)
+    for stelle in (len(roh) // 2, len(roh) - 1):
+        kaputt_roh = bytearray(roh)
+        kaputt_roh[stelle] ^= 0x01
+        kaputt = art + ":" + base64.b64encode(bytes(kaputt_roh)).decode("ascii")
+        with pytest.raises(geheim.GeheimError) as e:
+            geheim.lesen(kaputt)
+        assert "abc" not in e.value.detail
     if os.name == "posix":
         (eigener_ordner / geheim.SCHLUESSEL_DATEI).unlink()
         geheim.vergessen()
