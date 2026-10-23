@@ -285,10 +285,18 @@ def _block_lesen(daten: bytes, *, wege: bool, knoten_ids: set[int] | None = None
                     yield ("weg", wid, erster, {strings[k]: strings[x] for k, x in zip(keys, vals)})
 
 
+_VORRANG = (("natural", "peak"), ("tourism", "alpine_hut"), ("tourism", "wilderness_hut"))
+
+
 def art_von(tags: dict) -> str:
+    for k, v in _VORRANG:
+        if tags.get(k) == v:
+            return KATEGORIEN[(k, v)]
     for k in ("amenity", "shop", "tourism", "leisure", "healthcare", "craft", "railway", "aerialway", "natural", "historic"):
         v = tags.get(k)
         if v and (k, v) in KATEGORIEN:
+            if (k, v) == ("tourism", "information") and tags.get("information") != "office":
+                continue
             return KATEGORIEN[(k, v)]
     return ""
 
@@ -395,7 +403,7 @@ def _land_einlesen(pbf: Path, ziel: Path, *, darf=lambda: True, fortschritt=None
                 tags = e[-1]
                 if e[0] == "knoten":
                     if tags.get("place") in ORTSARTEN and tags.get("name"):
-                        ew = re.sub(r"\D", "", tags.get("population", "") or "")[:9]
+                        ew = re.sub(r"\D", "", (tags.get("population", "") or "").split(";")[0])[:9]
                         orte.append((tags.get("name:de") or tags["name"], tags["place"], e[2], e[3], int(ew) if ew else 0))
                     a = art_von(tags)
                     if a:
@@ -487,10 +495,13 @@ def frage_art(frage: str) -> str:
     return ""
 
 
+_ZUSATZ = re.compile(r"[A-ZÄÖÜ][\wäöüß.\-]*(?: [A-ZÄÖÜ][\wäöüß.\-]*)? (?:am|im|an der|in der|ob der|ob|bei|vor der) [A-ZÄÖÜ][\wäöüß\-]*")
+
+
 def _ortsworte(frage: str) -> list[str]:
     w = re.findall(r"[A-ZÄÖÜ][\wäöüß.\-]*", frage or "")
     w = [x.rstrip(".") if not x.endswith("St.") else x for x in w]
-    out = []
+    out = [m.group(0) for m in _ZUSATZ.finditer(frage or "") if not frage_art(m.group(0).split(" ")[0])]
     for n in (3, 2, 1):
         for i in range(len(w) - n + 1):
             k = " ".join(w[i:i + n])
@@ -522,6 +533,11 @@ class Laenderdatei:
                 for n in {norm, _norm(k)}:
                     r = self._db.execute("SELECT name, lat, lon, rang, einwohner FROM ort WHERE norm=? ORDER BY rang DESC, einwohner DESC LIMIT 1",
                                          (n,)).fetchone()
+                    if (r is None or int(r[3] or 0) < ORTSARTEN["town"]) and " " not in n:
+                        z = self._db.execute("SELECT name, lat, lon, rang, einwohner FROM ort WHERE norm > ? AND norm < ? AND rang >= ? "
+                                             "ORDER BY rang DESC, einwohner DESC LIMIT 1", (n + " ", n + " ~", ORTSARTEN["town"])).fetchone()
+                        if z and _ZUSATZ.fullmatch(z[0]) and (r is None or int(z[3] or 0) > int(r[3] or 0)):
+                            r = z
                     if r:
                         out.append((i, int(r[3] or 0), int(r[4] or 0), r[0], r[1], r[2], r[3]))
                         break
@@ -537,13 +553,16 @@ class Laenderdatei:
         return [x for x in mit if x[0] <= km][:n]
 
     def namen(self, art: str, worte: list[str], n: int) -> list[tuple[float, str, str, float, float]]:
-        ausdruck = " OR ".join('"' + w.replace('"', "") + '"*' for w in worte if len(w) >= 3)
-        if not ausdruck:
+        worte = [w.replace('"', "") for w in worte if len(w) >= 3]
+        if not worte:
             return []
+        mehr = "" if len(worte) == 1 else f" AND length(e.name) - length(replace(e.name, ' ', '')) = {len(worte) - 1}"
+        anfang = [re.sub(r"(?:en|em|er|es|e)$", "", w) if len(w) >= 5 else w for w in worte]
         with self._lock:
             try:
                 rows = self._db.execute("SELECT e.text, e.osm, e.lat, e.lon FROM eintrag_name JOIN eintrag e ON e.id = eintrag_name.rowid "
-                                        "WHERE eintrag_name MATCH ? AND e.art=? ORDER BY bm25(eintrag_name) LIMIT ?", (ausdruck, art, n)).fetchall()
+                                        f"WHERE eintrag_name MATCH ? AND e.art=?{mehr} ORDER BY lower(e.name) = ? DESC, bm25(eintrag_name) LIMIT ?",
+                                        (" AND ".join(f'"{w}"*' for w in anfang), art, " ".join(worte).lower(), n)).fetchall()
             except sqlite3.Error:
                 return []
         return [(0.0, t, o, la, lo) for t, o, la, lo in rows]
@@ -551,6 +570,22 @@ class Laenderdatei:
 
 NACH_NAMEN = ("Berg", "Hütte", "Burg oder Schloss", "Museum", "Tierpark", "Seilbahnstation")
 BERGNAH = ("Hütte", "Aussichtspunkt", "Seilbahnstation")
+
+
+def _nach_namen(dateien: list, art: str, kandidaten: list[str], n: int, ohne: str = "", frage: str = "") -> list[tuple[float, str, str, float, float]]:
+    erfolglos: list[list[str]] = []
+    weg = set(_norm(ohne).split())
+    for k in kandidaten:
+        worte = [w for w in k.split() if w.lower() not in _KEIN_ORT and not frage_art(w) and len(w) >= 3 and _norm(w) not in weg]
+        if not worte or any(all(w in teil for w in worte) for teil in erfolglos):
+            continue
+        gesehen: set[str] = set()
+        treffer = [x for d in dateien for x in d.namen(art, worte, n) if not (x[2] in gesehen or gesehen.add(x[2]))]
+        if treffer:
+            return treffer[:n]
+        if not _ZUSATZ.fullmatch(k) and len(worte) > 1 and " ".join(worte) in (frage or ""):
+            erfolglos.append(worte)
+    return []
 
 
 def bester_ort(dateien: list, kandidaten: list[str], frage: str = "") -> tuple[str, float, float, int] | None:
@@ -578,13 +613,12 @@ def suchen_in(dateien: list[Laenderdatei], frage: str, *, stand: str = "", ort_h
     liste: list[tuple[float, str, str]] = []
     titel = ""
     if art in NACH_NAMEN and worte:
-        for d in dateien:
-            liste += [x[:3] for x in d.namen(art, worte, 4)]
+        liste = [x[:3] for x in _nach_namen(dateien, art, kandidaten, 4, ohne="" if art in ("Berg",) + BERGNAH or not ort else ort[0], frage=frage)]
         if liste:
             titel = f"{art}: nach dem Namen gesucht"
     gruppen: list[tuple[str, list]] = []
     if not liste and worte and (art in BERGNAH or not ort):
-        berge = [b for d in dateien for b in d.namen("Berg", worte, 3)][:3]
+        berge = _nach_namen(dateien, "Berg", kandidaten, 3, frage=frage)
         ohne = []
         for _, btext, _, bla, blo in berge:
             nah = sorted((x for d in dateien for x in d.naechste(art, bla, blo, km=5.0, n=5)), key=lambda x: x[0])[:5]
@@ -602,7 +636,8 @@ def suchen_in(dateien: list[Laenderdatei], frage: str, *, stand: str = "", ort_h
         for d in dateien:
             liste += d.naechste(art, la, lo, km=km, n=6)
         liste.sort(key=lambda x: x[0])
-        liste = liste[:6]
+        gesehen: set[str] = set()
+        liste = [x for x in liste if not (x[2] in gesehen or gesehen.add(x[2]))][:6]
         titel = f"{art} bei {name}"
     if liste:
         gruppen = [(titel, liste)]

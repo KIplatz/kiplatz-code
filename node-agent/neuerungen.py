@@ -11,6 +11,7 @@ def dank(satz: str, wer: str, art: str = "Meldung") -> str:
 
 
 NEUERUNGEN: dict[str, list[str]] = {
+    "2026-10-23j": [],
     "2026-10-23i": [],
     "2026-10-23h": [],
     "2026-10-23g": [],

@@ -34,8 +34,8 @@ FREI_RESERVE_MB = 20_000
 NEU_NACH_TAGE = 30
 ABSCHNITT = 900
 BEGRIFFSKLAERUNG_VORLAGEN = frozenset({"Vorlage:Begriffsklärung", "Template:Begriffsklärung"})
-EINLESE_STAND = 3
-MAX_ABSCHNITTE = 60
+EINLESE_STAND = 4
+MAX_ABSCHNITTE = 300
 NAMEN_WARTEN_S = 2.0
 VEKTOR_ZUERST_JE_ARTIKEL = 3
 VEKTOR_BATCH = 8
@@ -78,6 +78,14 @@ def _titel_norm(t: str) -> str:
     return " ".join(str(t or "").replace("_", " ").lower().split())
 
 
+def _grundformen(wort: str) -> set[str]:
+    w = _titel_norm(wort).translate(str.maketrans({"ä": "a", "ö": "o", "ü": "u", "ß": "ss"}))
+    for endung in ("en", "er", "e", "n", "s"):
+        if len(w) - len(endung) >= 3 and w.endswith(endung):
+            return {w, w[:-len(endung)]}
+    return {w}
+
+
 def _ortsadjektive(ort: str) -> list[str]:
     out = [ort + "er"]
     if ort.endswith("en") and len(ort) >= 6:
@@ -87,19 +95,80 @@ def _ortsadjektive(ort: str) -> list[str]:
     return out
 
 
-_SACHBEGRIFFE = frozenset(_titel_norm(t) for t in ("Einwohner", "Bevölkerung", "Länge", "Höhe", "Tiefe", "Fläche", "Größe", "Gewicht", "Preis",
-                                                    "Kosten", "Anzahl", "Datum", "Jahr", "Dauer", "Entfernung", "Strecke", "Distanz", "Alter",
-                                                    "Kilometer", "Meter", "Euro", "Gründung"))
+_SACHWORT = re.compile(r"(?i)(?:einwohner\w*|bevölkerung\w*|fläche|höhe|tiefe|länge|größe|gewicht|preis\w*|kosten|anzahl|datum|jahr|jahre|dauer|"
+                       r"entfernung|strecke|distanz|alter|kilometer|meter|euro|prozent|temperatur|hauptstadt|vergleich\w*|unterschied\w*|zahl|zahlen|"
+                       r"stadt|städte|land|länder|bundesland|bundesländer|gemeinde|bezirk|gründung|geburt|wetter|klima|geschichte|wirtschaft|"
+                       r"politik|lage|währung|sprache|religion|welt|tabelle|liste|übersicht|aufzählung|auflistung|rangliste|reihenfolge|tag|tage|"
+                       r"woche|monat|stunde|minute|sekunde|uhr|uhrzeit|wort|wörter|satz|text|beispiel|frage|antwort)")
 
 
-_WARTUNG = re.compile(r"Vorlage:[^\s/]+(?: [^\s/]+){0,4}/Wartung/\S*(?:\s+(?:fehlt|unpassend))?")
+_WARTUNG = re.compile(r"Vorlage:[^\s/]+(?: [^\s/]+){0,4}/Wartung/(?:(?!Vorlage:|Wikipedia:)\S)*(?:\s+(?:fehlt|unpassend))?")
 _VORLAGE_WORT = re.compile(r"Vorlage:\S+(?: \S+){0,2}(?= |$)")
-_PLATZHALTER_ANFANG = re.compile(r"^(?:(?:pd\d|p\d|BW)\s+)+")
+_PROJEKT = re.compile(r"Wikipedia:WikiProjekt [^\s/]+(?:/(?:(?!Vorlage:|Wikipedia:)\S)*)+")
+_KOORDINATEN = re.compile(r"-?\d{1,3}\.\d+-?\d{1,3}\.\d+Koordinaten: [^A-Za-zÄÖÜäöü]{0,40}?[NS],? [^A-Za-zÄÖÜäöü]{0,40}?[OW](?:; CH1903: [\d /]+)?")
+_BILDWUNSCH = re.compile(r"(?:[a-z]{1,2}\d[a-z0-9]{0,3}|BW)")
+_LEERE_KLAMMER = re.compile(r"\[\s*(?:auch\s*)?\]")
 
 
-def ohne_wartung(text: str) -> str:
-    t = _WARTUNG.sub(" ", str(text or ""))
-    return _PLATZHALTER_ANFANG.sub("", t.lstrip())
+def ohne_wartung(text: str, titel: str = "") -> str:
+    t = _KOORDINATEN.sub(" ", _PROJEKT.sub(" ", _WARTUNG.sub(" ", str(text or ""))))
+    worte = t.split()
+    erstes = (titel or "").split(" ")[0].lower()
+    i = 0
+    while i < len(worte) - 1 and _BILDWUNSCH.fullmatch(worte[i]) and worte[i].lower() != erstes:
+        i += 1
+    t = " ".join(worte[i:])
+    t = _LEERE_KLAMMER.sub("", t)
+    t = re.sub(r"\(\s*(?:[,;:]\s*)+", "(", t)
+    t = re.sub(r"(?:\s*[,;]\s*)+\)", ")", t)
+    t = re.sub(r"\(\s*\)", "", t)
+    t = re.sub(r"\s+([,;)])", r"\1", t)
+    t = re.sub(r"([,;:])(?:\s*[,;])+", r"\1", t)
+    return " ".join(t.split())
+
+
+_ANHANG = re.compile(r"abgerufen am|eingesehen am|\bISBN\b|\bISSN\b|\bdoi:|Memento vom|Archiviert vom|\bIn: ", re.I)
+ANHANG_DICHT = 4
+ANHANG_FENSTER = 2000
+
+
+def ohne_anhang(text: str) -> str:
+    text = text or ""
+    stellen = [m.start() for m in _ANHANG.finditer(text)]
+    luecke = max(ANHANG_FENSTER, len(text) // 20)
+    if len(stellen) < ANHANG_DICHT or len(text) - stellen[-1] > luecke:
+        return text
+    erste = len(stellen) - 1
+    while erste > 0 and stellen[erste] - stellen[erste - 1] <= luecke:
+        erste -= 1
+    if len(stellen) - erste < ANHANG_DICHT:
+        return text
+    ende = max(text.rfind(". ", 0, stellen[erste]), text.rfind(".“ ", 0, stellen[erste]))
+    return text[:ende + 1] if ende >= 0 else text
+
+
+_SATZENDE = re.compile(r"(?<=[.!?])\s+(?=[A-ZÄÖÜ0-9„\"(])")
+_MONAT = re.compile(r"(?:Jänner|Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember|Jahrhunderts?|Jahrtausends?|Jh)\b")
+_ABKUERZUNG = re.compile(r"(?:^|[\s(])(?:[a-zäöü]|bzw|ca|Nr|St|Dr|Prof|Mio|Mrd|Chr|Jh|Abb|vgl|ggf|bspw|inkl|Bd|Hrsg|geb|gest|verh|ehem|evtl|Tsd|Mill|"
+                         r"Ing|Mag|Hl|Kap|Abs|Art|Univ|sog|insb|Mt|Ft|Jr|Sr|Mr|Mrs|Gen|Lt|Fr|Hr|röm|kath|evang|jun|sen|engl|franz|ital|lat|griech)\.$")
+_ORDNUNGSZAHL = re.compile(r"(?:^|\s)(?:der|die|das|dem|den|des|im|am|zum|zur|vom|beim|ins|seit|bis|ab|um|nach|vor|in|an|auf|für|zwischen|und|oder)"
+                           r"\s+\d{1,3}\.$", re.I)
+
+
+def _kein_satzende(davor: str, danach: str) -> bool:
+    if re.search(r"(?:^|[\s(–-])\d{1,4}\.$", davor) and _MONAT.match(danach):
+        return True
+    return bool(_ORDNUNGSZAHL.search(davor) or _ABKUERZUNG.search(davor) or re.search(r"(?:^|[\s(])[A-ZÄÖÜ]\.$", davor))
+
+
+def saetze(text: str) -> list[str]:
+    out: list[str] = []
+    for s in _SATZENDE.split(text or ""):
+        if out and _kein_satzende(out[-1], s):
+            out[-1] += " " + s
+        else:
+            out.append(s)
+    return out
 
 
 def stuecke(text: str, zeichen: int = ABSCHNITT) -> list[str]:
@@ -116,11 +185,10 @@ def stuecke(text: str, zeichen: int = ABSCHNITT) -> list[str]:
     return out
 
 
-def abschnitte(text: str, *, zeichen: int = ABSCHNITT) -> list[str]:
-    saetze = re.split(r"(?<=[.!?])\s+(?=[A-ZÄÖÜ0-9„\"(])", " ".join(ohne_wartung(text).split()))
-    saetze = [s for s in saetze if not _BELEG.search(s)]
+def abschnitte(text: str, *, zeichen: int = ABSCHNITT, titel: str = "") -> list[str]:
+    gute = [s for s in saetze(ohne_anhang(ohne_wartung(text, titel))) if not _BELEG.search(s)]
     out, aktuell = [], ""
-    for s in saetze:
+    for s in gute:
         while len(s) > zeichen:
             if aktuell:
                 out.append(aktuell)
@@ -149,11 +217,12 @@ def ist_beleg(stueck: str) -> bool:
 KURZDATEN_MIN_ZEICHEN = 120
 KURZDATEN_MIN_ZIFFERN = 10
 KURZDATEN_ZEICHEN = 6000
+KURZDATEN_LISTE_ZEICHEN = 20_000
 _INFOBOX_WORT = re.compile(r"\b(?:Basisdaten|Einwohner|Fläche|Höhe|Koordinaten|Länge)\b")
 _JAHRESKLAMMER = re.compile(r"\(\d{4}[–-]\d{4}\)")
 
 
-def kurzdaten(aux: list[str]) -> list[str]:
+def kurzdaten(aux: list[str], *, liste: bool = False) -> list[str]:
     wert = []
     gesehen: set[tuple[int, str, str]] = set()
     for a in aux:
@@ -166,10 +235,10 @@ def kurzdaten(aux: list[str]) -> list[str]:
         if schluessel in gesehen:
             continue
         gesehen.add(schluessel)
-        wert.append((0 if _INFOBOX_WORT.search(a[:200]) else 1, len(wert), a))
+        wert.append((0 if _INFOBOX_WORT.search(a[:200]) and not liste else 1, len(wert), a))
     wert.sort()
     out: list[str] = []
-    rest = KURZDATEN_ZEICHEN
+    rest = KURZDATEN_LISTE_ZEICHEN if liste else KURZDATEN_ZEICHEN
     for _, _, a in wert:
         if rest <= 0:
             break
@@ -189,10 +258,10 @@ def dokument_lesen(d: dict) -> dict | None:
     if any(str(v).strip() in BEGRIFFSKLAERUNG_VORLAGEN for v in (d.get("template") or [])):
         return None
     aux_alle = [str(a or "").strip() for a in (d.get("auxiliary_text") or [])]
-    teile = [t for t in abschnitte(text) if not ist_beleg(t)][:MAX_ABSCHNITTE]
+    teile = [t for t in abschnitte(text, titel=titel) if not ist_beleg(t)][:MAX_ABSCHNITTE]
     if not teile:
         return None
-    kurz = kurzdaten(aux_alle)
+    kurz = kurzdaten(aux_alle, liste=titel.startswith("Liste "))
     if kurz:
         teile[1:1] = kurz
     else:
@@ -603,6 +672,7 @@ class Datenbank:
     def titel_artikel(self, frage: str) -> list[int]:
         worte = re.findall(r"[\wäöüÄÖÜß.-]+", frage or "")
         treffer: list[tuple[int, int]] = []
+        gattung: set[int] = set()
         with self._lock:
             for laenge in (4, 3, 2, 1):
                 for i in range(0, max(0, len(worte) - laenge + 1)):
@@ -611,9 +681,14 @@ class Datenbank:
                                         or stueck[0].lower() in wissen._STOPP):
                         continue
                     norm = _titel_norm(" ".join(stueck).strip(".-"))
-                    r = self._c.execute("SELECT artikel FROM titel WHERE norm = ?", (norm,)).fetchone()
+                    r = self._c.execute("SELECT t.artikel, a.titel FROM titel t JOIN artikel a ON a.id = t.artikel WHERE t.norm = ?", (norm,)).fetchone()
                     if r and r[0] not in [t for t, _ in treffer]:
                         treffer.append((r[0], laenge))
+                        wort = stueck[0].strip(".-")
+                        if laenge == 1 and (_SACHWORT.fullmatch(wort) or _SACHWORT.fullmatch(r[1])
+                                            or (norm != _titel_norm(r[1]) and _grundformen(wort) & _grundformen(r[1]))):
+                            gattung.add(r[0])
+            listen = self._listen_artikel(worte)
             gross = [(i, w.strip(".-")) for i, w in enumerate(worte) if w[:1].isupper() and len(w.strip(".-")) >= 3 and w.lower() not in wissen._STOPP]
             for i, sache in gross:
                 for j, ort in gross:
@@ -625,7 +700,44 @@ class Datenbank:
                             allgemein = self._c.execute("SELECT artikel FROM titel WHERE norm = ?", (_titel_norm(sache),)).fetchone()
                             treffer = [(r[0], 9)] + [(t, n) for t, n in treffer if not (allgemein and t == allgemein[0])]
                             break
-        return [t for t, _ in treffer][:3]
+        namen = [t for t, _ in treffer if t not in gattung and t not in listen]
+        return (listen + namen if listen or namen else [t for t, _ in treffer])[:3]
+
+    def _listen_artikel(self, worte: list[str]) -> list[int]:
+        stamm = set(wissen.woerter(" ".join(worte)))
+        for s in list(stamm):
+            stamm.add(s + "land")
+            if s.endswith("isch") and len(s) >= 7:
+                stamm |= {s[:-4], s[:-4] + "land"}
+        if stamm & {"welt", "erde"}:
+            stamm |= {"welt", "erde"}
+        namen = {s for w in worte[1:] if w[:1].isupper() and not _SACHWORT.fullmatch(w.strip(".-")) for s in wissen.woerter(w)}
+
+        def gleich(a: str, b: str) -> bool:
+            return a == b or (min(len(a), len(b)) >= 5 and abs(len(a) - len(b)) <= 2 and (a.startswith(b) or b.startswith(a)))
+
+        def gedeckt(t: str) -> bool:
+            return any(gleich(t, q) for q in stamm)
+
+        beste: tuple[float, int, int] | None = None
+        gesehen: set[str] = set()
+        for i, w in enumerate(worte):
+            w = w.strip(".-").lower()
+            if len(w) < 4 or w in wissen._STOPP:
+                continue
+            for anfang in (f"liste der {w}", f"liste von {w}"):
+                for norm, aid in self._c.execute("SELECT norm, artikel FROM titel WHERE norm >= ? AND norm < ? LIMIT 3000", (anfang, anfang + "~")):
+                    if norm in gesehen:
+                        continue
+                    gesehen.add(norm)
+                    t = set(wissen.woerter(norm)) - {"list", "liste"}
+                    if len(t) < 2 or not all(gedeckt(x) for x in t):
+                        continue
+                    fehlt = sum(1 for n in namen if not any(gleich(n, x) for x in t))
+                    wert = (len(t) - 0.5 * fehlt, -len(norm), int(aid))
+                    if beste is None or wert > beste:
+                        beste = wert
+        return [beste[2]] if beste is not None and beste[0] >= 2 else []
 
     def _subjekt(self, frage: str, titel_ids: list[int]) -> tuple[int | None, str]:
         if not titel_ids:
@@ -635,7 +747,7 @@ class Datenbank:
             for aid in titel_ids:
                 r = self._c.execute("SELECT titel FROM artikel WHERE id = ?", (aid,)).fetchone()
                 t = str(r[0]) if r else ""
-                if _titel_norm(t) not in _SACHBEGRIFFE:
+                if not _SACHWORT.fullmatch(t.strip()):
                     titel.append((aid, t))
         if not titel:
             return None, ""
@@ -652,7 +764,7 @@ class Datenbank:
         name = re.sub(r"\s*\([^)]*\)$", "", titel).strip() if titel else ""
         if not name:
             for i, w in enumerate(re.findall(r"[\wäöüÄÖÜß-]+", frage or "")):
-                if i and len(w) >= 3 and w[:1].isupper() and w.lower() not in wissen._STOPP and _titel_norm(w) not in _SACHBEGRIFFE:
+                if i and len(w) >= 3 and w[:1].isupper() and w.lower() not in wissen._STOPP and not _SACHWORT.fullmatch(w):
                     name = w
                     break
         if not name:
@@ -814,10 +926,6 @@ _ORT_KLAMMER = re.compile(r"(?i)\((?:stadt|gemeinde|marktgemeinde|stadtgemeinde|
                           r"sachsen|thüringen|hessen|nordrhein-westfalen|niedersachsen|rheinland-pfalz|brandenburg|südtirol|kanton \w+|landkreis [^)]+|"
                           r"bezirk [^)]+)\)$")
 _BEGRIFFSKLAERUNG = re.compile(r"(?i)\b(?:steht für|bezeichnet|ist der name)\b[^.]{0,40}:|begriffsklärung")
-
-_SACHWORT_TITEL = re.compile(r"(?i)(?:einwohner\w*|bevölkerung\w*|fläche|höhe|länge|größe|preis\w*|kosten|temperatur|hauptstadt|vergleich\w*|"
-                             r"unterschied\w*|anzahl|zahl|stadt|städte|land|länder|bundesland|bundesländer|gemeinde|bezirk|gründung|geburt|alter|"
-                             r"wetter|klima|geschichte|wirtschaft|politik|lage|entfernung|währung|sprache|religion)")
 
 
 _NAME_TEIL = re.compile(r"[\wäöüÄÖÜß]+(?:[-'][\wäöüÄÖÜß]+)*")
@@ -1094,10 +1202,22 @@ class WikiKopie:
                                 else f"auf dem Laufwerk sind nur {frei_mb // 1000} GB frei")
                 self._log(f"OK wikipedia: zu wenig Platz ({frei_mb // 1000} GB frei, Bedarf {(bedarf_mb + FREI_RESERVE_MB) // 1000} GB), nächster Blick in einer Stunde")
                 return 3600
-            self._stand_setzen(bau_ausgabe=ausgabe, bau_teile=[[n, a, g] for n, a, g in teile], bau_gb=round(gesamt_gb, 1), bau_seit=_jetzt())
+            self._stand_setzen(bau_ausgabe=ausgabe, bau_teile=[[n, a, g] for n, a, g in teile], bau_gb=round(gesamt_gb, 1), bau_seit=_jetzt(),
+                               bau_stand=EINLESE_STAND)
             self._log(f"OK wikipedia: Ausgabe {ausgabe} mit {len(teile)} Teilen ({gesamt_gb:.1f} GB) wird geholt")
             return 0
+        if int(st.get("bau_stand", 0)) != EINLESE_STAND:
+            self._bau_verwerfen(st)
+            return 0
         return self._bau_schritt(st)
+
+    def _bau_verwerfen(self, st: dict) -> None:
+        bau = self._bau_pfad(st["bau_ausgabe"])
+        for p in [bau, bau.with_name(bau.name + "-wal"), bau.with_name(bau.name + "-shm")] + list(self.ordner.glob("teil-*.json.bz2")):
+            p.unlink(missing_ok=True)
+        self._stand_setzen(bau_ausgabe="", bau_teile=[], bau_vorrat="", bau_uebernommen="", einlesen_teil=-1, einlesen_zeile=0, bau_stand=0)
+        self._log(f"OK wikipedia: Bau der Ausgabe {st['bau_ausgabe']} mit Einleseregeln {st.get('bau_stand', 'vor 23j')} verworfen, "
+                  f"beginnt neu mit Stand {EINLESE_STAND}")
 
     def _bau_pfad(self, ausgabe: str) -> Path:
         return self.ordner / f"wikipedia-{ausgabe}.bau.sqlite"
@@ -1501,7 +1621,7 @@ class WikiKopie:
             kandidaten = list(db.titel_artikel(frage))
             if ortsfrage:
                 for w in re.findall(r"\b[A-ZÄÖÜ][\wäöüß.-]{2,}", frage or ""):
-                    if w.lower() in wissen._STOPP or _SACHWORT_TITEL.fullmatch(w):
+                    if w.lower() in wissen._STOPP or _SACHWORT.fullmatch(w):
                         continue
                     ort = next((v for v, t in db.varianten(w) if _ORT_KLAMMER.search(t.strip())), None)
                     if ort is None or ort in kandidaten:
@@ -1516,8 +1636,6 @@ class WikiKopie:
                 if not e:
                     continue
                 titel, text = e
-                if _SACHWORT_TITEL.fullmatch(titel.strip()):
-                    continue
                 if _BEGRIFFSKLAERUNG.search(text[:300]) or aid in gewaehlt:
                     continue
                 gewaehlt.append(aid)

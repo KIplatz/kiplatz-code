@@ -4113,6 +4113,7 @@ class Api:
                 _ABSICHT.wert = None
                 _FACH.wert = None
                 ki_laufzeit.original_setzen("")
+                _SUCHLAUF.stand = None
 
         def frage_ohne_schritt():
             nonlocal frisch
