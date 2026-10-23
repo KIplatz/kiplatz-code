@@ -934,11 +934,12 @@ class Api:
         if richtung and not (erkannt is not None and erkannt.art in ("wetter", "schlagzeilen")):
             grenze = (datetime.now(timezone.utc) - timedelta(hours=12)).strftime("%Y-%m-%dT%H:%M:%SZ")
             heute_ = date.today()
+            fenster_ = nachschauen.letzt_fenster(frage)
 
             def vorbei(t: wissen.Treffer) -> bool:
                 if t.quelle.art == "nachgeschaut" and t.quelle.datum < grenze:
                     return True
-                return nachschauen.zeitlich_vorbei(t.text, heute_, richtung)
+                return nachschauen.zeitlich_vorbei(t.text, heute_, richtung, fenster_)
             vorher_n = len(server) + len(lokal)
             server = [t for t in server if not vorbei(t)]
             lokal = [t for t in lokal if not vorbei(t)]
@@ -5899,14 +5900,19 @@ DACH_LAENDER = ("at", "de", "ch", "li")
 
 
 def such_sprache(frage: str) -> str:
-    if ki_laufzeit.original() and any(land.lower() not in DACH_LAENDER for land in belege.laender_in(frage)):
+    original = ki_laufzeit.original()
+    if original and any(land.lower() not in DACH_LAENDER for land in belege.laender_in(frage)):
         return "en"
     r = region.erkennen(frage)
-    return r.sprache if r else ""
+    if r:
+        return r.sprache
+    if original and not (belege.laender_in(frage) | belege.laender_in(original)) & {"AT", "DE", "CH", "LI"} and region.erkennen(original) is None:
+        return "en"
+    return ""
 
 
-SUCHWORT_ENGLISCH = ("Die Person hat auf Englisch gefragt, und die Frage betrifft ein Land außerhalb des deutschen Sprachraums; die Suche läuft auf Englisch: schreib beide Zeilen "
-                     "auf Englisch, mit den Wörtern, die man in diesem Land dafür verwendet.")
+SUCHWORT_ENGLISCH = ("Die Person hat auf Englisch gefragt, und die Frage betrifft keinen Ort im deutschen Sprachraum; die Suche läuft auf Englisch: schreib beide Zeilen "
+                     "auf Englisch, mit den Wörtern, die man dort dafür verwendet.")
 
 
 def zeitziel(frage: str, heute=None) -> tuple[int | None, int | None]:

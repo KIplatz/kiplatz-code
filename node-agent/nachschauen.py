@@ -103,7 +103,7 @@ def nicht_im_lexikon(frage: str) -> bool:
         return True
     if _SCHLAGZEILEN.search(f) and belege.gefragtes_land(f) not in ("", *LAENDER):
         return True
-    return bool(_JETZT_PRAKTISCH.search(f)) or belege.regelfrage(f) or amtsfrage(f)
+    return bool(_JETZT_PRAKTISCH.search(f)) or belege.regelfrage(f) or amtsfrage(f) or juengstes_ereignis(f)
 
 
 def erkennen_im_gespraech(nachrichten: list[dict]) -> "Auftrag | None":
@@ -567,6 +567,7 @@ class Nachschauer:
         gemischt: list[dict] = []
         for i in range(max((len(tr) for tr, _ in listen), default=0)):
             gemischt += [tr[i] for tr, _ in listen if i < len(tr)]
+        fenster = letzt_fenster(frage)
         reihe = treffer_reihen(gemischt, frage, heute=heute, r=r, ziel=ziel, ausser=ausser)
         reihe = ohne_vorbehalt(reihe, oeffner=self._seiten_oeffner)
         if not reihe:
@@ -580,7 +581,7 @@ class Nachschauer:
 
         def eine(t: dict):
             try:
-                return t, wissen.live_lesen(t["adresse"], frage, n=4, oeffner=self._seiten_oeffner, extra=(lambda s: zeit_punkte(s, heute, r)) if r else None)
+                return t, wissen.live_lesen(t["adresse"], frage, n=4, oeffner=self._seiten_oeffner, extra=(lambda s: zeit_punkte(s, heute, r, fenster)) if r else None)
             except wissen.WissenError:
                 sperren(t["adresse"])
                 return t, None
@@ -632,7 +633,7 @@ class Nachschauer:
             q, text, tr = ergebnis
             gelesen.append(t["adresse"])
             inhalt = " ".join(x.text for x in tr)
-            if zeitlich_vorbei(inhalt, heute, r) or veraltet_text(q.titel + " " + q.adresse + " " + inhalt, *ziel):
+            if zeitlich_vorbei(inhalt, heute, r, fenster) or veraltet_text(q.titel + " " + q.adresse + " " + inhalt, *ziel):
                 continue
             teile = [frage_kennung(frage), gefunden_zeile(q.titel, q.adresse, tag, text)]
             if t.get("text"):
@@ -714,7 +715,14 @@ _LETZT = re.compile(r"\bletzte[nrms]?\b(?!\s+mal\b)|\bzuletzt\b|\bgestern\b|\bge
                     r"wie (?:hat|haben) .{1,40} gespielt|wie (?:ist|sind) .{1,40} ausgegangen|wer hat .{1,40} gewonnen|"
                     rf"\b(?:heute|heutig\w*)\b.{{0,60}}\b{_AUSGANG_DE}\b|\b{_AUSGANG_DE}\b.{{0,30}}\bheute\b|"
                     rf"\b(?:yesterday|today|tonight)(?:'s)?\b.{{0,60}}\b{_AUSGANG_EN}\b|\b{_AUSGANG_EN}\b.{{0,60}}\b(?:yesterday|today|tonight)\b", re.I)
-_HEUTE = re.compile(r"\bheute\b|\bheutig\w*|\btoday\b|\btonight\b", re.I)
+_THE_LAST = re.compile(r"\b(?:the|its|their)\s+(?:last|latest|most recent|previous)\b(?!\s+(?:time|times|few|couple|\d))", re.I)
+_EREIGNIS = re.compile(r"\b(?:gewonnen|gewinnt|gespielt|ausgegangen|geendet|ergebnis\w*|sieger\w*|gewinner\w*|\w*meister(?:in|innen|schaft\w*)?|"
+                       r"torsch[üu]tzenk[öo]nig\w*|wahl|wahlen|\w+wahl(?:en)?|rennen|spiele?|spielen|spiels|spielt(?:e|en)?|spieltag\w*|spielstand|"
+                       r"match|finale?|endspiel|turnier\w*|wm|em|olympi\w*|grand prix|derby|cup|pokal\w*|\w*liga|league|"
+                       r"won|win(?:s|ner)?|played|result\w*|race|game|election|tournament|champion\w*|grand slam|super bowl)\b", re.I)
+_JUENGST = re.compile(r"\bletzte[nrms]?\b(?!\s+mal\b)|\bzuletzt\b|\bgestern\b|\bgestrig\w*|\bvorige[nrms]?\b|\bvergangene[nrms]?\b|\bheute\b|\bheutig\w*|"
+                      r"\byesterday\b|\btoday\b", re.I)
+_HEUTE =re.compile(r"\bheute\b|\bheutig\w*|\btoday\b|\btonight\b", re.I)
 _GESTERN = re.compile(r"\bgestern\b|\bgestrig\w*|\byesterday\b", re.I)
 
 
@@ -729,7 +737,8 @@ def _mit_original(frage: str) -> str:
 
 def richtung(frage: str) -> str:
     f = frage or ""
-    if _LETZT.search(_mit_original(f)):
+    g = _mit_original(f)
+    if _LETZT.search(g) or (_THE_LAST.search(g) and _EREIGNIS.search(g)):
         import kalender_tage
         from datetime import date as _date
         if any(j < (_date.today() - timedelta(days=45)).year for j in kalender_tage.jahre(f)):
@@ -741,6 +750,13 @@ def richtung(frage: str) -> str:
             return ""
         return "naechst"
     return ""
+
+
+def juengstes_ereignis(frage: str) -> bool:
+    if richtung(frage) != "letzt":
+        return False
+    g = _mit_original(frage)
+    return bool((_JUENGST.search(g) or _THE_LAST.search(g)) and _EREIGNIS.search(g))
 
 
 def zeitraum(frage: str) -> str:
@@ -787,24 +803,35 @@ def _tage(text: str, heute) -> list:
     return out
 
 
-def zeit_punkte(text: str, heute, r: str) -> float:
+LETZT_TAGE = 45
+AUSGABE_PUNKTE_TAGE = 400
+
+
+def letzt_fenster(frage: str) -> int | None:
+    return None if zeitraum(frage) == "month" else LETZT_TAGE
+
+
+def zeit_punkte(text: str, heute, r: str, fenster: int | None = LETZT_TAGE) -> float:
     if not r:
         return 0.0
+    zurueck = AUSGABE_PUNKTE_TAGE if fenster is None else fenster
     n = 0
     for d in _tage(text, heute):
         tage = (d - heute).days
-        if (r == "naechst" and 0 <= tage <= 120) or (r == "letzt" and -45 <= tage <= 0):
+        if (r == "naechst" and 0 <= tage <= 120) or (r == "letzt" and -zurueck <= tage <= 0):
             n += 1
     return float(min(n, 4))
 
 
-def zeitlich_vorbei(text: str, heute, r: str) -> bool:
+def zeitlich_vorbei(text: str, heute, r: str, fenster: int | None = LETZT_TAGE) -> bool:
     if not r:
         return False
     tage = _tage(text, heute)
     if len(tage) < 2:
         return False
-    return zeit_punkte(text, heute, r) == 0
+    if r == "letzt" and fenster is None:
+        return all(d > heute for d in tage)
+    return zeit_punkte(text, heute, r, fenster) == 0
 
 
 def _host(adresse: str) -> str:
@@ -910,6 +937,7 @@ def treffer_reihen(treffer: list[dict], frage: str, *, heute, r: str = "", ziel:
     gesehen: set[str] = set()
     bewertet = []
     regel = belege.regelfrage(frage)
+    fenster = letzt_fenster(frage) if r == "letzt" else LETZT_TAGE
     for rang, t in enumerate(treffer):
         adresse = str(t.get("adresse", ""))
         if not adresse.lower().startswith("https://") or adresse in gesehen or adresse in ausser:
@@ -917,8 +945,8 @@ def treffer_reihen(treffer: list[dict], frage: str, *, heute, r: str = "", ziel:
         gesehen.add(adresse)
         kopf = f"{t.get('titel', '')} {t.get('text', '')}"
         tw = set(wissen.woerter(kopf + " " + adresse.replace("-", " ").replace("/", " ")))
-        p = (len(fw & tw) / max(1, len(fw))) * 3.0 + zeit_punkte(kopf, heute, r) * 0.75 + 1.0 / (1 + rang)
-        if veraltet_text(kopf + " " + adresse, *ziel) or zeitlich_vorbei(kopf, heute, r):
+        p = (len(fw & tw) / max(1, len(fw))) * 3.0 + zeit_punkte(kopf, heute, r, fenster) * 0.75 + 1.0 / (1 + rang)
+        if veraltet_text(kopf + " " + adresse, *ziel) or zeitlich_vorbei(kopf, heute, r, fenster):
             p -= 3.0
         if regel and amtlich(adresse):
             p += AMTLICH_PUNKTE
