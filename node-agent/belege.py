@@ -183,12 +183,42 @@ def _ungefaehr_belegt(m: re.Match, satz: str, belegt: set[float]) -> bool:
     return False
 
 
-def unbelegte_zahlen(satz: str, belegt: set[float]) -> list[str]:
+def unbelegte_zahlen(satz: str, belegt: set[float], ableitung: bool = False) -> list[str]:
     out = []
     for m in _ZAHL.finditer(satz or ""):
-        if _zahl_pruefbar(m, satz) and not (_werte(m.group(0)) & belegt) and not _ungefaehr_belegt(m, satz, belegt):
+        if (_zahl_pruefbar(m, satz) and not (_werte(m.group(0)) & belegt) and not _ungefaehr_belegt(m, satz, belegt)
+                and not (ableitung and abgeleitet(_werte(m.group(0)), belegt))):
             out.append(m.group(0))
     return out
+
+
+_ABLEITUNG = re.compile(r"(?i)\bum wie viele?\b|\bunterschied\b|\bdifferenz\b|\bwie viele? (?:mehr|weniger)\b|\bmehr als\b|\bweniger als\b|\bgrößer\b|"
+                        r"\bkleiner\b|\bhöher\b|\bniedriger\b|\bzusammen\b|\binsgesamt\b|\bgesamt\b|\banteil\b|\bprozent\b|\bverglichen\b|\bvergleich\w*|"
+                        r"\bhow many (?:more|fewer|less)\b|\bhow much (?:more|less|bigger|larger|higher)\b|\bdifference\b|\bbigger\b|\blarger\b|"
+                        r"\bsmaller\b|\bhigher\b|\blower\b|\bcompared?\b|\bin total\b|\baltogether\b|\bcombined\b|\bshare\b|\bpercent\b")
+
+
+def ableitungsfrage(frage: str) -> bool:
+    return bool(_ABLEITUNG.search(frage or ""))
+
+
+def abgeleitet(werte: set[float], belegt: set[float]) -> bool:
+    if not belegt or len(belegt) > 400:
+        return False
+
+    def jahr(x: float) -> bool:
+        return x == int(x) and 1000 <= x <= 2099
+    gross = [a for a in belegt if a >= 100 and not jahr(a)]
+    for w in werte:
+        if w < 100 or jahr(w):
+            continue
+        for a in gross:
+            if a == w:
+                continue
+            b, c = round(a - w, 4), round(w - a, 4)
+            if (b >= 100 and not jahr(b) and b in belegt) or (c >= 100 and not jahr(c) and c in belegt):
+                return True
+    return False
 
 
 def _tokens(satz: str) -> list[tuple[str, int]]:
@@ -301,7 +331,7 @@ def adressen_in(satz: str) -> list[str]:
 
 
 def streng_pruefen(antwort: str, belege: str, *, zahlen_pruefen: bool = True, namen_pruefen=None, regel_frage: str = "",
-                   regel_quellen: list[str] | None = None) -> list[Befund]:
+                   regel_quellen: list[str] | None = None, ableitung: bool = False) -> list[Befund]:
     regel_raus = dict(regel_ungestuetzt(antwort, regel_frage, list(regel_quellen or []))) if regel_frage else {}
     belege_klein = (belege or "").lower()
     belegt_d = daten(belege)
@@ -321,7 +351,7 @@ def streng_pruefen(antwort: str, belege: str, *, zahlen_pruefen: bool = True, na
             z = [f"{d[0]}.{d[1]}." + (str(d[2]) if d[2] else "") for d in daten(s) if not _gedeckt_datum(d, belegt_d)]
             if zahlen_pruefen:
                 ohne_daten = _DATUM_ISO.sub(" ", _DATUM_WORT.sub(" ", _DATUM_ZAHL.sub(" ", s)))
-                z += unbelegte_zahlen(ohne_daten, belegt_z)
+                z += unbelegte_zahlen(ohne_daten, belegt_z, ableitung)
                 z += [j for j in jahre_anderswo(s, quellsaetze) if j not in z]
             pruefe_namen = namen_pruefen is None or namen_pruefen(s)
             sicher, lauf = namen(s) if pruefe_namen else ([], [])
@@ -624,7 +654,18 @@ def pruefen_noetig(frage: str, zeitgebunden: bool) -> bool:
     return zeitgebunden or bool(_PRUEFEN_FRAGE.search(frage or ""))
 
 
-_RECHNET = re.compile(r"(?i)\bzu je\b|\bje\b|\bmal\b|[×x*+/−-]\s*\d|\bzusammen\b|\binsgesamt\b|\bsumme\b|\bprozent von\b|%\s*von|\brabatt\b|was kostet das")
+_RECHNET = re.compile(r"(?i)\bzu je\b|\bje\b|\bmal\b|\d\s*[×x*+/−-]\s*\d|\bzusammen\b|\binsgesamt\b|\bsumme\b|\bprozent von\b|%\s*von|\brabatt\b|was kostet das")
+_NAME_ZAHL = re.compile(r"(?<=[A-Za-zÄÖÜäöüß])-\d+\b")
+_JAHR_SCHRAEG = re.compile(r"\b(1\d{3}|20\d{2})/(\d+)\b")
+
+
+def _ohne_code_zahlen(frage: str) -> str:
+    def code(m: re.Match) -> str:
+        jahr, rest = m.group(1), m.group(2)
+        if len(rest) >= 4 or (len(rest) == 2 and int(rest) == (int(jahr) + 1) % 100):
+            return " "
+        return m.group(0)
+    return _JAHR_SCHRAEG.sub(code, _NAME_ZAHL.sub(" ", frage or ""))
 _RECHNET_ZWEI = re.compile(r"(?i)\bplus\b|\bminus\b|\bweniger\b|\babzüglich\b|\bzuzüglich\b|\bgeteilt\b|\bdurch\s+\d|\bprozent\b|\bpercent\b|%|\bzinsen\b|"
                            r"\binterest\b|\btrinkgeld\b|\btip\b|\bnetto\b|\bbrutto\b|\bmwst\b|\bvat\b|\bzwischen\s+\d[\d.,]*\s+und\s+\d|"
                            r"\bbetween\s+\d[\d.,]*\s+and\s+\d|\bliter\w*\s+auf\s+100\b|\blit(?:er|re)s?\s+per\s+100\b|\bquadratmeter\b|\bsquare met(?:er|re)s?\b")
@@ -639,6 +680,25 @@ _UMRECHNEN = re.compile(rf"(?i)\bumrechn|\bconvert|\bwie viele?\s+(?:{_MASS})\s+
 
 _PREISFRAGE = re.compile(r"(?i)\b(?:was kostet|kostet|kosten|preis\w*|gebühr\w*|maut\w*|vignette\w*|tarif\w*|ticket\w*|eintritt\w*|"
                          r"how much (?:is|does|do|are|will)|costs?|price\w*|fees?|tolls?)\b")
+
+
+_GELDBETRAG = re.compile(r"(?i)[€$£]\s*\d|\d[\d.,]*\s*(?:€|\$|£|euros?\b|eur\b|cents?\b|dollars?\b|usd\b|pounds?\b|pfund\b|gbp\b|franken\b|chf\b|yen\b|kronen?\b|"
+                         r"zloty\b|forint\b)")
+_WAEHRUNG = re.compile(r"(?i)\b(euros?|eur|dollars?|usd|pounds?|pfund|gbp|franken|chf|yen|kronen?|zloty|forint|lira|rupees?|pesos?|yuan|renminbi)\b|[€$£]")
+_WAEHRUNG_GLEICH = {"€": "euro", "euros": "euro", "eur": "euro", "$": "dollar", "dollars": "dollar", "usd": "dollar", "£": "pound", "pounds": "pound",
+                    "pfund": "pound", "gbp": "pound", "chf": "franken", "kronen": "krone", "rupees": "rupee", "pesos": "peso", "renminbi": "yuan"}
+
+
+def rechenaufgabe(frage: str) -> bool:
+    if not rechnet(frage):
+        return False
+    f = _ohne_code_zahlen(frage)
+    if _PREISFRAGE.search(f) and not _GELDBETRAG.search(f):
+        return False
+    if len({_WAEHRUNG_GLEICH.get(w.lower(), w.lower()) for w in _WAEHRUNG.findall(f) if w} | {_WAEHRUNG_GLEICH.get(s, s) for s in re.findall(r"[€$£]", f)}) >= 2:
+        return False
+    zahlen = [z for z in _ZAHL.findall(f) if not _JAHRESZAHL.fullmatch(z)]
+    return len(zahlen) >= 2 or bool(_RECHENZEICHEN.search(f) or _UMRECHNEN.search(f))
 
 
 def preisfrage(frage: str) -> bool:
@@ -902,7 +962,7 @@ def regel_ungestuetzt(antwort: str, frage: str, quelltexte: list[str]) -> list[t
 
 
 def rechnet(frage: str) -> bool:
-    f = frage or ""
+    f = _ohne_code_zahlen(frage)
     if not re.search(r"\d", f):
         return False
     if _RECHENZEICHEN.search(f) or _UMRECHNEN.search(f):

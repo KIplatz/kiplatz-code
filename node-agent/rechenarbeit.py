@@ -1160,7 +1160,7 @@ def schritt_teile(ablauf: list[tuple[float, str]], gesamt_s: float) -> list[list
 def aufrufe_zeile(aufrufe: list[dict]) -> str:
     teile = []
     for a in aufrufe:
-        z = f"{a.get('art', '?')} {a.get('s', 0):.1f} s"
+        z = f"{a.get('art', '?')} {a.get('s', 0):.0f} Stellen" if a.get("art") == "wstellen" else f"{a.get('art', '?')} {a.get('s', 0):.1f} s"
         if "ein" in a or "aus" in a:
             z += f" (ein {int(a.get('ein', 0))}/cache {int(a.get('cache', 0))} in {a.get('ein_ms', 0):.0f} ms, aus {int(a.get('aus', 0))} in {a.get('aus_ms', 0):.0f} ms)"
         elif "n" in a:

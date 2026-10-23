@@ -97,6 +97,8 @@ def nicht_im_lexikon(frage: str) -> bool:
     f = " ".join(str(frage or "").split())
     if not f:
         return False
+    if belege.rechenaufgabe(f):
+        return False
     if _UNTERWEGS.search(f) and (_VON_NACH.search(f) or _DAUER_WEG.search(f) or _WANN_FAEHRT.search(f)):
         return True
     if _DAUER_WEG.search(f) and _VON_NACH.search(f):
@@ -217,7 +219,7 @@ def erkennen(frage: str) -> Auftrag | None:
     unten = f.lower()
     if _SCHREIBEN.search(f):
         return None
-    if _RECHNEN.search(f) and re.search(r"\d", f):
+    if (_RECHNEN.search(f) and re.search(r"\d", f)) or belege.rechenaufgabe(f):
         return None
     mess_wetter =bool(_WETTER_MESS.search(f)) and bool(_FRAGEFORM.search(f) or _WETTER_ZEIT.search(f) or _ORT_OHNE.search(f)
                                                          or any(m.group(1).strip(" .,;:!?") not in _ORT_NICHT for m in _ORT.finditer(f)))

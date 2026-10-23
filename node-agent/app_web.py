@@ -5867,7 +5867,7 @@ def suche_denkbar(frage: str) -> bool:
         return False
     if nachschauen._SCHREIBEN.search(f) and not re.search(r"\b(?:wer|wann|wo|welche[rsmn]?|wie viel|wieviel|was kostet)\b", f, re.I):
         return False
-    if nachschauen._RECHNEN.search(f) and re.search(r"\d", f):
+    if (nachschauen._RECHNEN.search(f) and re.search(r"\d", f)) or belege.rechenaufgabe(f):
         return False
     return True
 
@@ -6214,11 +6214,11 @@ def _ohne_vermittler(zusatz: str, quellen: list[dict], adressen: set[str]) -> st
 
 
 def _streng(t: str, belegtext: str, zusatz: str, rechnen: bool, pruefer, auszuege: list[tuple[int, str]], *, regel: bool = False,
-            beispiele: bool = False, bekannt=None, regelfrage: str = "", richter=None) -> tuple[str, list[str], int]:
+            beispiele: bool = False, bekannt=None, regelfrage: str = "", richter=None, ableitung: bool = False) -> tuple[str, list[str], int]:
     aus_quellen = any(s.farbe == "gruen" for s in pruefung.pruefen(t, auszuege).saetze)
     quelltexte = [x for _n, x in auszuege]
     befunde = belege.streng_pruefen(t, belegtext, zahlen_pruefen=not rechnen, namen_pruefen=None if (aus_quellen or regel) else (lambda s: False),
-                                    regel_frage=regelfrage, regel_quellen=quelltexte)
+                                    regel_frage=regelfrage, regel_quellen=quelltexte, ableitung=ableitung)
     if (not aus_quellen and not regel) or beispiele:
         befunde = [dataclasses.replace(b, zahlen=()) if b.zahlen and belege.alltag_ohne_widerspruch(b.satz, belegtext) else b
                    for b in befunde]
@@ -6330,11 +6330,12 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
     belegtext = (_ohne_vermittler(zusatz or "", quellen, vermittler) + "\n" + (frage or "") + "\n"
                  + wissen.zeit_zeile(None if heute == ki_laufzeit.heute() else datetime(heute.year, heute.month, heute.day, 12).astimezone()))
     rechnen = belege.rechnet(frage)
+    ableitung = belege.ableitungsfrage(frage)
     regel = not schreiben and belege.regelfrage(frage) and not belege.preisfrage(frage)
     regelfrage = frage if (not schreiben and belege.regelfrage(frage)) else ""
     auszuege = [(int(q.get("nummer") or 0), str(q.get("text") or "")) for q in beleg_quellen if q.get("text")]
     beispiele = not (rechnen or regel or belege.zahlenfrage(frage) or belege.preisfrage(frage))
-    geprueft, raus, vom_pruefer = _streng(t, belegtext, zusatz, rechnen, pruefer, auszuege, regel=regel, beispiele=beispiele, bekannt=bekannt,
+    geprueft, raus, vom_pruefer = _streng(t, belegtext, zusatz, rechnen, pruefer, auszuege, regel=regel, beispiele=beispiele, bekannt=bekannt, ableitung=ableitung,
                                           regelfrage=regelfrage, richter=richter)
     regel_saetze = {s for s, _g in belege.regel_ungestuetzt(t, regelfrage, [x for _n, x in auszuege])} if regelfrage else set()
     basis = t
@@ -6358,7 +6359,7 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
             neu, _ = belege.ohne_selbstbezug(neu)
             neu, _ = belege.wochentage_berichtigen(neu, heute)
             neu = ohne_auszuege(ohne_markdown(neu))
-            geprueft2, raus2, vom2 = _streng(neu, belegtext, zusatz, rechnen, pruefer, auszuege, regel=regel, beispiele=beispiele, bekannt=bekannt,
+            geprueft2, raus2, vom2 = _streng(neu, belegtext, zusatz, rechnen, pruefer, auszuege, regel=regel, beispiele=beispiele, bekannt=bekannt, ableitung=ableitung,
                                              regelfrage=regelfrage)
             quell_z = belege.zahlenwerte(belegtext + "\n" + "\n".join(x for _n, x in auszuege))
             erste_rest = geprueft == "Das weiß ich noch nicht." or nur_rest(basis, geprueft, raus)
@@ -6398,7 +6399,7 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
                 neu, _ = belege.ohne_platzhalter(neu or "")
                 neu, _ = belege.ohne_selbstbezug(neu)
                 neu, _ = belege.wochentage_berichtigen(neu, heute)
-                geprueft3, raus3, vom3 = _streng(neu, belegtext, zusatz, rechnen, pruefer, auszuege, regelfrage=regelfrage)
+                geprueft3, raus3, vom3 = _streng(neu, belegtext, zusatz, rechnen, pruefer, auszuege, regelfrage=regelfrage, ableitung=ableitung)
                 quell_z = belege.zahlenwerte(belegtext + "\n" + "\n".join(x for _n, x in auszuege))
                 if geprueft3.strip() and geprueft3 != "Das weiß ich noch nicht." and belege.brauchbar(geprueft3) \
                         and len(namen_fehlen(frage, geprueft3)) < len(fehlend) \
