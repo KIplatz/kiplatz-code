@@ -118,6 +118,8 @@ ABHOLEN_FEHLVERSUCHE = 2
 KNAPP_TREFFER = 2
 KNAPP_ZEICHEN = 500
 WIKI_KANDIDATEN = 8
+LIVE_STELLEN = 6
+LIVE_STELLEN_LISTE = 8
 PRUEFER_MODELLE = ("14B", "8B")
 PRUEFSTAND_MITGLIEDER = True
 TRAINING_TAKT_S = 10.0
@@ -1065,6 +1067,7 @@ class Api:
                 hinweis = (f"In der Wikipedia-Kopie auf diesem Gerät nachgeschlagen (Stand {a_[6:8]}.{a_[4:6]}.{a_[:4]}). " if privat_erlaubt is True
                            else f"In der Wikipedia-Kopie auf dem PC, der geantwortet hat, nachgeschlagen (Stand {a_[6:8]}.{a_[4:6]}.{a_[:4]}). ") + hinweis
         sortiert: bewertung.Sortierung | None = None
+        live_sortiert = False
         if bewerten and not selbst:
             kandidaten = ergaenzend + orte + server + lokal + ([] if zeitgebunden else wiki + wiki_titel)
             if kandidaten:
@@ -1080,6 +1083,7 @@ class Api:
                     nach = s2.treffer
                     if raus:
                         hinweis = f"{raus} gelesene Stellen passten nicht zur Frage und wurden weggelassen. " + hinweis
+                    live_sortiert = True
             live += nach
             if satz:
                 hinweis = satz + " " + hinweis
@@ -1122,6 +1126,15 @@ class Api:
                     or not nachschauen.veraltet_text(t.quelle.titel + " " + t.quelle.adresse + " " + t.text, *ziel)]
             if len(live) < vorher_live:
                 hinweis = f"{vorher_live - len(live)} gelesene Stellen mit Preisen aus einem früheren Jahr wurden weggelassen. " + hinweis
+        if art is None or art.art == "suche":
+            gesucht = [t for t in live if t.quelle.art == "nachgeschaut"]
+            teile = nachschauen.teilfragen(frage)
+            grenze = (min(2, len(teile)) * LIVE_STELLEN if teile else LIVE_STELLEN_LISTE if nachschauen.listenfrage(frage) else LIVE_STELLEN)
+            if len(gesucht) > grenze:
+                weg = {id(t) for t in gesucht[grenze:]}
+                live = [t for t in live if id(t) not in weg]
+                hinweis = ((f"Von den passenden gelesenen Stellen bekam das Modell die {grenze} besten, {len(weg)} weitere nicht. " if live_sortiert
+                            else f"Von den gelesenen Stellen bekam das Modell die ersten {grenze}, {len(weg)} weitere nicht. ") + hinweis)
         schon = {(t.quelle.kennung, t.text[:80]) for t in live}
         zusatz, quellen = wissen.kontext_bauen(live + [t for t in rest if (t.quelle.kennung, t.text[:80]) not in schon], live=schon_live)
         if selbst and zusatz:
@@ -2244,6 +2257,8 @@ class Api:
             a = modell(zusatz, strom.token)
             hinweis = (hinweis + " " if hinweis else "") + f"Die Grafikkarte hat versagt ({exc.detail}); die Antwort kam vom Prozessor."
         strom.schluss()
+        if getattr(a, "gekuerzt", False):
+            hinweis = (hinweis + " " if hinweis else "") + GEKUERZT_HINWEIS
         nachgeholt = False
 
         def nachsuchen(satz: str, grund: str) -> bool:
@@ -2265,7 +2280,8 @@ class Api:
                 _log(self._core, f"ABGELEHNT nachgeholt: {exc.code}: {exc.detail}")
                 return False
             a, zusatz, quellen, im_speicher, quellen_stand, nachgeholt = a2, zusatz2, quellen2, im_speicher2, self._letzter_stand, True
-            hinweis = (grund + " " + hinweis2 + (" " + vorspann_hinweis if vorspann_hinweis else "")).strip()
+            hinweis = (grund + " " + hinweis2 + (" " + vorspann_hinweis if vorspann_hinweis else "")
+                       + (" " + GEKUERZT_HINWEIS if getattr(a2, "gekuerzt", False) else "")).strip()
             strom.neu()
             return True
 
@@ -5713,6 +5729,7 @@ def erfunden_verdacht(pr, quellen: list[dict], schrift, frage: str = "") -> bool
 
 
 KLEIN_NUR_MIT_BELEG_UNTER_B = 8.0
+GEKUERZT_HINWEIS = "Frage, Gespräch und Fundstellen waren zusammen länger, als das Modell auf einmal lesen kann; ein Teil wurde dafür gekürzt."
 KLEIN_HINWEIS = "Ein kleines Modell beantwortet Wissensfragen nur mit frischen Quellen, darum wurde gleich im Internet nachgeschaut."
 _FAKTENFRAGE_ANFANG = re.compile(r"^\s*(?:wer|wem|wen|wessen|was|wann|wo|woher|wohin|wie|wieso|weshalb|warum|welche\w*|wieviel\w*|ist|sind|war|waren|"
                                  r"hat|haben|hatte|gibt|gab|liegt|liegen|stimmt|who|what|when|where|which|how|why|is|are|was|were|does|did)\b", re.I)
