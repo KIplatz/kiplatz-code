@@ -5938,6 +5938,9 @@ def _frueher_gefragt(nachrichten: list[dict] | None) -> bool:
     return len(fragen) > 1
 
 
+_AUSGABE_ZEITWORT = re.compile(r"\b(?:letzte[nrms]?|zuletzt|vorige[nrms]?|vergangene[nrms]?|last|latest|most recent|previous)\b", re.I)
+
+
 def suchwoerter_ordnen(liste: list[str], frage: str, frueher: str = "", heute=None) -> list[str]:
     from datetime import date
     h = heute or date.today()
@@ -5946,6 +5949,7 @@ def suchwoerter_ordnen(liste: list[str], frage: str, frueher: str = "", heute=No
     fremd = (alt - eigen) if (eigen & alt) and (eigen - alt) else set()
     bezug = eigen | alt
     out: list[str] = []
+    ausgabe = nachschauen.ereignis_tag(frage, h) is None and nachschauen.juengstes_ereignis(frage)
     for q in liste:
         if bezug and not _verwandt(set(wissen.woerter(q)), bezug):
             continue
@@ -5953,6 +5957,15 @@ def suchwoerter_ordnen(liste: list[str], frage: str, frueher: str = "", heute=No
         q2 = " ".join(w)
         if len(q2.split()) < 2:
             q2 = " ".join(frage.split())[:120]
+        if ausgabe:
+            ohne = " ".join(_AUSGABE_ZEITWORT.sub(" ", q2).split())
+            if len(ohne.split()) < 2:
+                ohne = " ".join(_AUSGABE_ZEITWORT.sub(" ", nachschauen.suchbegriffe_regel(frage, "") or frage).split())[:120]
+            if not out and not re.search(r"\b20\d\d\b", ohne):
+                ohne = f"{ohne} {h.year}"
+            if ohne and ohne.lower() not in (o.lower() for o in out):
+                out.append(ohne)
+            continue
         tag = nachschauen.ereignis_tag(frage, h)
         if tag is not None and not out and str(tag.year) not in q2:
             englisch = antwortsprache.frage_sprache(frage) == "en" or antwortsprache.frage_sprache(q2) == "en" or such_sprache(frage) == "en"
@@ -5964,6 +5977,10 @@ def suchwoerter_ordnen(liste: list[str], frage: str, frueher: str = "", heute=No
                 q2 += f" {h.year}"
         if q2.lower() not in (o.lower() for o in out):
             out.append(q2)
+    if ausgabe and len(out) == 1:
+        vorjahr = re.sub(rf"\b{h.year}\b", str(h.year - 1), out[0])
+        if vorjahr != out[0]:
+            out.append(vorjahr)
     return out[:SUCHEN_HOECHSTENS]
 
 
