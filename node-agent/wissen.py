@@ -1013,8 +1013,10 @@ def kontext_bauen(tr: list[Treffer], *, live: set[str] | None = None) -> tuple[s
                   "Ist die Frage allgemein (ein Begriff, Fachwissen, Schulwissen, Alltagswissen, wie etwas funktioniert) und passen die Auszüge nicht dazu, "
                   "dann antworte aus deinem eigenen Wissen, in ganzen Sätzen, ohne Quellennummer, und erwähne die Auszüge dabei gar nicht "
                   "(nicht „das steht nicht in den Auszügen, aber“). Dasselbe gilt für Rechenaufgaben mit Zahlen aus der Frage: rechnen, nicht nachschlagen. "
-                  "Nur bei Konkretem, das man nachschlagen müsste (eine bestimmte Website, Firma, Person, ein kleiner Ort, ein Preis, eine Zahl, ein Datum, ein Produkt), "
-                  "das nicht in den Auszügen steht, schreib genau: „Das weiß ich noch nicht.“ "
+                  "Nur bei Angaben, die sich ändern oder die nur eine bestimmte Quelle sicher weiß (Ergebnisse und Ereignisse von heute oder den letzten Tagen, "
+                  "Preise, Termine, Öffnungszeiten, Gesetze, Fristen, eine bestimmte Firma, Website, ein bestimmtes Produkt, eine Person, die nicht in jedem "
+                  "Lexikon steht, ein kleiner Ort), die nicht in den Auszügen stehen, schreib genau: „Das weiß ich noch nicht.“ "
+                  "Lexikon- und Weltwissen (Einwohner großer Städte, Höhen, Jahreszahlen der Geschichte, bekannte Personen) sagst du auch ohne Auszug. "
                   "Erfinde nichts dazu, keine Namen, keine Produkte, keine Jahreszahlen, auch nicht, wenn ein Auszug ein ähnliches Wort enthält. "
                   "Passt ein Auszug nur im Namen, aber nicht im Ort, in der Zeit oder im Zusammenhang der Frage (eine andere Person, Firma oder Sache gleichen Namens), "
                   "dann ist das keine Antwort: Sag in einem Satz, dass du nur jemand oder etwas gleichen Namens von anderswo gefunden hast und nicht weißt, ob es dasselbe ist. Achte auf das Datum oben: Zeigt ein Auszug einen älteren Stand (eine frühere Saison, ein früheres Jahr, Termine, die schon vorbei sind), gib ihn nie als aktuell aus. Nimm den Auszug mit dem neuesten Stand; hat keiner den aktuellen Stand, sag in einem Satz, dass du nur einen älteren Stand gefunden hast, und von wann er ist. Schreib in der Antwort nie „Auszüge“ oder „Wissensspeicher“; die Person sieht keine Auszüge."]

@@ -746,6 +746,7 @@ class Api:
         self._pruefrunde: dict | None = None
         self._ruht_gemeldet = ""
         self._pruefrunde_pause_bis = 0.0
+        self._update_steht_an = ""
         self._runde_ruht_grund = ""
         self._knopf_wartet = False
         self._knopf_meldung = ""
@@ -1485,6 +1486,10 @@ class Api:
             return None
         if not erzwingen:
             if time.monotonic() < self._pruefrunde_pause_bis:
+                return None
+            steht_an = getattr(self, "_update_steht_an", "")
+            if steht_an and steht_an > app_core.APP_BUILD:
+                self._runde_ruht(f"ein Update auf Bau {steht_an} steht an")
                 return None
             fremd = self._karte_fremd()
             if fremd:
@@ -5318,20 +5323,35 @@ class Api:
             warte = 6
             tausch_versuche = 0
             zuletzt = 0.0
+            geblickt = 0.0
             while not self._stopp.wait(warte):
                 warte = self.UPDATE_BLICK_S
                 if self._update_warten():
                     warte = 60
+                    if time.monotonic() - geblickt >= self.UPDATE_BLICK_S:
+                        geblickt = time.monotonic()
+                        try:
+                            neu_w = app_install.neuester_bau(self._community.adresse, self._community._oeffner)
+                        except Exception:
+                            neu_w = ""
+                        if neu_w:
+                            steht = neu_w if neu_w > app_core.APP_BUILD else ""
+                            if steht and steht != self._update_steht_an:
+                                _log(self._core, f"OK update: der Server nennt Bau {neu_w}, dieses Programm ist {app_core.APP_BUILD}; nach der laufenden Arbeit")
+                            self._update_steht_an = steht
                     continue
                 if zuletzt and time.monotonic() - zuletzt < self.UPDATE_TAKT_S and tausch_versuche == 0:
                     try:
                         neu = app_install.neuester_bau(self._community.adresse, self._community._oeffner)
                     except Exception:
                         neu = ""
+                    if neu and neu <= app_core.APP_BUILD:
+                        self._update_steht_an = ""
                     if not neu or neu <= app_core.APP_BUILD:
                         continue
                     _log(self._core, f"OK update: der Server nennt Bau {neu}, dieses Programm ist {app_core.APP_BUILD}; jetzt holen")
                 zuletzt = time.monotonic()
+                self._update_steht_an = ""
                 try:
                     was, text = self._update_holen()
                     if was == "aktualisiert":
