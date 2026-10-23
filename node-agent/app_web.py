@@ -2439,9 +2439,11 @@ class Api:
             return pruefer(z, saetze)
         bekannt = getattr(self._wiki, "namen_bekannt", None)
 
-        def richter(satz: str, texte: list[str]) -> float | None:
+        def richter(satz: str, texte: list[str], *, einspruch: bool = False) -> float | None:
             vorrang = getattr(getattr(self, "_rechen", None), "vorrang", None)
             vorrang = vorrang if isinstance(vorrang, threading.Event) else None
+            if not isinstance(getattr(_SCHATTEN, "liste", None), list):
+                vorrang = None
             if pruefer is None or not texte or (vorrang is not None and vorrang.is_set()):
                 return None
             t0 = time.monotonic()
@@ -2449,13 +2451,15 @@ class Api:
                 a = self._ki.server.frage([{"role": "user", "content": belege.RICHTER_AUFTRAG + " " + " ".join(satz.split())[:600]}], zusatz=zusatz,
                                           max_tokens=4, temperature=0.0, art="richter", abbruch=vorrang)
             finally:
-                _SCHATTEN.zeit = float(getattr(_SCHATTEN, "zeit", 0.0) or 0.0) + time.monotonic() - t0
+                if not einspruch:
+                    _SCHATTEN.zeit = float(getattr(_SCHATTEN, "zeit", 0.0) or 0.0) + time.monotonic() - t0
             return None if getattr(a, "abgebrochen", False) else belege.richter_wert(a.text)
         _FREMD.texte = belege.fremde_texte(quellen)
         neu_text, notizen = belege_anwenden(text, frage, zusatz, quellen, nochmal=neu if nochmal is not None else None,
                                             pruefer=pruefer_mit_schritt if pruefer is not None else None, schreiben=schreiben, bekannt=bekannt,
                                             umschreiben=self._umschreiber() if nochmal is not None else None,
-                                            richter=richter if not schreiben else None)
+                                            richter=richter if not schreiben else None,
+                                            einspruch=pruefer is not None and not schreiben and not (belege.preisfrage(frage) or belege.regelfrage(frage)))
         if notizen:
             _log(self._core, "INFO belege: " + " ".join(notizen))
             lieferschein["belege"] = notizen
@@ -6221,7 +6225,8 @@ def _ohne_vermittler(zusatz: str, quellen: list[dict], adressen: set[str]) -> st
 
 
 def _streng(t: str, belegtext: str, zusatz: str, rechnen: bool, pruefer, auszuege: list[tuple[int, str]], *, regel: bool = False,
-            beispiele: bool = False, bekannt=None, regelfrage: str = "", richter=None, ableitung: bool = False) -> tuple[str, list[str], int]:
+            beispiele: bool = False, bekannt=None, regelfrage: str = "", richter=None, ableitung: bool = False, einspruch: bool = False,
+            einspruch_zaehler: list[int] | None = None, schatten: bool = True) -> tuple[str, list[str], int]:
     aus_quellen = any(s.farbe == "gruen" for s in pruefung.pruefen(t, auszuege).saetze)
     quelltexte = [x for _n, x in auszuege]
     befunde = belege.streng_pruefen(t, belegtext, zahlen_pruefen=not rechnen, namen_pruefen=None if (aus_quellen or regel) else (lambda s: False),
@@ -6245,6 +6250,8 @@ def _streng(t: str, belegtext: str, zusatz: str, rechnen: bool, pruefer, auszueg
     fraglich_b = [b for b in befunde if not b.sicher_falsch and b.verdacht]
     fraglich = [b.satz for b in fraglich_b]
     vom_pruefer = 0
+    vom_pruefer_weg: set[str] = set()
+    urteile: dict[str, float | None] = {}
     als_name: set = set()
     if fraglich and pruefer is not None:
         try:
@@ -6255,7 +6262,7 @@ def _streng(t: str, belegtext: str, zusatz: str, rechnen: bool, pruefer, auszueg
         vom_pruefer_weg = {b.satz for b in fraglich_b if als_name & set(b.verdacht)}
         vom_pruefer = len(vom_pruefer_weg)
         weg |= vom_pruefer_weg
-    if richter is not None and isinstance(getattr(_SCHATTEN, "liste", None), list):
+    if schatten and richter is not None and isinstance(getattr(_SCHATTEN, "liste", None), list):
         for b in befunde:
             if b.regel:
                 continue
@@ -6266,10 +6273,36 @@ def _streng(t: str, belegtext: str, zusatz: str, rechnen: bool, pruefer, auszueg
                 if feld == "rg" and satz == b.satz:
                     break
                 try:
-                    eintrag[feld] = richter(satz, quelltexte)
+                    eintrag[feld] = (richter(satz, quelltexte, einspruch=True) if einspruch and feld == "r" and b.satz in weg
+                                     else richter(satz, quelltexte))
                 except Exception:
                     eintrag[feld] = None
+            urteile[b.satz] = eintrag.get("r")
             _SCHATTEN.liste.append(eintrag)
+    if einspruch and richter is not None and weg:
+        gerettet: set[str] = set()
+        quellsaetze = [q for zeile in (belegtext or "").split(chr(10)) for q in belege._saetze(zeile)]
+        zaehler = einspruch_zaehler if einspruch_zaehler is not None else [0, 0]
+        for b in befunde:
+            if b.satz not in weg or b.regel or b.satz in gerettet:
+                continue
+            if b.zahlen and belege.jahre_anderswo(b.satz, quellsaetze):
+                continue
+            if b.satz in urteile:
+                r = urteile[b.satz]
+            elif zaehler[0] >= SCHATTEN_HOECHSTENS:
+                continue
+            else:
+                zaehler[0] += 1
+                try:
+                    r = richter(b.satz, quelltexte, einspruch=True)
+                except Exception:
+                    r = None
+            if r == 1.0 or (r == 0.5 and not b.zahlen and not b.namen and not (als_name & set(b.verdacht))):
+                gerettet.add(b.satz)
+        zaehler[1] += len(gerettet)
+        weg -= gerettet
+        vom_pruefer = len(vom_pruefer_weg - gerettet)
     if not weg:
         return t, [], 0
     if isinstance(getattr(_GESTRICHEN, "liste", None), list):
@@ -6296,9 +6329,10 @@ def _streng(t: str, belegtext: str, zusatz: str, rechnen: bool, pruefer, auszueg
 
 def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, heute: date | None = None, nochmal=None, pruefer=None,
                     umschreiben=None,
-                    schreiben: bool = False, bekannt=None, richter=None) -> tuple[str, list[str]]:
+                    schreiben: bool = False, bekannt=None, richter=None, einspruch: bool = False) -> tuple[str, list[str]]:
     heute = heute or ki_laufzeit.heute()
     notizen: list[str] = []
+    einspruch_zaehler = [0, 0]
     t, n = belege.ohne_platzhalter(text)
     if n:
         notizen.append(f"{n} Platzhalter in eckigen Klammern entfernt.")
@@ -6335,6 +6369,7 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
         notizen.append(ANDERE_PERSON)
         return "Das weiß ich noch nicht.", notizen
     vermittler = nachschauen.vermittler_adressen(quellen)
+    einspruch = einspruch and not vermittler
     beleg_quellen = [q for q in quellen if str(q.get("adresse") or "") not in vermittler]
     belegtext = (_ohne_vermittler(zusatz or "", quellen, vermittler) + "\n" + (frage or "") + "\n"
                  + wissen.zeit_zeile(None if heute == ki_laufzeit.heute() else datetime(heute.year, heute.month, heute.day, 12).astimezone()))
@@ -6345,7 +6380,7 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
     auszuege = [(int(q.get("nummer") or 0), str(q.get("text") or "")) for q in beleg_quellen if q.get("text")]
     beispiele = not (rechnen or regel or belege.zahlenfrage(frage) or belege.preisfrage(frage))
     geprueft, raus, vom_pruefer = _streng(t, belegtext, zusatz, rechnen, pruefer, auszuege, regel=regel, beispiele=beispiele, bekannt=bekannt, ableitung=ableitung,
-                                          regelfrage=regelfrage, richter=richter)
+                                          regelfrage=regelfrage, richter=richter, einspruch=einspruch, einspruch_zaehler=einspruch_zaehler)
     regel_saetze = {s for s, _g in belege.regel_ungestuetzt(t, regelfrage, [x for _n, x in auszuege])} if regelfrage else set()
     basis = t
     ausloeser = belege.vermischt_ausloeser(geprueft, [(str(q.get("titel") or ""), str(q.get("text") or "")) for q in quellen if q.get("text")])
@@ -6369,7 +6404,8 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
             neu, _ = belege.wochentage_berichtigen(neu, heute)
             neu = ohne_auszuege(ohne_markdown(neu))
             geprueft2, raus2, vom2 = _streng(neu, belegtext, zusatz, rechnen, pruefer, auszuege, regel=regel, beispiele=beispiele, bekannt=bekannt, ableitung=ableitung,
-                                             regelfrage=regelfrage)
+                                             regelfrage=regelfrage, richter=richter if einspruch else None, einspruch=einspruch,
+                                             einspruch_zaehler=einspruch_zaehler, schatten=False)
             quell_z = belege.zahlenwerte(belegtext + "\n" + "\n".join(x for _n, x in auszuege))
             erste_rest = geprueft == "Das weiß ich noch nicht." or nur_rest(basis, geprueft, raus)
             if (geprueft2.strip() and belege.brauchbar(geprueft2) and not _WEISS_NICHT.search(geprueft2) and not nur_rest(neu, geprueft2, raus2)
@@ -6424,6 +6460,10 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
     if geprueft != "Das weiß ich noch nicht.":
         geprueft, n_eigen, _ersetzt = eigene_worte(geprueft, belege.fremde_texte(quellen), umschreiben)
         notizen += n_eigen
+    if einspruch_zaehler[1]:
+        n = einspruch_zaehler[1]
+        notizen.append(f"{n} Sätze wurden nicht gestrichen: laut dem Modell stehen sie in den Quellen." if n > 1
+                       else "1 Satz wurde nicht gestrichen: laut dem Modell steht er in den Quellen.")
     return geprueft, notizen
 
 
