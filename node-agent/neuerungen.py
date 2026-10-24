@@ -11,6 +11,9 @@ def dank(satz: str, wer: str, art: str = "Meldung") -> str:
 
 
 NEUERUNGEN: dict[str, list[str]] = {
+    "2026-10-24l": [
+        "Längen, Strecken und Gewichte prüft KIplatz jetzt genauer: Eine Angabe wie „26 Minuten“ bleibt nur stehen, wenn eine Quelle wirklich diese Dauer nennt, nicht bloß irgendwo die Zahl 26.",
+    ],
     "2026-10-24k": [],
     "2026-10-24j": [
         "Videos mit Kurznamen erscheinen jetzt auch als Karte: Wer nach dem Trailer von „GTA VI“ fragt, bekommt das Video „Grand Theft Auto VI“, und nie eines zu GTA V. Ein Link in der Antwort bleibt stehen, auch wenn KIplatz den Satz daneben in eigenen Worten schreibt.",

@@ -183,10 +183,63 @@ def _ungefaehr_belegt(m: re.Match, satz: str, belegt: set[float]) -> bool:
     return False
 
 
-def unbelegte_zahlen(satz: str, belegt: set[float], ableitung: bool = False) -> list[str]:
+_EINHEIT_ART = (
+    ("dauer", 1.0, r"sekunden?|sek\.?|seconds?|secs?"),
+    ("dauer", 60.0, r"minuten?|min\.?|minutes?|mins?"),
+    ("dauer", 3600.0, r"stunden?|std\.?|hours?|hrs?"),
+    ("strecke", 0.001, r"mm|millimetern?|millimetres?|millimeters?"),
+    ("strecke", 0.01, r"cm|zentimetern?|centimetres?|centimeters?"),
+    ("strecke", 1.0, r"m|metern?|metres?|meters?"),
+    ("strecke", 1000.0, r"km|kilometern?|kilometres?|kilometers?"),
+    ("strecke", 1609.344, r"meilen|miles?|mi"),
+    ("gewicht", 1.0, r"g|gramm|grams?"),
+    ("gewicht", 1000.0, r"kg|kilos?|kilogramms?|kilograms?"),
+    ("gewicht", 1e6, r"t|tonnen|tonnes?|tons?"),
+)
+_LAENGE = re.compile(r"(?<![\d:.])(\d{1,2}):([0-5]\d)(?::([0-5]\d))?(?![\d:])(?!\s*(?:uhr|h\b|o'clock))", re.I)
+_EINHEIT_RE = [(art, faktor, re.compile(rf"[\s-]?(?:{muster})(?![\wÄÖÜäöüß²³])", re.I)) for art, faktor, muster in _EINHEIT_ART]
+
+
+def _einheit(text: str, ende: int) -> tuple[str, float] | None:
+    for art, faktor, r in _EINHEIT_RE:
+        if r.match(text, ende):
+            return art, faktor
+    return None
+
+
+def einheiten_werte(text: str) -> dict[str, set[float]]:
+    out: dict[str, set[float]] = {}
+    for m in _ZAHL.finditer(text or ""):
+        e = _einheit(text, m.end())
+        if e:
+            out.setdefault(e[0], set()).update(round(w * e[1], 3) for w in _werte(m.group(0)))
+    for m in _LAENGE.finditer(text or ""):
+        a, b, c = m.group(1), m.group(2), m.group(3)
+        sek = int(a) * 3600 + int(b) * 60 + int(c) if c else int(a) * 60 + int(b)
+        out.setdefault("dauer", set()).add(float(sek))
+    return out
+
+
+def _einheit_belegt(m: re.Match, satz: str, e: tuple[str, float], quell: dict[str, set[float]]) -> bool:
+    werte = {round(w * e[1], 3) for w in _werte(m.group(0))}
+    belegt = quell.get(e[0], set())
+    if werte & belegt:
+        return True
+    if _UNGEFAEHR.search(satz[:m.start()]):
+        return any(abs(v - x) <= abs(x) * UNGEFAEHR_ANTEIL for x in werte if x for v in belegt)
+    return False
+
+
+def unbelegte_zahlen(satz: str, belegt: set[float], ableitung: bool = False, einheiten: dict[str, set[float]] | None = None) -> list[str]:
     out = []
     for m in _ZAHL.finditer(satz or ""):
-        if (_zahl_pruefbar(m, satz) and not (_werte(m.group(0)) & belegt) and not _ungefaehr_belegt(m, satz, belegt)
+        if not _zahl_pruefbar(m, satz):
+            continue
+        e = _einheit(satz, m.end()) if einheiten is not None else None
+        if e:
+            if not _einheit_belegt(m, satz, e, einheiten):
+                out.append(m.group(0))
+        elif (not (_werte(m.group(0)) & belegt) and not _ungefaehr_belegt(m, satz, belegt)
                 and not (ableitung and abgeleitet(_werte(m.group(0)), belegt))):
             out.append(m.group(0))
     return out
@@ -353,6 +406,7 @@ def streng_pruefen(antwort: str, belege: str, *, zahlen_pruefen: bool = True, na
     belege_klein = (belege or "").lower()
     belegt_d = daten(belege)
     belegt_z = zahlenwerte(belege)
+    belegt_e = einheiten_werte(belege)
     staemme = _wortstaemme(belege)
     quell_laender = laender_in(belege)
     quell_links = {link_norm(u) for u in links_in(belege)}
@@ -369,7 +423,7 @@ def streng_pruefen(antwort: str, belege: str, *, zahlen_pruefen: bool = True, na
             z = [f"{d[0]}.{d[1]}." + (str(d[2]) if d[2] else "") for d in daten(s) if not _gedeckt_datum(d, belegt_d)]
             if zahlen_pruefen:
                 ohne_daten = _DATUM_ISO.sub(" ", _DATUM_WORT.sub(" ", _DATUM_ZAHL.sub(" ", s)))
-                z += unbelegte_zahlen(ohne_daten, belegt_z, ableitung)
+                z += unbelegte_zahlen(ohne_daten, belegt_z, ableitung, belegt_e)
                 z += [j for j in jahre_anderswo(s, quellsaetze) if j not in z]
             pruefe_namen = namen_pruefen is None or namen_pruefen(s)
             sicher, lauf = namen(s) if pruefe_namen else ([], [])
