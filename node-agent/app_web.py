@@ -2384,6 +2384,10 @@ class Api:
             antwort_text = self._belege_nachher(antwort_text, suchfrage(nachrichten), "" if fern else zusatz, [] if fern else quellen, lieferschein,
                                                 None if fern else (lambda extra: modell(zusatz + "\n\n" + extra, None, max_tokens_=240).text),
                                                 schreiben=schrift is not None, ampel=not fern)
+            if not fern:
+                antwort_text, wt = wochentage_berichtigen(antwort_text)
+                if wt:
+                    lieferschein["quellen"] = (lieferschein.get("quellen", "") + f" Wochentag vom Programm nachgerechnet und berichtigt ({wt}).").strip()
             sf = suchfrage(nachrichten)
             if (not fern and belege.vergleichsfrage(sf) and nachschauen.vergleich_art(sf) == "energie"
                     and nachschauen.vergleich_markt(" ".join(str(n.get("content", "")) for n in nachrichten if n.get("role") == "user")) == "AT"):
@@ -5943,6 +5947,43 @@ VERGLEICH_NAEHE = 300
 _DOMAIN = re.compile(r"(?i)\b((?:[a-z0-9-]+\.)+[a-z]{2,10})\b")
 
 
+_WOCHENTAGE = ("Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag")
+_MONAT_ZAHL = {"jänner": 1, "jaenner": 1, "januar": 1, "februar": 2, "feber": 2, "märz": 3, "maerz": 3, "april": 4, "mai": 5, "juni": 6, "juli": 7,
+               "august": 8, "september": 9, "oktober": 10, "november": 11, "dezember": 12}
+_WOCHENTAG_SATZ = re.compile(r"(?i)\b(\d{1,2})\.\s*(?:(\d{1,2})\.|(" + "|".join(_MONAT_ZAHL) + r"))\s*(\d{4})?\s+(ist|fällt\s+auf|war)\s+"
+                             r"(?:ein(?:em|en)?\s+)?(" + "|".join(_WOCHENTAGE) + r")\b")
+
+
+def wochentage_berichtigen(text: str, heute=None) -> tuple[str, int]:
+    from datetime import date as _date
+    heute = heute or ki_laufzeit.heute()
+    teile, zuletzt, n = [], 0, 0
+    for m in _WOCHENTAG_SATZ.finditer(text or ""):
+        tag, monat = int(m.group(1)), int(m.group(2)) if m.group(2) else _MONAT_ZAHL[m.group(3).lower()]
+        if not m.group(4) and m.group(5).lower() == "war":
+            continue
+        try:
+            jahr = int(m.group(4)) if m.group(4) else (heute.year if _date(heute.year, monat, tag) >= heute else heute.year + 1)
+            richtig = _WOCHENTAGE[_date(jahr, monat, tag).weekday()]
+        except ValueError:
+            continue
+        if m.group(6).lower() != richtig.lower():
+            teile += [text[zuletzt:m.start(6)], richtig]
+            zuletzt, n = m.end(6), n + 1
+    return ("".join(teile) + text[zuletzt:], n) if n else (text, 0)
+
+
+_KEIN_HAENDLER = re.compile(r"^(?:mehrere\w*|diverse\w*|verschiedene\w*|dieseseite|andere\w*|several\w*|various\w*|multiple\w*|thispage|others?)$")
+
+
+def _ab_preis(preise: set[str], texte: list[str]) -> bool:
+    for t in texte:
+        for m in _PREIS_ZAHL.finditer(t or ""):
+            if _preise(m.group(0) + " €") & preise and re.search(r"(?i)\b(?:ab|from)\s*(?:€|eur|euro)?\s*$", t[max(0, m.start() - 14):m.start()]):
+                return True
+    return False
+
+
 def _name_schluessel(text: str) -> str:
     return re.sub(r"[^0-9a-zäöüß]", "", str(text or "").lower())
 
@@ -5997,7 +6038,7 @@ def vergleich_zeilen_pruefen(text: str, quellen: list[dict], *, englisch: bool =
         preise = _preise(zellen[1] if len(zellen) > 1 else "")
         k = _name_schluessel(name)
         eigene = [h for h in seiten if k and k in _host_schluessel(h)]
-        if not preise or len(k) < 3:
+        if not preise or len(k) < 3 or _KEIN_HAENDLER.match(k):
             gut = False
         elif any(h in vergleiche for h in eigene):
             gut = False
@@ -6006,6 +6047,9 @@ def vergleich_zeilen_pruefen(text: str, quellen: list[dict], *, englisch: bool =
             gut = bool(preise & dort) if dort else any(preise & _preis_nach_name(s, name) for s in stellen)
         if gut:
             bleibt.append((min(float(p.replace(",", ".")) for p in preise), name, min(preise, key=lambda p: float(p.replace(",", "."))), i))
+            if len(zellen) > 1 and not re.search(r"(?i)\b(?:ab|from)\b", zellen[1]) and _ab_preis(preise, stellen + [t for ts in seiten.values() for t in ts]):
+                zellen[1] = ("from " if englisch else "ab ") + zellen[1]
+                zeilen[i] = "| " + " | ".join(zellen) + " |"
         else:
             weg.append(i)
             gestrichen |= {k} | preise
@@ -6018,7 +6062,7 @@ def vergleich_zeilen_pruefen(text: str, quellen: list[dict], *, englisch: bool =
     bleibt = [b[:3] for b in bleibt]
     weg.sort()
     if not weg:
-        return text, 0
+        return "\n".join(zeilen), 0
     if not bleibt:
         satz = ("I read the pages listed below, but none of them showed a price I can assign to a seller with certainty." if englisch else
                 "Auf den gelesenen Seiten stand kein Preis, den ich einem Anbieter sicher zuordnen kann. Die gelesenen Seiten stehen unten bei den Quellen.")
