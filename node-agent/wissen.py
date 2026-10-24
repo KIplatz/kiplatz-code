@@ -281,6 +281,8 @@ _robots: dict[str, tuple[float, object, str, list]] = {}
 KI_PROGRAMME = ("GPTBot", "ChatGPT-User", "OAI-SearchBot", "CCBot", "Google-Extended", "GoogleOther", "ClaudeBot", "Claude-Web", "anthropic-ai",
                 "Applebot-Extended", "Bytespider", "PerplexityBot", "meta-externalagent", "FacebookBot", "cohere-ai", "Amazonbot", "Diffbot",
                 "Timpibot", "AI2Bot", "Omgilibot", "ImagesiftBot", "YouBot", "MistralAI-User", _ROBOTS_NAME, "KIplatzBot", _ROBOTS_NAME_ALT, "*")
+LESER_FUER_PERSONEN = (_ROBOTS_NAME, "KIplatzBot", _ROBOTS_NAME_ALT, "*", "ChatGPT-User", "OAI-SearchBot", "Claude-User", "Claude-SearchBot",
+                       "Claude-Web", "Perplexity-User", "PerplexityBot", "MistralAI-User")
 _NOAI = re.compile(r"\b(noai|noimageai)\b", re.I)
 
 
@@ -330,7 +332,7 @@ def _tdm_passt(ort: str, pfad: str) -> bool:
     return bool(re.match(muster, pfad or "/"))
 
 
-def vorbehalt(adresse: str, *, oeffner=None) -> str:
+def vorbehalt(adresse: str, *, oeffner=None, fuer_frage: bool = False) -> str:
     oeffner = oeffner or __import__("datenfluss").oeffner("Website lesen")
     teile = urllib.parse.urlsplit(adresse)
     host = teile.netloc.lower()
@@ -340,7 +342,7 @@ def vorbehalt(adresse: str, *, oeffner=None) -> str:
     if aus:
         return aus
     if parser is not None:
-        for name in KI_PROGRAMME:
+        for name in (LESER_FUER_PERSONEN if fuer_frage else KI_PROGRAMME):
             try:
                 if not parser.can_fetch(name, adresse):
                     return f"robots.txt sperrt {name}"
@@ -407,7 +409,7 @@ def nur_oeffentlich(adresse: str) -> None:
             raise WissenError("WISSEN_ADRESSE", "nur öffentliche Websites, keine internen Adressen")
 
 
-def seite_holen(adresse: str, *, oeffner=None, pruefer=None) -> tuple[str, str, str]:
+def seite_holen(adresse: str, *, oeffner=None, pruefer=None, fuer_frage: bool = False) -> tuple[str, str, str]:
     if oeffner is None and pruefer is not None:
         opener = urllib.request.build_opener(_UmleitungPruefen(pruefer))
         oeffner = lambda req, timeout=None: opener.open(req, timeout=timeout)
@@ -419,7 +421,7 @@ def seite_holen(adresse: str, *, oeffner=None, pruefer=None) -> tuple[str, str, 
         adresse = "https://" + adresse
     if any(ch in adresse for ch in " \n\t\"'<>"):
         raise WissenError("WISSEN_ADRESSE", "das sieht nicht wie eine Adresse aus")
-    grund = vorbehalt(adresse, oeffner=oeffner)
+    grund = vorbehalt(adresse, oeffner=oeffner, fuer_frage=fuer_frage)
     if grund:
         raise WissenError("WISSEN_ROBOTS", f"diese Website sagt Nein zu KI ({grund}), darum liest KIplatz sie nicht; bitte selbst dort nachlesen")
     req = urllib.request.Request(adresse, headers={"User-Agent": _UA, "Accept": "text/html, text/plain;q=0.9"})
@@ -445,11 +447,101 @@ def seite_holen(adresse: str, *, oeffner=None, pruefer=None) -> tuple[str, str, 
         raise WissenError("WISSEN_ROBOTS", f"diese Website sagt Nein zu KI ({grund}), darum liest KIplatz sie nicht; bitte selbst dort nachlesen")
     if art.startswith("text/html"):
         titel, text = html_zu_text(text_roh)
+        angebote = angebote_aus_seite(text_roh) if fuer_frage else ""
+        if angebote:
+            text = angebote + "\n\n" + text
     else:
         titel, text = "", text_roh.strip()
     if len(text) < 40:
         raise WissenError("WISSEN_LEER", "auf der Seite steht fast kein lesbarer Text")
     return endgueltig, titel or endgueltig, text[:MAX_TEXT]
+
+
+ANGEBOTE_KOPF = "Angebote laut den Produktdaten dieser Seite"
+ANGEBOTE_MAX = 25
+MEHRERE_HAENDLER = "mehrere Händler zusammen"
+_LD_JSON = re.compile(r"<script[^>]*type\s*=\s*[\"']?application/ld\+json[\"']?[^>]*>(.*?)</script>", re.S | re.I)
+
+
+def _betrag(wert) -> str:
+    s = str(wert or "").strip().replace(" ", "").replace(" ", "")
+    if re.fullmatch(r"\d+,\d{1,2}", s):
+        s = s.replace(",", ".")
+    try:
+        x = float(s)
+    except ValueError:
+        return ""
+    return f"{x:.2f}".replace(".", ",") if 0 < x < 10_000_000 else ""
+
+
+def angebote_aus_seite(roh: str) -> str:
+    roh = (roh or "")[:MAX_SEITE]
+    zeilen: list[str] = []
+    name = ""
+
+    def knoten(d):
+        if isinstance(d, list):
+            for x in d:
+                yield from knoten(x)
+        elif isinstance(d, dict):
+            yield d
+            yield from knoten(d.get("@graph") or [])
+
+    for block in _LD_JSON.findall(roh):
+        try:
+            daten = json.loads(block.strip())
+        except ValueError:
+            continue
+        for k in knoten(daten):
+            typ = k.get("@type")
+            if "Product" not in (typ if isinstance(typ, list) else [typ]) or not k.get("offers"):
+                continue
+            name = " ".join(str(k.get("name") or "").split())[:120]
+            angebote = k["offers"] if isinstance(k["offers"], list) else [k["offers"]]
+            for o in angebote:
+                if not isinstance(o, dict):
+                    continue
+                einzeln = o.get("offers") if isinstance(o.get("offers"), list) else []
+                if einzeln:
+                    angebote += einzeln
+                    continue
+                preis = _betrag(o.get("price") or o.get("lowPrice"))
+                if not preis:
+                    continue
+                waehrung = str(o.get("priceCurrency") or "").strip()[:3]
+                verkaeufer = o.get("seller") if isinstance(o.get("seller"), dict) else {}
+                wer = " ".join(str(verkaeufer.get("name") or "").split())[:60] or (
+                    MEHRERE_HAENDLER if "AggregateOffer" in str(o.get("@type")) else "diese Seite")
+                da = "lieferbar" if "InStock" in str(o.get("availability") or "") else ""
+                bis = _betrag(o.get("highPrice"))
+                betrag = f"{preis} bis {bis}" if bis and bis != preis else preis
+                zeilen.append(f"- {wer}: {betrag} {waehrung}".rstrip() + (f", {da}" if da else ""))
+            if zeilen:
+                break
+        if zeilen:
+            break
+    if not zeilen:
+        def mikro(feld: str, wert: str = r"[\d.,]+") -> list[str]:
+            out = []
+            for m in re.finditer(r"<[^>]*\bitemprop\s*=\s*[\"']?" + feld + r"\b[^>]*>", roh, re.I):
+                c = re.search(r"\bcontent\s*=\s*[\"']?(" + wert + ")", m.group(0), re.I)
+                if c:
+                    out.append(c.group(1))
+            return out
+        preise = [p for p in map(_betrag, mikro("price")) if p]
+        waehrung = next(iter(mikro("priceCurrency", r"[A-Za-z]{3}")), "").upper()
+        tief, hoch = [p for p in map(_betrag, mikro("lowPrice")) if p][:1], [p for p in map(_betrag, mikro("highPrice")) if p][:1]
+        anzahl = next(iter(mikro("offerCount", r"\d+")), "")
+        if tief or len(set(preise)) > 2:
+            werte = sorted({float(p.replace(",", ".")) for p in preise + tief + hoch})
+            von, bis = (tief or [f"{werte[0]:.2f}".replace(".", ",")])[0], (hoch or [f"{werte[-1]:.2f}".replace(".", ",")])[0]
+            zeilen.append(f"- {MEHRERE_HAENDLER}: {von} bis {bis} {waehrung}".rstrip() + (f", {anzahl} Angebote" if anzahl else ""))
+        elif preise:
+            zeilen.append(f"- diese Seite: {preise[0]} {waehrung}".rstrip())
+    if not zeilen:
+        return ""
+    zeilen = list(dict.fromkeys(zeilen))[:ANGEBOTE_MAX]
+    return f"{ANGEBOTE_KOPF}" + (f" (Produkt „{name}“)" if name else "") + ":\n" + "\n".join(zeilen)
 
 
 @dataclass(frozen=True)
@@ -935,10 +1027,14 @@ class Wissensspeicher:
         return kontext_bauen(self.suchen(frage, n=n, privat_erlaubt=privat_erlaubt))
 
 
-def live_lesen(adresse: str, frage: str, *, n: int = TREFFER, oeffner=None, extra=None) -> tuple[Quelle, str, list[Treffer]]:
-    endgueltig, titel, text = seite_holen(adresse, oeffner=oeffner)
+def live_lesen(adresse: str, frage: str, *, n: int = TREFFER, oeffner=None, extra=None, fuer_frage: bool = False) -> tuple[Quelle, str, list[Treffer]]:
+    endgueltig, titel, text = seite_holen(adresse, oeffner=oeffner, fuer_frage=fuer_frage)
     q = Quelle(hashlib.sha256(("seite|" + endgueltig).encode("utf-8")).hexdigest()[:12], "seite", titel, endgueltig, _jetzt(), len(text))
-    teile = abschnitte(text)
+    if text.startswith(ANGEBOTE_KOPF):
+        block, _, rest = text.partition("\n\n")
+        teile = [block] + abschnitte(rest)
+    else:
+        teile = abschnitte(text)
     fw = set(woerter(frage))
     mass = mass_punkte(frage) if extra is None else None
     zusatz = [(float(extra(t)) if extra is not None else 0.0) + (mass(t) if mass is not None else 0.0) for t in teile]

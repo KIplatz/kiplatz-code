@@ -11,6 +11,30 @@ def dank(satz: str, wer: str, art: str = "Meldung") -> str:
 
 
 NEUERUNGEN: dict[str, list[str]] = {
+    "2026-10-24i": [
+        "Der Preisvergleich findet jetzt die echten Shops: KIplatz liest jeden Preis so, wie ihn der Shop selbst für Suchmaschinen angibt, und zeigt jeden Händler mit seinem Preis. Preisvergleichsseiten und Zahlungsdienste stehen nicht mehr als Anbieter in der Tabelle.",
+        "Hast du ein Angebot als Foto angehängt, steht es jetzt als eigene Zeile in der Tabelle, mit Baujahr, wenn es draufsteht. So siehst du gleich, ob es woanders günstiger geht.",
+        "Sperrt ein Shop nur das Sammeln für KI-Training, liest KIplatz seine Seite für deine Frage, lernt aber nie daraus. Wer KIplatz das Lesen verbietet, wird weiter nicht gelesen.",
+    ],
+    "2026-10-24h": [
+        "Steht ein Video als Karte unter der Antwort, schreibt KIplatz nicht mehr darüber, es könne das Video hier nicht zeigen.",
+    ],
+    "2026-10-24g": [
+        "Willst du ein Video sehen, etwa „Zeig mir Gameplay zu Enshrouded“, zeigt KIplatz es dir direkt in der Antwort, mit Vorschaubild. Abgespielt wird erst nach deinem Klick, vorher geht nichts an YouTube. Das gilt in der App, im Programm und auf kiplatz.at.",
+        "Fragst du nach dem günstigsten Anbieter, vergleicht KIplatz jetzt mehrere Shops und zeigt dir eine Tabelle nach Preis. Jeder Preis muss auf der Seite dieses Shops stehen, sonst fliegt die Zeile raus. Die Funktion ist neu, wir verbessern sie laufend.",
+        "Häng ein Foto oder ein PDF an und sag „such das im Internet“: KIplatz liest den Text darauf und sucht genau nach dem, was dort steht, etwa nach dem Reifen auf deinem Screenshot.",
+    ],
+    "2026-10-24f": [],
+    "2026-10-24e": [],
+    "2026-10-24d": [],
+    "2026-10-24c": [],
+    "2026-10-24b": [],
+    "2026-10-24a": [],
+    "2026-10-23v": [],
+    "2026-10-23u": [],
+    "2026-10-23t": [],
+    "2026-10-23s": [],
+    "2026-10-23r": [],
     "2026-10-23q": [],
     "2026-10-23p": [],
     "2026-10-23o": [],
@@ -1133,6 +1157,11 @@ ZURUECKGEHALTEN: dict[str, list[str]] = {
 }
 
 KURZ_JE_TAG: dict[str, list[str]] = {
+    "2026-10-24": [
+        "KIplatz zeigt dir YouTube-Videos jetzt direkt in der Antwort, abgespielt wird erst nach deinem Klick",
+        "Frag nach dem günstigsten Anbieter, und KIplatz vergleicht mehrere Shops in einer Tabelle",
+        "Ein Foto oder PDF im Anhang sucht KIplatz jetzt gezielt im Internet nach",
+    ],
     "2026-10-21": [
         "„Ja, live nachprüfen“ sucht jetzt immer im Internet, auch bei Bergen mit bekanntem Namen",
     ],
@@ -1235,6 +1264,10 @@ KURZ_JE_TAG: dict[str, list[str]] = {
 
 
 GESCHICHTE_JE_TAG: dict[str, dict[str, str]] = {
+    "2026-10-24": {
+        "haken": "Frag KIplatz ab heute „Zeig mir Gameplay zu Enshrouded“, und das Video steht gleich in der Antwort, mit Vorschaubild.",
+        "text": "Und wer „Wo bekomme ich diesen Reifen am günstigsten?“ fragt, bekommt jetzt eine Tabelle mehrerer Shops nach Preis. Jeder Preis wird gegen die Seite des Shops geprüft, bevor er dasteht.",
+    },
     "2026-10-21": {
         "haken": "Frag KIplatz ab heute „Wie hoch ist der Traunstein?“, und tippst du auf „Ja, live nachprüfen“, wird wirklich im Internet gesucht.",
         "text": "Bisher hielt ein Treffer auf der Karte die Suche im Internet auf, auch wenn du ausdrücklich nachprüfen wolltest. Das haben wir behoben.",

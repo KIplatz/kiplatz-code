@@ -7,6 +7,7 @@ import { holen, holenRoh, basisSetzen, standBewerten, ServerFehler, beiAbgemelde
 import { Gespraeche, FARBEN, tagesgruss } from "./gespraeche.js";
 import { WETTER, MIT_ORT, mitOrt, sauber } from "./einrichten.js";
 import { zeichnen as antwortZeichnen, nurRueckfrage } from "./antwort.js";
+import { videoKarten } from "./video.js";
 import { symbol, symboleEinsetzen } from "./symbole.js";
 import { APP_VERSION } from "./version.js";
 import { Abgleich } from "./abgleich.js";
@@ -469,7 +470,7 @@ function zeichneVerlauf() {
       antwortZeichnen(b, n.text);
 
       if (!n.fehler) { d.dataset.ki = "erzeugt"; if (n.lieferschein?.etikett?.unterschrift) d.dataset.kiplatzEtikett = JSON.stringify(n.lieferschein.etikett); }
-      d.append(w, b, metaKnoten(n, i, i === letzte));
+      d.append(w, b, ...(n.fehler ? [] : videoKarten(n.text, n.lieferschein?.videos)), metaKnoten(n, i, i === letzte));
     }
     box.append(d);
   });

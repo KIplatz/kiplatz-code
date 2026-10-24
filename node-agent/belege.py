@@ -700,7 +700,10 @@ def _ohne_code_zahlen(frage: str) -> str:
         if len(rest) >= 4 or (len(rest) == 2 and int(rest) == (int(jahr) + 1) % 100):
             return " "
         return m.group(0)
-    return _JAHR_SCHRAEG.sub(code, _NAME_ZAHL.sub(" ", frage or ""))
+    return _JAHR_SCHRAEG.sub(code, _NAME_ZAHL.sub(" ", _REIFENGROESSE.sub(" ", frage or "")))
+
+
+_REIFENGROESSE = re.compile(r"(?i)\b\d{2,3}/\d{2}\s*(?:Z?R|-)\s*\d{2}(?:[.,]\d)?\b")
 _RECHNET_ZWEI = re.compile(r"(?i)\bplus\b|\bminus\b|\bweniger\b|\babzüglich\b|\bzuzüglich\b|\bgeteilt\b|\bdurch\s+\d|\bprozent\b|\bpercent\b|%|\bzinsen\b|"
                            r"\binterest\b|\btrinkgeld\b|\btip\b|\bnetto\b|\bbrutto\b|\bmwst\b|\bvat\b|\bzwischen\s+\d[\d.,]*\s+und\s+\d|"
                            r"\bbetween\s+\d[\d.,]*\s+and\s+\d|\bliter\w*\s+auf\s+100\b|\blit(?:er|re)s?\s+per\s+100\b|\bquadratmeter\b|\bsquare met(?:er|re)s?\b")
@@ -742,6 +745,16 @@ def rechenaufgabe(frage: str) -> bool:
 
 def preisfrage(frage: str) -> bool:
     return bool(_PREISFRAGE.search(frage or "")) and not rechnet(frage)
+
+
+_VERGLEICH = re.compile(r"(?i)\b(?:günstigst\w*|guenstigst\w*|billigst\w*|preisvergleich\w*|preise?\s+vergleich\w*|vergleich\w*\s+(?:\S+\s+){0,3}?preise?\b|"
+                        r"bester?n?\s+preis\w*|günstiger\w*\s+(?:anbieter|angebot|shop|händler|haendler)|billiger\w*\s+(?:anbieter|angebot|shop|händler)|"
+                        r"wo\s+(?:\S+\s+){0,6}?(?:am\s+)?(?:günstigsten|billigsten)|cheapest|best\s+price|lowest\s+price|compare\s+prices|price\s+comparison|"
+                        r"cheaper\s+(?:offer|deal|quote|shop|seller))")
+
+
+def vergleichsfrage(frage: str) -> bool:
+    return bool(_VERGLEICH.search(frage or ""))
 
 
 _REGEL_WORT = re.compile(r"(?i)\b(?:\w*pflicht\w*|vorgeschrieben\w*|gesetzlich\w*|verordnung\w*|erlaubt|verboten|strafe\w*|bu[ßs]geld\w*|"

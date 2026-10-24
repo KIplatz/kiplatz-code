@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 from __future__ import annotations
 
+import contextlib
 import random
 import re
 import sys
@@ -434,6 +435,15 @@ class Rechenarbeit:
 
     def _wache_ende(self) -> None:
         self._wache_an.clear()
+
+    @contextlib.contextmanager
+    def wache_halten(self):
+        wache = self._wache_starten()
+        try:
+            yield wache
+        finally:
+            if wache:
+                self._wache_ende()
 
     def _frage_zurueck(self, auftrag: dict, grund: str) -> None:
         try:

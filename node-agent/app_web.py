@@ -119,6 +119,7 @@ KNAPP_ZEICHEN = 500
 WIKI_KANDIDATEN = 8
 LIVE_STELLEN = 6
 LIVE_STELLEN_LISTE = 8
+LIVE_STELLEN_VERGLEICH = 10
 PRUEFER_MODELLE = ("14B", "8B")
 PRUEFSTAND_MITGLIEDER = True
 TRAINING_TAKT_S = 10.0
@@ -911,7 +912,7 @@ class Api:
         ergaenzend: list[wissen.Treffer] = []
         for adresse in wissen.adressen_in_text(frage):
             try:
-                q, text, tr = wissen.live_lesen(adresse, frage)
+                q, text, tr = wissen.live_lesen(adresse, frage, fuer_frage=True)
                 live += tr
                 hinweis = f"{q.adresse} jetzt live gelesen. " + hinweis
                 self._live_merken(q, text)
@@ -1139,6 +1140,9 @@ class Api:
             gesucht = [t for t in live if t.quelle.art == "nachgeschaut"]
             teile = nachschauen.teilfragen(frage)
             grenze = (min(2, len(teile)) * LIVE_STELLEN if teile else LIVE_STELLEN_LISTE if nachschauen.listenfrage(frage) else LIVE_STELLEN)
+            if belege.vergleichsfrage(frage):
+                grenze = LIVE_STELLEN_VERGLEICH
+                gesucht.sort(key=lambda t: -nachschauen.preis_punkte(t.text))
             if len(gesucht) > grenze:
                 weg = {id(t) for t in gesucht[grenze:]}
                 live = [t for t in live if id(t) not in weg]
@@ -1406,15 +1410,25 @@ class Api:
             lauf.pop("nebenher", None)
         else:
             neben = None
-        if len(anfragen) > 1:
+        vergleich = belege.vergleichsfrage(frage)
+        if vergleich and anfragen:
+            anfragen = list(dict.fromkeys(anfragen + [f"{anfragen[0]} preis", f"{anfragen[0]} kaufen"]))[:3]
+            if neben is not None and neben["anfragen"] != anfragen:
+                neben = None
+        if vergleich:
+            self._schritt("Einen Moment, ich vergleiche mehrere Anbieter, das dauert etwas …")
+        elif len(anfragen) > 1:
             vorne, letzte = _aufzaehlung(anfragen)
             self._schritt(f"sucht im Internet nach {vorne} und „{letzte}“ und liest die besten Seiten …")
         else:
             self._schritt(f"sucht im Internet nach „{''.join(anfragen)}“ und liest die besten Seiten …")
+        mehr = {"lesen_max": VERGLEICH_LESEN, "seiten_max": VERGLEICH_SEITEN, "warten_s": VERGLEICH_WARTEN_S, "liste_immer": True} if vergleich else {}
+        if vergleich or belege.preisfrage(frage):
+            mehr["preis"] = True
         try:
             ergebnisse, gelesen, woher = neben["holen"]() if neben is not None else self._nachschauer.suche_runde(
                 anfragen, frage, sprache=such_sprache(frage), zeit=nachschauen.zeitraum(frage),
-                ausser=frozenset(lauf["gelesen"]) if lauf else frozenset(), ziel=zeitziel(frage))
+                ausser=frozenset(lauf["gelesen"]) if lauf else frozenset(), ziel=zeitziel(frage), **mehr)
         except app_core.AppError as exc:
             _log(self._core, f"ABGELEHNT nachschauen suche: {exc.code}: {exc.detail}")
             if lauf is not None:
@@ -1437,7 +1451,7 @@ class Api:
         anfragen = nachschauen.anfragen_aufteilen([q for q in anfragen if q and q.strip()], frage)[:4] or [frage]
         gelesen = (f"Jetzt im Internet gesucht ({woher}), 1 Seite gelesen, {wohin}." if seiten == 1
                    else f"Jetzt im Internet gesucht ({woher}), {seiten} Seiten gelesen, {wohin}.")
-        return out[:12], f"{gelesen} {gesucht_satz(frage, anfragen, r.land if r else '')}"
+        return out[:24 if vergleich else 12], f"{gelesen} {gesucht_satz(frage, anfragen, r.land if r else '')}"
 
     @staticmethod
     def _deckt_ab(frage: str, treffer: list[wissen.Treffer]) -> bool:
@@ -1913,7 +1927,8 @@ class Api:
                                                "bitte noch einmal drücken.")
                         _log(self._core, "ABGELEHNT pruefstand_lauf: die Rechenarbeit kam nicht zwischen zwei Aufträge")
                         return
-                    r = self._guarded("pruefstand_lauf", lambda: self._pruefstand_lauf(erzwingen=True, probelauf=bool(probelauf)))
+                    with self._rechen.wache_halten():
+                        r = self._guarded("pruefstand_lauf", lambda: self._pruefstand_lauf(erzwingen=True, probelauf=bool(probelauf)))
                     b = r.get("daten") if r.get("ok") else None
                     rd = b.get("runde") if isinstance(b, dict) and isinstance(b.get("runde"), dict) else {}
                     if not r.get("ok"):
@@ -2337,6 +2352,10 @@ class Api:
                 "quellen_liste": wissen.benutzte_quellen(a.text or "", quellen, {s.quelle for s in pr.saetze if s.farbe == "gruen" and s.quelle}),
                 "gemacht": "live nachgeprüft" if frisch else ("nachgeschaut und geantwortet" if nachgeholt else "geantwortet"), "erfunden": pr.text, "pruefung": pr.kurz(),
             }
+            if linkfrage(next((str(n.get("content", "")) for n in reversed(nachrichten) if n.get("role") == "user"), "")) or linkfrage(suchfrage(nachrichten)) or nachschauen._VIDEO_WORT.search(suchfrage(nachrichten)):
+                videos = nachschauen.videos_aus_quellen(quellen, suchfrage(nachrichten))
+                if videos:
+                    lieferschein["videos"] = videos
             if verworfen:
                 lieferschein["erste_fassung"] = "nachgeschaut" if nachgeholt else "verworfen"
             if quellen_stand:
@@ -2344,6 +2363,20 @@ class Api:
             if skill_name:
                 lieferschein["skill"] = skill_name
             antwort_text = ohne_auszuege(ohne_markdown(a.text)) or "(keine Antwort erhalten)"
+            if lieferschein.get("videos") or re.search(r"youtube\.com/watch\?|youtu\.be/", antwort_text):
+                bisher = list(lieferschein.get("videos") or [])
+                for nummer in nachschauen._VIDEO_NUMMER.findall(antwort_text):
+                    if len(bisher) < 2 and nummer not in {v["nummer"] for v in bisher} and any(nummer in str(q.get("text", "")) + str(q.get("adresse", "")) for q in quellen):
+                        bisher.append({"nummer": nummer, "titel": ""})
+                if bisher:
+                    lieferschein["videos"] = bisher
+                    antwort_text = ohne_kann_nicht_zeigen(antwort_text)
+            if not fern and belege.vergleichsfrage(suchfrage(nachrichten)):
+                letzte = next((str(n.get("content", "")) for n in reversed(nachrichten) if n.get("role") == "user"), "")
+                antwort_text, weg = vergleich_zeilen_pruefen(antwort_text, quellen, englisch=such_sprache(suchfrage(nachrichten)) == "en",
+                                                             anhang=letzte[len(schriftstueck.eigene_worte(letzte)[0]):])
+                if weg:
+                    lieferschein["quellen"] = (lieferschein.get("quellen", "") + f" Vergleich: {weg} Zeilen ohne Preis auf der Seite des Anbieters gestrichen.").strip()
             vorher_text = antwort_text
             antwort_text = self._belege_nachher(antwort_text, suchfrage(nachrichten), "" if fern else zusatz, [] if fern else quellen, lieferschein,
                                                 None if fern else (lambda extra: modell(zusatz + "\n\n" + extra, None, max_tokens_=240).text),
@@ -4826,6 +4859,18 @@ class Api:
                     "teams": teams, "mein_team": mein, "konto": bool(self._konto_dict())}
         return self._guarded("bestenliste", go)
 
+    def video_vorschau(self, nummer: object = "") -> dict:
+        def go():
+            bild = self._community.vorschaubild(str(nummer))
+            return {"bild": "data:image/jpeg;base64," + base64.b64encode(bild).decode("ascii")} if bild else {}
+        return self._guarded("video_vorschau", go)
+
+    def video_rahmen(self, nummer: object = "") -> dict:
+        def go():
+            adresse = self._community.video_rahmen_adresse(str(nummer))
+            return {"adresse": adresse} if adresse else {}
+        return self._guarded("video_rahmen", go)
+
     def lernen_stand(self, an: object = None) -> dict:
         def go():
             if not self._konto_dict() or self._community.geraet() is None:
@@ -5674,13 +5719,18 @@ def suchauftrag(text: str, *, hat_vorige_antwort: bool = True) -> tuple[bool, st
 
 
 _VERWEISWORT = re.compile(r"(?i)\b(?:davon|dazu|daraus|dort|dorthin|darüber|darueber|dafür|dafuer|dies|diese[mnrs]?|that|this|those|these|there)\b")
+_ZEIG_ES = re.compile(r"(?i)\b(?:zeig\w*|schick\w*|send\w*|show|gib)\s+(?:mir\s+|uns\s+)?(?:es|ihn)\b")
+_VIDEO_NENNER_IM_SATZ = re.compile(r"(?i)\b(?:videos?|clips?|links?|youtube\w*)\b")
+_VIDEO_NENNER = {"video", "videos", "youtube", "link", "links", "clip", "clips", "guide"}
 _ARTIKEL_VOR = re.compile(r"(?i)\b(?:der|die|das|den|dem|des|the)\s+([\wäöüÄÖÜß-]+)(?:\s+([\wäöüÄÖÜß-]+))?")
 
 
 def nachfrage_mit_bezug(letzte: str, vorige_frage: str, vorige_antwort: str) -> bool:
     if not vorige_frage or not vorige_antwort or len(letzte.split()) > 16:
         return False
-    if _VERWEISWORT.search(letzte):
+    if _VERWEISWORT.search(letzte) or _ZEIG_ES.search(letzte):
+        return True
+    if _VIDEO_NENNER_IM_SATZ.search(letzte) and linkfrage(vorige_frage) and not [w for w in re.findall(r"[\wäöüÄÖÜß-]+", letzte)[1:] if w[0].isupper() and w.lower() not in _VIDEO_NENNER]:
         return True
     neu_in_antwort = set(wissen.woerter(vorige_antwort)) - set(wissen.woerter(vorige_frage))
     for m in _ARTIKEL_VOR.finditer(letzte):
@@ -5697,7 +5747,33 @@ def _vorige(nachrichten: list[dict]) -> tuple[str, str]:
     return frage, antwort
 
 
+_ANHANG_BEZUG = re.compile(r"(?i)\b(?:im\s+anhang|anhang|angehängt\w*|auf\s+(?:dem|diesem)\s+(?:foto|bild|screenshot)|(?:das|dem|dieses?|diesem)\s+"
+                           r"(?:foto|bild|screenshot|dokument|datei)|attached|attachment|(?:the|this)\s+(?:photo|picture|screenshot|image))\b")
+
+
+def _anhang_kennzeile(anhang: str) -> str:
+    beste, punkte = "", 0
+    for z in [z.strip() for z in anhang.splitlines() if z.strip()][1:16]:
+        if re.search(r"[€$£]|https?://|\bwww\.", z):
+            continue
+        p = len(wissen.woerter(z))
+        if p > punkte:
+            beste, punkte = z, p
+    return " ".join(beste.split())[:120] if punkte >= 3 else ""
+
+
+def ohne_anhang(text: str) -> str:
+    eigen, mit = schriftstueck.eigene_worte(text)
+    if not mit:
+        return text
+    if not _ANHANG_BEZUG.search(eigen):
+        return eigen.strip()
+    kenn = " ".join(_anhang_kennzeile(text[len(eigen):]).split()[:6])
+    return " ".join(f"{kenn} {_ANHANG_BEZUG.sub(' ', eigen)}".split())
+
+
 def suchfrage(nachrichten: list[dict]) -> str:
+    nachrichten = [{**n, "content": ohne_anhang(str(n.get("content", "")))} if n.get("role") == "user" else n for n in nachrichten or []]
     letzte = next((str(n.get("content", "")) for n in reversed(nachrichten) if n.get("role") == "user"), "")
     a = _absicht_von(nachrichten) if nachrichten and nachrichten[-1].get("role") == "user" else absicht.Absicht()
     if a.frisch:
@@ -5795,6 +5871,9 @@ SUCHWORT_ENTSCHEIDEN = ("Braucht die letzte Frage keine Suche, weil sie allgemei
                         "braucht eine Suche.")
 SUCHWORT_ANDERS = ("Diese Suchen wurden schon gemacht und haben die Antwort nicht gebracht: {bisher}. Schreib zwei neue Suchanfragen mit anderen Wörtern, "
                    "zum Beispiel mit dem Namen der Seite oder Stelle, die es sicher weiß, oder mit dem Begriff, den diese Stelle dafür verwendet.")
+VERGLEICH_LESEN = 10
+VERGLEICH_SEITEN = 8
+VERGLEICH_WARTEN_S = 15.0
 SUCHRUNDEN = 3
 FRAGE_FOKUS = ("Gefragt ist genau: „{frage}“. Beantworte genau das. Steht die gefragte Angabe (zum Beispiel eine Dauer, eine Anzahl, ein Ort) "
                "in keiner Quelle, sag das in einem Satz, statt eine andere Zahl oder Angabe zu nennen. Schreib in eigenen Worten, nie mehr als 6 "
@@ -5803,14 +5882,134 @@ FRAGE_FOKUS = ("Gefragt ist genau: „{frage}“. Beantworte genau das. Steht di
 
 REGEL_FOKUS = ("Es geht um eine Regel: beginne mit dem, was gilt, so wie es in den Quellen steht: für wen, ab wann und bis wann, was genau "
                "verlangt ist, Ausnahmen und was bei einem Verstoß droht. Was davon in keiner Quelle steht, lässt du einfach weg.")
+VERGLEICH_FOKUS = ("Die Person will Anbieter mit Preis vergleichen. Schreib eine Tabelle mit den Spalten Anbieter, Preis, Hinweis, nach Preis aufsteigend, "
+                   "eine Zeile je Händler aus den Quellen oben. Anbieter ist der Händler, der verkauft: eine Seite, die viele Händler mit Preis aufführt "
+                   "(ein Preisvergleich), oder ein Zahlungsdienst ist nie ein Anbieter; nimm von ihr die einzelnen Händler, jeden mit genau dem Preis, der "
+                   "bei ihm steht. Die Zeilen „Angebote laut den Produktdaten dieser Seite“ sind die verlässlichsten Preise; „diese Seite“ heißt dort: "
+                   "der Händler, dem die Seite gehört. Nimm nur Preise für genau das gefragte Produkt (gleiche Größe und Ausführung), nie aus ähnlichen "
+                   "Produkten. In den Hinweis kommt nur, was in der Quelle bei diesem Händler steht (Baujahr, Lieferzeit, Land); steht dort nichts, bleibt "
+                   "er leer. Zeigt der Anhang der Person ein Angebot mit Händler und Preis, gehört es als eigene Zeile dazu, mit dem Hinweis „aus deinem "
+                   "Anhang“ und dem Baujahr, wenn es dort steht. Ist ein Angebot älter (früheres Baujahr) als die anderen, sag das. Darunter ein Satz, wer "
+                   "am günstigsten ist. Steht bei keinem Anbieter ein Preis, sag das in einem Satz und nenne die gelesenen Seiten.")
 PREIS_FOKUS = ("Es geht um einen Preis: nenne jede Variante, die in den Quellen steht (zum Beispiel nach Dauer oder Fahrzeugklasse), jede mit "
                "ihrem Betrag aus den Quellen.")
+
+
+_PREIS_ZAHL = re.compile(r"(?<![\d.,])(\d{1,3}(?:[. ]\d{3})+,\d{2}|\d+,\d{2}|\d+\.\d{2}(?![\d.])|\d+(?=\s*(?:€|eur\b|euro\b|\$|usd\b|chf\b|£|,-)))", re.I)
+
+
+def _preise(text: str) -> set[str]:
+    out = set()
+    for z in _PREIS_ZAHL.findall(text or ""):
+        z = re.sub(r"[\s ]", "", z)
+        if re.fullmatch(r"\d+\.\d{2}", z):
+            z = z.replace(".", ",")
+        else:
+            z = z.replace(".", "")
+        out.add(z if "," in z else z + ",00")
+    return out
+
+
+VERGLEICH_NAEHE = 300
+_DOMAIN = re.compile(r"(?i)\b((?:[a-z0-9-]+\.)+[a-z]{2,10})\b")
+
+
+def _name_schluessel(text: str) -> str:
+    return re.sub(r"[^0-9a-zäöüß]", "", str(text or "").lower())
+
+
+def _host_schluessel(host: str) -> set[str]:
+    h = str(host or "").lower().removeprefix("www.")
+    return {_name_schluessel(h), _name_schluessel(h.split(".")[0])} - {""}
+
+
+def _preis_nach_name(text: str, name: str) -> set[str]:
+    worte = [w for w in re.split(r"[^0-9A-Za-zÄÖÜäöüß]+", name) if w]
+    if not worte:
+        return set()
+    muster = re.compile(r"(?i)(?<![0-9a-zäöüß])" + r"[\s.\-]*".join(re.escape(w) for w in worte) + r"(?![0-9a-zäöüß])")
+    out = set()
+    for m in muster.finditer(text or ""):
+        p = _PREIS_ZAHL.search(text[m.end(): m.end() + VERGLEICH_NAEHE])
+        if p:
+            out |= _preise(p.group(0) + " €")
+    return out
+
+
+def vergleich_zeilen_pruefen(text: str, quellen: list[dict], *, englisch: bool = False, anhang: str = "") -> tuple[str, int]:
+    seiten: dict[str, list[str]] = {}
+    stellen: list[str] = []
+    for q in quellen or []:
+        t = str(q.get("text", ""))
+        if str(q.get("titel", "")).startswith(nachschauen.SUCHERGEBNISSE_TITEL):
+            stellen += [z for z in t.split("\n") if z.strip()]
+            continue
+        host = nachschauen._host(str(q.get("adresse", "")))
+        if host:
+            seiten.setdefault(host, []).append(t)
+        stellen.append(t)
+    vergleiche = {h for h, ts in seiten.items() if any(nachschauen.PREISVERGLEICH_SATZ in t for t in ts) or nachschauen.preisvergleich("\n".join(ts))}
+    if anhang.strip():
+        for h in {d.lower() for d in _DOMAIN.findall(anhang)}:
+            seiten.setdefault(h, []).append(anhang)
+        stellen.append(anhang)
+    zeilen = text.split("\n")
+    tabelle = [i for i, z in enumerate(zeilen) if z.strip().startswith("|")]
+    if len(tabelle) < 3:
+        return text, 0
+    daten = [i for i in tabelle[1:] if not re.fullmatch(r"[\s|:\-–—]+", zeilen[i])]
+    weg, bleibt = [], []
+    gestrichen: set[str] = set()
+    for i in daten:
+        zellen = [c.strip() for c in zeilen[i].strip().strip("|").split("|")]
+        name = zellen[0].split("(")[0].strip()
+        preise = _preise(zellen[1] if len(zellen) > 1 else "")
+        k = _name_schluessel(name)
+        eigene = [h for h in seiten if k and k in _host_schluessel(h)]
+        if not preise or len(k) < 3:
+            gut = False
+        elif any(h in vergleiche for h in eigene):
+            gut = False
+        else:
+            dort = set().union(*(_preise(t) for h in eigene for t in seiten[h])) if eigene else set()
+            gut = bool(preise & dort) if dort else any(preise & _preis_nach_name(s, name) for s in stellen)
+        if gut:
+            bleibt.append((min(float(p.replace(",", ".")) for p in preise), name, min(preise, key=lambda p: float(p.replace(",", ".")))))
+        else:
+            weg.append(i)
+            gestrichen |= {k} | preise
+    if not weg:
+        return text, 0
+    if not bleibt:
+        satz = ("I read the pages listed below, but none of them showed a price I can assign to a seller with certainty." if englisch else
+                "Auf den gelesenen Seiten stand kein Preis, den ich einem Anbieter sicher zuordnen kann. Die gelesenen Seiten stehen unten bei den Quellen.")
+        rest = [z for j, z in enumerate(zeilen) if j not in tabelle and not _nennt_gestrichenes(z, gestrichen)]
+        return "\n".join([satz] + [z for z in rest if z.strip()]).strip(), len(weg)
+    neu, ersetzt = [], False
+    for j, z in enumerate(zeilen):
+        if j in weg:
+            continue
+        if j not in tabelle and _nennt_gestrichenes(z, gestrichen):
+            ersetzt = True
+            continue
+        neu.append(z)
+    if ersetzt:
+        _p, name, preis = min(bleibt)
+        neu.append(f"The cheapest offer is {name} at {preis} €." if englisch else f"Am günstigsten ist {name} mit {preis} €.")
+    return "\n".join(neu), len(weg)
+
+
+def _nennt_gestrichenes(zeile: str, gestrichen: set[str]) -> bool:
+    k = _name_schluessel(zeile)
+    return any(g and ("," in g and g in _preise(zeile) or "," not in g and len(g) >= 3 and g in k) for g in gestrichen)
 
 
 def frage_fokus(frage: str) -> str:
     f = " ".join(str(frage or "").split())[:300]
     teile = [FRAGE_FOKUS.format(frage=f)]
-    if belege.preisfrage(f):
+    if belege.vergleichsfrage(f):
+        teile.append(VERGLEICH_FOKUS)
+    elif belege.preisfrage(f):
         teile.append(PREIS_FOKUS)
     elif belege.regelfrage(f):
         teile.append(REGEL_FOKUS)
@@ -5830,10 +6029,28 @@ ZAHLEN_NUR_AUS_QUELLEN = ("Nenne nur Zahlen, Daten, Uhrzeiten, Beträge und Name
                           "der dort nicht steht, lässt du weg, auch wenn du ihn zu wissen glaubst.")
 
 
-_LINKFRAGE = re.compile(r"(?i)\b(?:links?|urls?|webadresse\w*|internetadresse\w*|youtube\w*|video-?link\w*)\b")
+_LINKFRAGE = re.compile(r"(?i)\b(?:links?|urls?|webadresse\w*|internetadresse\w*|youtube\w*|video-?link\w*)\b"
+                        r"|\b(?:zeig\w*|schick\w*|send\w*|gib|find\w*|such\w*|show|send|find|got)\b[^.?!\n]{0,40}\bvideos?\b"
+                        r"|\bvideos?\b[^.?!\n]{0,30}\b(?:dazu|davon|dafür|anschauen|ansehen|anzusehen|schick\w*|zeig\w*|send|show|watch)\b"
+                        r"|\b(?:gibt\s+es|is\s+there|are\s+there|do\s+you\s+have)\b[^.?!\n]{0,40}\bvideos?\b")
 LINK_FOKUS = ("Die Person will einen Link. Schreib die Adresse genau so, wie sie bei einer Quelle oben in Klammern oder in den Suchergebnissen steht, "
               "vollständig mit https://; erfinde nie eine Adresse und kürze keine. Steht keine passende Adresse dort, sag das in einem Satz und nenne die "
-              "Seite aus den Quellen, die das Video oder die Anleitung erwähnt.")
+              "Seite aus den Quellen, die das Video oder die Anleitung erwähnt. Nennst du ein Video, schreib seinen Titel und gleich dahinter seine ganze "
+              "Adresse, wie sie bei den Suchergebnissen steht. Ein YouTube-Video erscheint unter deiner Antwort als Karte, die man gleich hier ansehen kann; "
+              "schreib nie, dass du ein Video nicht zeigen, einbetten oder abspielen kannst.")
+_KANN_NICHT_ZEIGEN = re.compile(r"(?i)\b(?:nicht|kein\w*|can(?:no|')t|cannot|unable|not\s+able)\b[^.!?\n]{0,60}\b(?:einbett\w*|eingebettet|(?:direkt\s+)?(?:zeigen|anzeigen|"
+                                r"abspielen|wiedergeben)|embed\w*|show\s+(?:you\s+)?(?:the\s+)?(?:video|trailer|it)|play\s+(?:the\s+)?(?:video|trailer|it))\b")
+
+
+def ohne_kann_nicht_zeigen(text: str) -> str:
+    zeilen = []
+    for z in (text or "").split("\n"):
+        saetze = re.split(r"(?<=[.!?])\s+", z)
+        rest = [s for s in saetze if not _KANN_NICHT_ZEIGEN.search(s)]
+        if rest or not z.strip():
+            zeilen.append(" ".join(rest))
+    neu = re.sub(r"\n{3,}", "\n\n", "\n".join(zeilen)).strip()
+    return neu or text
 
 
 def linkfrage(frage: str) -> bool:
@@ -5845,7 +6062,7 @@ def mit_fokus(zusatz: str, frage: str) -> str:
         zusatz = zusatz + "\n\n" + ZAHLEN_NUR_AUS_QUELLEN
     if linkfrage(frage):
         zusatz = (zusatz + "\n\n" if zusatz else "") + LINK_FOKUS
-    if not (massfrage(frage) or belege.preisfrage(frage) or belege.regelfrage(frage)):
+    if not (massfrage(frage) or belege.preisfrage(frage) or belege.regelfrage(frage) or belege.vergleichsfrage(frage)):
         return zusatz
     return (zusatz + "\n\n" if zusatz else "") + frage_fokus(frage)
 
@@ -5926,6 +6143,8 @@ def suche_denkbar(frage: str) -> bool:
     f = " ".join((frage or "").split())
     if len(wissen.woerter(f)) < 2 or _NUR_GESPRAECH.match(f):
         return False
+    if nachschauen._IM_NETZ.search(f.lower()):
+        return True
     if nachschauen._SCHREIBEN.search(f) and not re.search(r"\b(?:wer|wann|wo|welche[rsmn]?|wie viel|wieviel|was kostet)\b", f, re.I):
         return False
     if (nachschauen._RECHNEN.search(f) and re.search(r"\d", f)) or belege.rechenaufgabe(f):
@@ -6049,6 +6268,8 @@ def suchwoerter_ordnen(liste: list[str], frage: str, frueher: str = "", heute=No
         vorjahr = re.sub(rf"\b{h.year}\b", str(h.year - 1), out[0])
         if vorjahr != out[0]:
             out.append(vorjahr)
+    if out and nachschauen._VIDEO_WORT.search(frage) and not any(re.search(r"(?i)youtu", o) for o in out):
+        out[0] = " ".join([out[0], "youtube"])
     return out[:SUCHEN_HOECHSTENS]
 
 

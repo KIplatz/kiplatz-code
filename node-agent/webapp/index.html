@@ -357,6 +357,15 @@
 
   .aktionen { display: flex; align-items: center; gap: 2px; margin-top: 8px; flex-wrap: wrap; }
 
+  .video-karte { margin: .6em 0 .2em; max-width: 520px; }
+  .video-flaeche { position: relative; aspect-ratio: 16 / 9; border-radius: 10px; border: 1px solid var(--border); background: var(--ground); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .video-vorschau { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .video-knopf { position: relative; }
+  .video-flaeche iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  .video-knopf::before { content: "\25B6\00a0"; }
+  .video-knopf { min-height: 40px; padding: 0 20px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface); color: inherit; font: inherit; font-weight: 600; cursor: pointer; }
+  .video-titel { font-size: 13px; font-weight: 600; margin: 0 0 4px; }
+  .video-klein { margin-top: 4px; font-size: 11px; line-height: 1.35; }
   .msg .body.entwurf { opacity: .62; transition: opacity .2s; } .msg .body.entwurf.ueberarbeitet { opacity: .42; } .entwurf-hinweis { font-size: 12px; color: var(--text2, #667); margin: 0 0 4px; }
 
   .live-ja-zeile .btn { display: inline-flex; align-items: center; gap: 8px; } .live-ja-zeile .btn svg { width: 16px; height: 16px; flex: none; }
@@ -2284,9 +2293,52 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
     if (ddArt === "melden") api().antwort_rueckmelden(aktuell.kennung, nummer, grund || "Vorschlag zur Antwort", vorschlag, an).then((r) => gemeldet(r, nummer));
     else api().gespraech_bewerten(aktuell.kennung, nummer, "schlecht", grund || "Vorschlag zur Antwort", vorschlag, an).then((r) => bewertet(r, nummer, "schlecht"));
   });
+
+
+  const VIDEO_MUSTER = /https?:\/\/(?:(?:(?:www|m)\.)?youtube\.com\/watch\?(?:[^\s)\]>]*&)?v=|youtu\.be\/)([A-Za-z0-9_-]{11})(?![A-Za-z0-9_-])/g;
+
+  function videoKarten(el, text, videos) {
+    for (const alt of el.parentNode.querySelectorAll(":scope > .video-karte")) alt.remove();
+    const liste = [];
+    for (const v of Array.isArray(videos) ? videos : []) {
+      const nr = String((v && v.nummer) || "");
+      if (/^[A-Za-z0-9_-]{11}$/.test(nr) && !liste.some((x) => x.nr === nr) && liste.length < 2) liste.push({ nr, titel: String((v && v.titel) || "").slice(0, 160) });
+    }
+    for (const m of String(text || "").matchAll(VIDEO_MUSTER)) { if (liste.length < 2 && !liste.some((x) => x.nr === m[1])) liste.push({ nr: m[1], titel: "" }); }
+    let ende = el;
+    for (const { nr, titel } of liste) {
+      const k = document.createElement("div"); k.className = "video-karte";
+      if (titel) { const t = document.createElement("div"); t.className = "video-titel"; t.textContent = titel; k.append(t); }
+      const fl = document.createElement("div"); fl.className = "video-flaeche";
+      const kn = document.createElement("button"); kn.type = "button"; kn.className = "video-knopf"; kn.textContent = "Video ansehen";
+
+
+      kn.addEventListener("click", () => {
+        kn.disabled = true;
+        api().video_rahmen(nr).then((r) => {
+          if (!r || !r.ok || !r.daten || !r.daten.adresse) { kn.disabled = false; return; }
+          const f = document.createElement("iframe");
+          f.src = r.daten.adresse; f.title = "YouTube";
+          f.setAttribute("sandbox", "allow-scripts allow-same-origin allow-presentation"); f.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
+          f.setAttribute("allow", "fullscreen; picture-in-picture"); f.setAttribute("allowfullscreen", "");
+          fl.replaceChildren(f);
+        }).catch(() => { kn.disabled = false; });
+      });
+      fl.append(kn);
+
+      api().video_vorschau(nr).then((r) => {
+        if (!r || !r.ok || !r.daten || !r.daten.bild || !kn.isConnected) return;
+        const bild = document.createElement("img"); bild.className = "video-vorschau"; bild.alt = ""; bild.src = r.daten.bild; fl.prepend(bild);
+      }).catch(() => {});
+      const kl = document.createElement("div"); kl.className = "video-klein muted small";
+      const hi = document.createElement("span"); hi.textContent = "Beim Ansehen lädt YouTube das Video, dabei gehen Daten an YouTube.";
+      const li = document.createElement("a"); li.href = "https://www.youtube.com/watch?v=" + nr; li.target = "_blank"; li.rel = "noopener noreferrer"; li.textContent = "Auf YouTube öffnen";
+      kl.append(hi, " ", li); k.append(fl, kl); ende.after(k); ende = k;
+    }
+  }
   function nachricht(rolle, text, ls, neueste) {
     const d = document.createElement("div"); d.className = "msg " + rolle;
-    if (rolle === "user") d.textContent = text; else d.innerHTML = `<div class="who">KIplatz</div><div class="body">${ampelText(text, ampelVon(ls))}</div>` + lieferscheinHtml(ls, neueste);
+    if (rolle === "user") d.textContent = text; else { d.innerHTML = `<div class="who">KIplatz</div><div class="body">${ampelText(text, ampelVon(ls))}</div>` + lieferscheinHtml(ls, neueste); videoKarten(d.querySelector(".body"), text, ls && ls.videos); }
     if (rolle !== "user") d.dataset.ki = "erzeugt";
     if (rolle !== "user" && ls && ls.etikett && ls.etikett.unterschrift) d.dataset.kiplatzEtikett = JSON.stringify(ls.etikett);
     return d;
@@ -2391,7 +2443,7 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
         const ansicht = ansichtMerken();
         liveHalt();
         arbeitStoppen(); laufendSetzen(false); live.classList.remove("denkt");
-        if (res.ok) { entwurfFertig(); live.innerHTML = ampelText(res.daten.text, ampelVon(res.daten.lieferschein)); document.querySelectorAll("#messages [data-tun=nochmal]").forEach((x) => x.remove()); a.insertAdjacentHTML("beforeend", lieferscheinHtml(res.daten.lieferschein, true)); aktuell = res.daten.gespraech; a.dataset.nummer = aktuell.nachrichten.length - 1; zeichneCredits(res.daten.credits); $("#titel").textContent = aktuell.titel; sag(""); }
+        if (res.ok) { entwurfFertig(); live.innerHTML = ampelText(res.daten.text, ampelVon(res.daten.lieferschein)); videoKarten(live, res.daten.text, res.daten.lieferschein && res.daten.lieferschein.videos); document.querySelectorAll("#messages [data-tun=nochmal]").forEach((x) => x.remove()); a.insertAdjacentHTML("beforeend", lieferscheinHtml(res.daten.lieferschein, true)); aktuell = res.daten.gespraech; a.dataset.nummer = aktuell.nachrichten.length - 1; zeichneCredits(res.daten.credits); $("#titel").textContent = aktuell.titel; sag(""); }
         else { entwurfFertig(); live.textContent = res.text; if (!wartend) { ta.value = text; ta.dispatchEvent(new Event("input")); } }
         if (!kiAn) api().ki_zustand().then((r) => nach(r, zeichneKi));
         liveEnde(); ladeListe(); ansichtHalten(u, ansicht); ta.focus();
@@ -2466,7 +2518,7 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
       const ansicht = ansichtMerken();
       liveHalt();
       arbeitStoppen(); laufendSetzen(false); live.classList.remove("denkt");
-      if (res.ok) { entwurfFertig(); live.innerHTML = ampelText(res.daten.text, ampelVon(res.daten.lieferschein)); document.querySelectorAll("#messages [data-tun=nochmal]").forEach((x) => x.remove()); a.insertAdjacentHTML("beforeend", lieferscheinHtml(res.daten.lieferschein, true)); aktuell = res.daten.gespraech; a.dataset.nummer = aktuell.nachrichten.length - 1; zeichneCredits(res.daten.credits); sag("Live nachgeprüft."); }
+      if (res.ok) { entwurfFertig(); live.innerHTML = ampelText(res.daten.text, ampelVon(res.daten.lieferschein)); videoKarten(live, res.daten.text, res.daten.lieferschein && res.daten.lieferschein.videos); document.querySelectorAll("#messages [data-tun=nochmal]").forEach((x) => x.remove()); a.insertAdjacentHTML("beforeend", lieferscheinHtml(res.daten.lieferschein, true)); aktuell = res.daten.gespraech; a.dataset.nummer = aktuell.nachrichten.length - 1; zeichneCredits(res.daten.credits); sag("Live nachgeprüft."); }
       else { entwurfFertig(); live.textContent = res.text; }
       liveEnde(); ladeListe(); ansichtHalten(a, ansicht);
     });

@@ -530,6 +530,26 @@ class Community:
     def geraete(self) -> list[dict]:
         return [g for g in self._anfrage("/geraete", {}, mit_schluessel=True).get("geraete", []) if isinstance(g, dict)]
 
+    def vorschaubild(self, nummer: str) -> bytes | None:
+        nummer = str(nummer or "")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{11}", nummer):
+            return None
+        req = urllib.request.Request(f"{self.adresse}/vorschau?v={nummer}", headers={"User-Agent": _UA, "Accept": "image/jpeg"})
+        try:
+            if self._oeffner is not None:
+                antwort = self._oeffner(req, timeout=TIMEOUT_S)
+            else:
+                antwort = urllib.request.urlopen(req, timeout=TIMEOUT_S, context=self._ctx)
+            with antwort as r:
+                daten = r.read(150_001)
+        except Exception:
+            return None
+        return daten if len(daten) <= 150_000 and daten.startswith(b"\xff\xd8\xff") else None
+
+    def video_rahmen_adresse(self, nummer: str) -> str | None:
+        nummer = str(nummer or "")
+        return f"{self.adresse}/video-rahmen?v={nummer}" if re.fullmatch(r"[A-Za-z0-9_-]{11}", nummer) else None
+
     def rechenstand(self) -> dict:
         st = self._anfrage("/rechenstand", als_geraet=self.geraet() is not None)
         g = st.get("geraet")

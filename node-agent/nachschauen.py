@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 import belege
+import schriftstueck
 import wissen
 
 WETTER_API = "https://api.open-meteo.com/v1/forecast"
@@ -54,7 +55,7 @@ _FRAGEFORM = re.compile(r"\b(wird es|ist es|gibt es|kommt|bleibt es|scheint)\b",
 _KEIN_WETTER = re.compile(r"\b(warum|wieso|weshalb|wie entsteh\w*|wie weit|entfernt|entfernung|sekunden|was ist|was sind|was bedeutet|fahrenheit|in celsius|in grad celsius)\b", re.I)
 _SCHREIBEN = re.compile(r"\b(schreib\w*|gedicht|geschichte|erkl[äa]r\w*|was ist ein|was bedeutet|übersetz\w*|uebersetz\w*)\b", re.I)
 _SCHLAGZEILEN = re.compile(r"\b(schlagzeil|nachrichten|news\b|neuigkeit|was ist (heute |gerade )?(passiert|los)|was gibt es neues|aktuelle meldung)", re.I)
-_RECHNEN = re.compile(r"\b(zu je|je stück|pro stück|stückpreis|zusammen|insgesamt|gesamt|summe|mal\b|prozent|rabatt|umrechn\w*|in meilen|in kilometer|in euro|wie viele tage)\b|[×x*]\s*\d|\d\s*[×x*]|%", re.I)
+_RECHNEN = re.compile(r"\b(zu je|je stück|pro stück|stückpreis|zusammen|insgesamt|gesamt|summe|mal\b|prozent|rabatt|umrechn\w*|in meilen|in kilometer|in euro|wie viele tage)\b|\d\s*x\s*\d|[×*]\s*\d|\d\s*[×*]|%", re.I)
 _SUCHE = re.compile(r"\b(wie ?viel|wie hoch|wie teuer|was kostet|kosten|preis|f[öo]rderung|zuschuss|frist|termin|[öo]ffnungszeit|gesetz|steuer|aktuell|derzeit|neu(?:e|en|es)?\b|20(?:2[4-9]|3\d)|wer ist|wann ist|wo ist|wo gibt|"
                     r"how much|how many|how high|how expensive|costs?\b|price|subsid\w+|grant|deadline|appointment|opening hours|law\b|tax\w*|"
                     r"current\w*|new\b|who is|when is|where is|where can i)", re.I)
@@ -183,6 +184,7 @@ DATEI_BESITZ_EN = (r"(?:my|our)\s+(?:\S+\s+){0,2}?(?:files?|documents?|folders?|
                    r"applications?|invoices?|bills?|contracts?|cv|resume|certificates?|payslips?|tax\s+returns?|receipts?|letters?)")
 DATEI_TUN_EN = r"(?:find|search|look\s+for|where\s+(?:is|are|did\s+i\s+(?:put|save))|where's|show\s+me|fetch|get\s+me|send\s+me|i\s+need|open|do\s+you\s+have|is\s+there)"
 DATEI_WIE_EN = r"\s*(?:how|why|what|which|should|explain|write|can\s+you\s+(?:explain|write|tell))"
+_IM_NETZ = re.compile(r"\b(?:im\s+(?:internet|netz|web)|online|on\s+the\s+(?:internet|web)|online\s+shops?|webshops?)\b")
 
 
 SUCHERGEBNISSE_TITEL = "Suchergebnisse"
@@ -196,8 +198,10 @@ def ohne_wortlaut(titel: str, text: str) -> tuple[str, str]:
 
 
 def ist_dateifrage(text: str) -> bool:
-    t = " ".join(str(text or "").lower().split())
+    t = " ".join(schriftstueck.eigene_worte(str(text or ""))[0].lower().split())
     if not t or _WIE_FRAGE.match(t) or re.match(DATEI_WIE_EN + r"\b", t):
+        return False
+    if _IM_NETZ.search(t):
         return False
     if re.search(r"\b" + _DATEI_WORT + r"\b", t) and re.search(_DATEI_TUN, t):
         return True
@@ -506,7 +510,7 @@ class Nachschauer:
             treffer = self._suche_fn(frage[:300])
         except Exception:
             return None
-        sicher = ohne_vorbehalt([t for t in treffer if str(t.get("adresse", "")).lower().startswith("https://")], oeffner=self._seiten_oeffner)
+        sicher = ohne_vorbehalt([t for t in treffer if str(t.get("adresse", "")).lower().startswith("https://")], oeffner=self._seiten_oeffner, fuer_frage=True)
         links = [str(t.get("adresse")) for t in sicher]
         return (links, [str(t.get("text", "")) for t in sicher], "Community-Suche") if links else None
 
@@ -529,7 +533,7 @@ class Nachschauer:
             if len(out) - uebersicht >= SUCHE_SEITEN:
                 break
             try:
-                q, text, tr = wissen.live_lesen(adresse, a.frage, n=3, oeffner=self._seiten_oeffner)
+                q, text, tr = wissen.live_lesen(adresse, a.frage, n=3, oeffner=self._seiten_oeffner, fuer_frage=True)
             except wissen.WissenError:
                 continue
             teile = [frage_kennung(a.frage), gefunden_zeile(q.titel, q.adresse, self._jetzt().strftime("%d.%m.%Y"), text)]
@@ -552,10 +556,12 @@ class Nachschauer:
         return [], SUCHE_NICHT_DURCH
 
     def suche_runde(self, anfragen: list[str], frage: str, *, sprache: str = "", zeit: str = "", ausser=frozenset(), heute=None,
-                    ziel: tuple = (None, None)) -> tuple[list[Ergebnis], list[str], str]:
+                    ziel: tuple = (None, None), lesen_max: int = 0, seiten_max: int = 0, warten_s: float = 0.0, liste_immer: bool = False,
+                    preis: bool = False) -> tuple[list[Ergebnis], list[str], str]:
         from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
         from datetime import date as _date
         heute = heute or _heute_frager()
+        lesen_max, seiten_max, warten_s = lesen_max or RUNDE_LESEN, seiten_max or RUNDE_SEITEN, warten_s or RUNDE_WARTEN_S
         r = richtung(frage)
         anfragen = anfragen_aufteilen([q for q in anfragen if q and q.strip()], frage)[:4] or [frage]
         auftraege = [(q, zeit) for q in anfragen if zeit] + [(q, "") for q in anfragen]
@@ -571,7 +577,7 @@ class Nachschauer:
             gemischt += [tr[i] for tr, _ in listen if i < len(tr)]
         fenster = letzt_fenster(frage)
         reihe = treffer_reihen(gemischt, frage, heute=heute, r=r, ziel=ziel, ausser=ausser)
-        reihe = ohne_vorbehalt(reihe, oeffner=self._seiten_oeffner)
+        reihe = ohne_vorbehalt(reihe, oeffner=self._seiten_oeffner, fuer_frage=True)
         if not reihe:
             if not nicht_durch:
                 raise NachschauError(SUCHE_NICHTS, "die Suche hat nichts gefunden")
@@ -581,16 +587,19 @@ class Nachschauer:
         tag = self._jetzt().strftime("%d.%m.%Y")
         auszuege = sum(1 for t in reihe[:RUNDE_UEBERSICHT] if t.get("text"))
 
+        punkte = ([lambda s: zeit_punkte(s, heute, r, fenster)] if r else []) + ([preis_punkte] if preis else [])
+
         def eine(t: dict):
             try:
-                return t, wissen.live_lesen(t["adresse"], frage, n=4, oeffner=self._seiten_oeffner, extra=(lambda s: zeit_punkte(s, heute, r, fenster)) if r else None)
+                return t, wissen.live_lesen(t["adresse"], frage, n=4, oeffner=self._seiten_oeffner, fuer_frage=True,
+                                            extra=(lambda s: sum(f(s) for f in punkte)) if punkte else None)
             except wissen.WissenError:
                 sperren(t["adresse"])
                 return t, None
 
         fertig: list = []
         versucht: set[str] = set()
-        ende = time.monotonic() + RUNDE_WARTEN_S * 1.5
+        ende = time.monotonic() + warten_s * 1.5
         for _ in range(2):
             hosts: set[str] = set()
             lesen = []
@@ -599,7 +608,7 @@ class Nachschauer:
                     continue
                 hosts.add(_host(t["adresse"]))
                 lesen.append(t)
-                if len(lesen) >= RUNDE_LESEN:
+                if len(lesen) >= lesen_max:
                     break
             if not lesen or time.monotonic() >= ende:
                 break
@@ -607,7 +616,7 @@ class Nachschauer:
             pool = ThreadPoolExecutor(max_workers=len(lesen), thread_name_prefix="lesen")
             try:
                 futures = [pool.submit(eine, t) for t in lesen]
-                bis = time.monotonic() + max(1.0, min(RUNDE_WARTEN_S, ende - time.monotonic()))
+                bis = time.monotonic() + max(1.0, min(warten_s, ende - time.monotonic()))
                 offen, genug_seit = set(futures), None
                 while offen:
                     rest = bis - time.monotonic()
@@ -617,7 +626,7 @@ class Nachschauer:
                         break
                     _fertig, offen = wait(offen, timeout=rest, return_when=FIRST_COMPLETED)
                     lesbar = sum(1 for f in futures if f.done() and not f.exception() and f.result()[1] is not None)
-                    if lesbar >= RUNDE_SEITEN:
+                    if lesbar >= seiten_max:
                         break
                     if lesbar >= 2 and genug_seit is None:
                         genug_seit = time.monotonic()
@@ -630,7 +639,7 @@ class Nachschauer:
         seiten = 0
         vermittler_hosts = {_host(t["adresse"]) for t, e in fertig if e is not None and vermittler(e[1], t["adresse"])}
         for t, ergebnis in fertig:
-            if ergebnis is None or seiten >= RUNDE_SEITEN:
+            if ergebnis is None or seiten >= seiten_max:
                 continue
             q, text, tr = ergebnis
             gelesen.append(t["adresse"])
@@ -638,7 +647,7 @@ class Nachschauer:
             if zeitlich_vorbei(inhalt, heute, r, fenster) or veraltet_text(q.titel + " " + q.adresse + " " + inhalt, *ziel):
                 continue
             teile = [frage_kennung(frage), gefunden_zeile(q.titel, q.adresse, tag, text)]
-            if t.get("text"):
+            if t.get("text") and not (preis and any(geldbetraege(x.text) for x in tr)):
                 teile.append(" ".join(str(t["text"]).split())[:500])
             teile += [x.text for x in tr]
             out.append(Ergebnis("suche", f"Nachgeschaut: {q.titel}"[:160], q.adresse, "\n\n".join(teile)[:MAX_TEXT], gueltig, f"im Internet gesucht ({woher}) und die Seiten gelesen"))
@@ -648,7 +657,8 @@ class Nachschauer:
         uebersicht = Ergebnis("suche", SUCHERGEBNISSE_TITEL, reihe[0]["adresse"], "\n\n".join(
             [frage_kennung(frage), f"Suchergebnisse ({woher}), gelesen am {tag}."] + zeilen)[:MAX_TEXT],
             gueltig, f"im Internet gesucht ({woher}) und die Seiten gelesen")
-        if auszuege >= 2 or (not out and auszuege):
+        video_da = bool(_VIDEO_WORT.search(frage)) and any(_video_adresse(t.get("adresse", "")) for t in reihe[:RUNDE_UEBERSICHT])
+        if auszuege >= 2 or (not out and auszuege) or video_da or (liste_immer and auszuege):
             out.insert(0, uebersicht)
         if not out:
             raise NachschauError("NACHSCHAU_LEER", "die gefundenen Seiten ließen sich nicht lesen oder waren veraltet")
@@ -882,7 +892,7 @@ VORBEHALT_WARTEN_S = 2.5
 VORBEHALT_HOSTS = 16
 
 
-def ohne_vorbehalt(treffer: list[dict], *, oeffner=None, warten_s: float = VORBEHALT_WARTEN_S) -> list[dict]:
+def ohne_vorbehalt(treffer: list[dict], *, oeffner=None, warten_s: float = VORBEHALT_WARTEN_S, fuer_frage: bool = False) -> list[dict]:
     import threading
     erste: dict[str, str] = {}
     for t in treffer:
@@ -894,7 +904,7 @@ def ohne_vorbehalt(treffer: list[dict], *, oeffner=None, warten_s: float = VORBE
 
     def pruefen(h: str, a: str) -> None:
         try:
-            ergebnis[h] = wissen.vorbehalt(a, oeffner=oeffner)
+            ergebnis[h] = wissen.vorbehalt(a, oeffner=oeffner, fuer_frage=fuer_frage)
         except Exception:
             ergebnis[h] = "nicht prüfbar"
     faeden = [threading.Thread(target=pruefen, args=(h, a), name="vorbehalt", daemon=True) for h, a in list(erste.items())[:VORBEHALT_HOSTS]]
@@ -906,7 +916,7 @@ def ohne_vorbehalt(treffer: list[dict], *, oeffner=None, warten_s: float = VORBE
     frei = {h for h, grund in list(ergebnis.items()) if not grund}
     def frei_auch_hier(adresse: str) -> bool:
         try:
-            return not wissen.vorbehalt(adresse, oeffner=oeffner)
+            return not wissen.vorbehalt(adresse, oeffner=oeffner, fuer_frage=fuer_frage)
         except Exception:
             return False
     return [t for t in treffer if _host(str(t.get("adresse", ""))) in frei and frei_auch_hier(str(t["adresse"]))]
@@ -963,7 +973,43 @@ def vermittler_adressen(quellen: list[dict]) -> set[str]:
 
 def gefunden_zeile(titel: str, adresse: str, tag: str, seitentext: str) -> str:
     zeile = f"Gefunden über die Suche, Seite „{titel}“ ({adresse}), gelesen am {tag}."
-    return zeile + " " + VERMITTLER_SATZ if vermittler(seitentext, adresse) else zeile
+    if vermittler(seitentext, adresse):
+        return zeile + " " + VERMITTLER_SATZ
+    return zeile + " " + PREISVERGLEICH_SATZ if preisvergleich(seitentext) else zeile
+
+
+_GELDBETRAG = re.compile(r"(?<![\d.,])(\d{1,3}(?:[.  ]\d{3})+|\d+)[.,](\d{2})(?!\d)\s*(?:€|eur\b|euro\b|\$|usd\b|chf\b|£)"
+                         r"|(?:€|\$|£|eur\b|chf\b)\s*(\d{1,3}(?:[.  ]\d{3})+|\d+)[.,](\d{2})(?!\d)", re.I)
+_PREISVERGLEICH_WORT = re.compile(r"(?i)\b(?:preisvergleich\w*|vergleiche\s+preise|preise\s+vergleichen|\d[\d.]*\s+angebote\b|"
+                                  r"price\s+comparison|compare\s+prices|\d[\d,]*\s+offers\b)")
+PREISVERGLEICH_MIN = 4
+PREISVERGLEICH_SATZ = ("Diese Seite ist ein Preisvergleich und verkauft selbst nicht: nenne sie nie als Anbieter, sondern die Händler, die sie "
+                       "mit ihrem Preis aufführt, jeden mit dem Preis, der bei ihm steht.")
+
+
+def geldbetraege(text: str) -> set[str]:
+    out = set()
+    for m in _GELDBETRAG.finditer(text or ""):
+        ganz, cent = (m.group(1), m.group(2)) if m.group(1) is not None else (m.group(3), m.group(4))
+        ganz = re.sub(r"[.  ]", "", ganz)
+        if int(ganz) or int(cent):
+            out.add(f"{int(ganz)},{cent}")
+    return out
+
+
+def preis_punkte(text: str) -> float:
+    if str(text or "").startswith(wissen.ANGEBOTE_KOPF):
+        return 3.0
+    return 1.0 if geldbetraege(text) else 0.0
+
+
+def preisvergleich(text: str) -> bool:
+    t = " ".join((text or "").split())
+    if t.startswith(wissen.ANGEBOTE_KOPF):
+        kopf = t.split(wissen.ANGEBOTE_KOPF, 1)[1][:3000]
+        if wissen.MEHRERE_HAENDLER in kopf or len({w for w in re.findall(r" - ([^:]{2,60}): \d", kopf) if w != "diese Seite"}) >= 3:
+            return True
+    return len(geldbetraege(t)) >= PREISVERGLEICH_MIN and bool(_PREISVERGLEICH_WORT.search(t))
 
 
 _VIDEO_HOSTS = ("youtube.com", "youtu.be", "vimeo.com", "dailymotion.com", "tiktok.com")
@@ -974,10 +1020,60 @@ def _zeilen_adresse(adresse: str) -> str:
     return adresse if any(host == h or host.endswith("." + h) for h in _VIDEO_HOSTS) else host
 
 
+def _video_adresse(adresse: str) -> bool:
+    return str(adresse).startswith("https://") and _zeilen_adresse(adresse) == adresse
+
+
 def trefferzeile(i: int, host: str, kopf: str, auszug: str, vermittler_hosts: set[str]) -> str:
+    if kopf and _video_adresse(host):
+        kopf = f"„{kopf}“"
     if host in vermittler_hosts or (auszug and vermittler(auszug, host if host.startswith("http") else "https://" + host)):
         return f"{i}. {host}" + (f" – {kopf}" if kopf else "") + f" ({VERMITTLER_ZEILE})"
     return f"{i}. {host}" + (f" – {kopf}" if kopf else "") + (f": {auszug}" if auszug else "")
+
+
+_VIDEO_ZEILE = re.compile(r"^\s*\d+\.\s+(https://(?:(?:www|m)\.)?youtube\.com/watch\?\S+|https://youtu\.be/\S+)\s+–\s+„(.+?)“", re.MULTILINE)
+_VIDEO_WORT = re.compile(
+    r"(?i)\b(?:videos?|youtube\w*|clips?|gameplay|let'?s\s*plays?|walkthroughs?|playthroughs?|longplays?|speedruns?|trailers?|teaser|"
+    r"tutorials?|unboxing|livestreams?|vlogs?|dokus?|dokumentation(?:en)?|dokumentarfilm\w*|documentar(?:y|ies)|reportagen?|"
+    r"musikvideos?|music\s+videos?|tipps\s+(?:und|&)\s+tricks|tips\s+(?:and|&)\s+tricks|reaction|highlights|compilation|fails|asmr|karaoke|boss\s*guide)\b")
+_VIDEO_NUMMER = re.compile(r"(?:youtube\.com/watch\?(?:[^\s&]*&)*v=|youtu\.be/)([A-Za-z0-9_-]{11})(?![A-Za-z0-9_-])")
+_VIDEO_ALLGEMEIN = frozenset(wissen.woerter(
+    "zeig zeigen schick schicken sende senden link youtube video videos guide tutorial anleitung einsteiger anfänger beginner tipps tricks "
+    "walkthrough gameplay lösung lösen dazu davon show send find search watch how tips spiel game gibt kannst bitte nachprüfen live "
+    "2024 2025 2026 2023 deutsch deutsche deutscher deutsches german englisch english aktuell aktuelle neu neue neues neuer new heute "
+    "schau schauen finde finden findest eines eine mal gut gute beste best part teil folge episode full komplett ganze trailer review test "
+    "lets let play plays playthrough longplay speedrun teaser unboxing livestream stream vlog doku dokus dokumentation dokumentarfilm "
+    "documentary reportage musikvideo music reaction highlights und and compilation fails asmr karaoke boss"))
+
+
+_VIDEO_UNTERSCHEIDER = frozenset(wissen.woerter("trailer review test teil folge part episode deutsch german english englisch"))
+
+
+def videos_aus_quellen(quellen: list[dict], themenfrage: str, *, hoechstens: int = 2) -> list[dict]:
+    sache = {w for w in wissen.woerter(themenfrage)} - _VIDEO_ALLGEMEIN
+    if not sache:
+        return []
+    gefunden: dict[str, tuple[int, int, int, str]] = {}
+    fw = set(wissen.woerter(themenfrage))
+    platz = 0
+    for q in quellen or []:
+        if not isinstance(q, dict) or not str(q.get("titel", "")).startswith(SUCHERGEBNISSE_TITEL):
+            continue
+        for adresse, titel in _VIDEO_ZEILE.findall(str(q.get("text", ""))):
+            m = _VIDEO_NUMMER.search(adresse)
+            platz += 1
+            if not m or m.group(1) in gefunden:
+                continue
+            tw = set(wissen.woerter(titel))
+            treffer = len(sache & tw)
+            if treffer >= min(2, len(sache)):
+                gefunden[m.group(1)] = (-treffer, -len(fw & _VIDEO_UNTERSCHEIDER & tw), platz, " ".join(titel.split())[:160])
+    if not gefunden:
+        return []
+    beste = min(t[0] for t in gefunden.values())
+    gefunden = {n: t for n, t in gefunden.items() if t[0] == beste}
+    return [{"nummer": n, "titel": t[3]} for n, t in sorted(gefunden.items(), key=lambda kv: kv[1])[:max(0, hoechstens)]]
 
 
 def treffer_reihen(treffer: list[dict], frage: str, *, heute, r: str = "", ziel: tuple = (None, None), ausser=frozenset()) -> list[dict]:
