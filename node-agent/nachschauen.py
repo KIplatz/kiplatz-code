@@ -262,11 +262,108 @@ ist sind war hat haben wird werden kann soll sollte gibt's""".split())
 _NICHT_SUCHEN |= set("""brauche brauchst braucht brauchen benötige benötigst benötigt benötigen muss musst müssen darf darfst dürfen als
 do does did i you we he she it they a an the to of for is are was were be can could should would will must need needs my your our their
 what how when where who which why there please tell me""".split())
-_NICHT_SUCHEN |= set("""bekomme bekommst bekommt bekommen kriege kriegst kriegt find get""".split())
+_NICHT_SUCHEN |= set("""bekomme bekommst bekommt bekommen kriege kriegst kriegt find get welcher welches welchem welchen""".split())
 
 
 _VERGLEICH_WUNSCH = re.compile(r"(?i)^(?:günstig\w*|guenstig\w*|billig\w*|preiswert\w*|anbieter\w*|händler\w*|haendler\w*|shops?|angebot\w*|preisvergleich\w*|"
                                r"vergleich\w*|bester?n?|cheap\w*|best|lowest|seller\w*|shops?|offers?|deals?|compare|comparison|price|prices)$")
+
+
+_ENERGIE = re.compile(r"(?i)\b(?:strom|stromanbieter\w*|stromtarif\w*|strompreis\w*|stromlieferant\w*|stromversorger\w*|ökostrom\w*|gasanbieter\w*|gastarif\w*|"
+                      r"gaspreis\w*|gasversorger\w*|energieanbieter\w*|energietarif\w*|energieversorger\w*|electricity|power\s+(?:supplier|provider|tariff)|"
+                      r"energy\s+(?:supplier|provider|tariff|deal)|gas\s+(?:supplier|provider|tariff))\b")
+_REISE = re.compile(r"(?i)\b(?:flug|flüge|fluege|flugticket\w*|flights?|zugticket\w*|bahnticket\w*|zugfahrt\w*|zugverbindung\w*|zug\s+(?:von|nach)|"
+                    r"(?:bus|fernbus|zug|bahn)\w*\s+(?:von|nach)\s|ticket\w*\s+(?:von|nach)\s|fähre\w*|faehre\w*|hotel\w*|unterkunft|übernachtung\w*|"
+                    r"ferienwohnung\w*|mietwagen\w*|train\s+(?:ticket|from|to)|bus\s+ticket|coach\s+from|ferry|accommodation|car\s+rental|rental\s+car)")
+_MONATE = r"(?:jänner|jaenner|januar|februar|feber|märz|maerz|april|mai|juni|juli|august|september|oktober|november|dezember|january|february|march|may|june|july|october|december)"
+_DATUM = re.compile(rf"(?i)\b\d{{1,2}}\.\s*\d{{1,2}}\.|\b\d{{4}}-\d{{2}}-\d{{2}}\b|\b\d{{1,2}}\.?\s+{_MONATE}\b|\b{_MONATE}\b|\b(?:heute|morgen|übermorgen|"
+                    r"uebermorgen|montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag|wochenende|ostern|weihnachten|silvester|today|tomorrow|"
+                    r"monday|tuesday|wednesday|thursday|friday|saturday|sunday|weekend)\b|\bnächste[nrs]?\s+woche|\bnext\s+week")
+_VERBRAUCH = re.compile(r"(?i)\b\d[\d.\s]*\s*kwh\b|\b\d+\s*(?:personen|person|leute|people)\b|\b(?:single|singlehaushalt|ein-?personen)")
+_PLZ = re.compile(r"(?<!\d)(?<!\d[.,])\d{4,5}(?!\d|[.,]\d|\s*kwh)", re.I)
+MAERKTE = {"AT": "de-AT", "DE": "de-DE", "CH": "de-CH", "LI": "de-CH", "GB": "en-GB", "IE": "en-IE", "US": "en-US", "CA": "en-CA", "AU": "en-AU",
+           "NZ": "en-NZ", "IT": "it-IT", "FR": "fr-FR", "BE": "fr-BE", "LU": "fr-LU", "NL": "nl-NL", "ES": "es-ES", "PT": "pt-PT", "PL": "pl-PL",
+           "CZ": "cs-CZ", "SK": "sk-SK", "HU": "hu-HU", "SI": "sl-SI", "HR": "hr-HR", "DK": "da-DK", "SE": "sv-SE", "NO": "nb-NO", "FI": "fi-FI",
+           "GR": "el-GR", "RO": "ro-RO", "BG": "bg-BG", "JP": "ja-JP"}
+KAUFWOERTER = {"de": ("preis", "kaufen"), "en": ("price", "buy"), "it": ("prezzo", "acquista"), "fr": ("prix", "acheter"), "nl": ("prijs", "kopen"),
+               "es": ("precio", "comprar"), "pt": ("preço", "comprar"), "pl": ("cena", "kup"), "cs": ("cena", "koupit"), "sk": ("cena", "kúpiť"),
+               "hu": ("ár", "vásárlás"), "sl": ("cena", "kupi"), "hr": ("cijena", "kupiti"), "da": ("pris", "køb"), "sv": ("pris", "köp"),
+               "nb": ("pris", "kjøp"), "fi": ("hinta", "osta"), "el": ("τιμή", "αγορά"), "ro": ("pret", "cumpara"), "bg": ("цена", "купи"),
+               "ja": ("価格", "購入")}
+RUECKFRAGE_ANFANG = "Damit ich ehrlich vergleichen kann, brauche ich noch"
+RUECKFRAGE_ANFANG_EN = "So I can compare fairly, I still need"
+_TEILE = {"land": ("das Land, in dem du kaufst (die Händler dort zählen, nicht die eines anderen Landes)",
+                   "the country you're buying in (shops there are what counts, not those in another country)"),
+          "energie": ("deine Postleitzahl und deinen Jahresverbrauch in kWh (steht auf der Jahresabrechnung; ungefähr reicht, etwa 2 500 kWh für zwei "
+                      "Personen), sonst wären die Preise nur Beispielrechnungen",
+                      "your postcode and your annual consumption in kWh (it's on your annual bill; a rough figure is fine, say 2,500 kWh for two "
+                      "people), otherwise the prices would only be sample calculations"),
+          "datum": ("das Datum, denn Ticket- und Hotelpreise ändern sich je nach Tag; ohne Datum gäbe es nur „ab“-Preise, die für deinen Tag nicht "
+                    "gelten müssen",
+                    "the date, because ticket and hotel prices change by day; without one I could only give “from” prices that may not apply to "
+                    "your day")}
+
+
+def vergleich_art(text: str) -> str:
+    t = str(text or "")
+    return "energie" if _ENERGIE.search(t) else "reise" if _REISE.search(t) else ""
+
+
+def vergleich_markt(text: str) -> str:
+    import region
+    r = region.erkennen(text or "")
+    if r is not None:
+        return r.land.upper()
+    genannt = {c for c in belege.laender_in(text or "") if c in MAERKTE}
+    if not genannt:
+        genannt = {belege.land_der_adresse(d).upper() for d in re.findall(r"(?i)\b(?:[a-z0-9-]+\.)+[a-z]{2,3}\b", text or "")} & set(MAERKTE)
+    return next(iter(genannt)) if len(genannt) == 1 else ""
+
+
+def markt_sprache(markt: str) -> str:
+    return MAERKTE.get(str(markt or "").upper(), "")
+
+
+def kaufwoerter(sprache: str) -> tuple[str, str]:
+    return KAUFWOERTER.get(str(sprache or "de").split("-")[0].lower(), KAUFWOERTER["de"])
+
+
+def ist_vergleich_rueckfrage(text: str) -> bool:
+    t = " ".join(str(text or "").split())
+    return t.startswith(RUECKFRAGE_ANFANG) or t.startswith(RUECKFRAGE_ANFANG_EN)
+
+
+def _rueckfrage_text(fehlt: list[str]) -> tuple[str, str]:
+    def satz(anfang: str, teile: list[str]) -> str:
+        if len(teile) == 1:
+            return f"{anfang}: {teile[0]}."
+        return f"{anfang}:\n" + "\n".join(f"- {t[0].upper()}{t[1:]}" for t in teile)
+    return satz(RUECKFRAGE_ANFANG, [_TEILE[f][0] for f in fehlt]), satz(RUECKFRAGE_ANFANG_EN, [_TEILE[f][1] for f in fehlt])
+
+
+def vergleich_rueckfrage(nachrichten: list[dict]) -> tuple[str, str] | None:
+    if not nachrichten or nachrichten[-1].get("role") != "user":
+        return None
+    vorige = next((n for n in reversed(nachrichten[:-1]) if n.get("role") == "assistant"), None)
+    if vorige is not None and ist_vergleich_rueckfrage(str(vorige.get("content", ""))):
+        return None
+    ganz = str(nachrichten[-1].get("content", ""))
+    eigen = schriftstueck.eigene_worte(ganz)[0]
+    vergleich = belege.vergleichsfrage(eigen)
+    art = vergleich_art(eigen)
+    if not (vergleich or (art == "reise" and belege.preisfrage(eigen))):
+        return None
+    gespraech = " ".join(str(n.get("content", "")) for n in nachrichten if n.get("role") == "user")
+    fehlt = []
+    if art != "reise" and not vergleich_markt(gespraech):
+        fehlt.append("land")
+    if art == "energie":
+        verbrauch = _VERBRAUCH.search(gespraech)
+        if not (verbrauch and _PLZ.search(gespraech.replace(verbrauch.group(0), " "))):
+            fehlt.append("energie")
+    if art == "reise" and not _DATUM.search(ganz):
+        fehlt.append("datum")
+    return _rueckfrage_text(fehlt) if fehlt else None
 
 
 def ohne_vergleichswunsch(anfrage: str) -> str:

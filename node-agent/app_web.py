@@ -1271,7 +1271,7 @@ class Api:
         richtung = nachschauen.richtung(frage)
         erg: dict = {}
 
-        sprache = such_sprache(frage)
+        sprache = mehr.pop("sprache", "") or such_sprache(frage)
         original, zone = ki_laufzeit.original(), ki_laufzeit.zone()
 
         def suchen() -> None:
@@ -1413,6 +1413,7 @@ class Api:
             neben = None
         vergleich = belege.vergleichsfrage(frage)
         anfragen, mehr = vergleich_runde(frage, anfragen)
+        markt = mehr.pop("sprache", "")
         if neben is not None and neben["anfragen"] != anfragen:
             neben = None
         if vergleich:
@@ -1424,7 +1425,7 @@ class Api:
             self._schritt(f"sucht im Internet nach „{''.join(anfragen)}“ und liest die besten Seiten …")
         try:
             ergebnisse, gelesen, woher = neben["holen"]() if neben is not None else self._nachschauer.suche_runde(
-                anfragen, frage, sprache=such_sprache(frage), zeit=nachschauen.zeitraum(frage),
+                anfragen, frage, sprache=markt or such_sprache(frage), zeit=nachschauen.zeitraum(frage),
                 ausser=frozenset(lauf["gelesen"]) if lauf else frozenset(), ziel=zeitziel(frage), **mehr)
         except app_core.AppError as exc:
             _log(self._core, f"ABGELEHNT nachschauen suche: {exc.code}: {exc.detail}")
@@ -2218,6 +2219,11 @@ class Api:
             return a4.rueckfrage, {"modell": "nachgefragt, ohne Modell", "geraet": geraet, "dauer_s": 0.0, "wortstuecke": 0, "gelesen": 0,
                                    "quellen": "keine Quelle nötig, das Programm fragt nach.", "quellen_liste": [], "gemacht": "nachgefragt",
                                    "erfunden": "nichts, es wurde nur nachgefragt", "pruefung": pruefung.pruefen("", []).kurz(), "_en": ""}, None
+        vr = nachschauen.vergleich_rueckfrage(nachrichten) if (not fern and self.nachschauen_an()) else None
+        if vr is not None:
+            return vr[0], {"modell": "nachgefragt, ohne Modell", "geraet": geraet, "dauer_s": 0.0, "wortstuecke": 0, "gelesen": 0,
+                           "quellen": "keine Quelle nötig, das Programm fragt nach.", "quellen_liste": [], "gemacht": "nachgefragt",
+                           "erfunden": "nichts, es wurde nur nachgefragt", "pruefung": pruefung.pruefen("", []).kurz(), "_en": vr[1]}, None
         if kopie and not (messen or frisch):
             fertig = self._fertig_aus_kopie(nachrichten, fuer_andere=(kopie == "andere"))
             if fertig is not None:
@@ -2378,6 +2384,10 @@ class Api:
             antwort_text = self._belege_nachher(antwort_text, suchfrage(nachrichten), "" if fern else zusatz, [] if fern else quellen, lieferschein,
                                                 None if fern else (lambda extra: modell(zusatz + "\n\n" + extra, None, max_tokens_=240).text),
                                                 schreiben=schrift is not None, ampel=not fern)
+            sf = suchfrage(nachrichten)
+            if (not fern and belege.vergleichsfrage(sf) and nachschauen.vergleich_art(sf) == "energie"
+                    and nachschauen.vergleich_markt(" ".join(str(n.get("content", "")) for n in nachrichten if n.get("role") == "user")) == "AT"):
+                antwort_text = antwort_text.rstrip() + "\n\n" + (TARIFKALKULATOR_EN if such_sprache(sf) == "en" else TARIFKALKULATOR)
             if antwort_text != vorher_text:
                 strom.neu()
             return antwort_text, vorher_text, lieferschein
@@ -5787,7 +5797,8 @@ def suchfrage(nachrichten: list[dict]) -> str:
         neu = set(wissen.woerter(rest)) - set(wissen.woerter(frueher))
         return f"{frueher} {rest}" if neu else frueher
     davor = nachrichten[:-1] if nachrichten and nachrichten[-1].get("role") == "user" else []
-    if len(davor) >= 2 and davor[-1].get("role") == "assistant" and str(davor[-1].get("content", "")).startswith(schriftstueck.VORSPANN):
+    if len(davor) >= 2 and davor[-1].get("role") == "assistant" and (str(davor[-1].get("content", "")).startswith(schriftstueck.VORSPANN)
+                                                                       or nachschauen.ist_vergleich_rueckfrage(str(davor[-1].get("content", "")))):
         auftrag = next((" ".join(str(n.get("content", "")).split()) for n in reversed(davor) if n.get("role") == "user"), "")
         if auftrag:
             return f"{auftrag[:300]} {letzte}".strip()
@@ -5875,13 +5886,16 @@ VERGLEICH_WARTEN_S = 15.0
 
 def vergleich_runde(frage: str, anfragen: list[str]) -> tuple[list[str], dict]:
     vergleich = belege.vergleichsfrage(frage)
+    sprache = nachschauen.markt_sprache(nachschauen.vergleich_markt(frage)) if vergleich else ""
     if vergleich and anfragen:
         anfragen = list(dict.fromkeys(nachschauen.ohne_vergleichswunsch(q) for q in anfragen))
-        preis, kaufen = ("price", "buy") if such_sprache(frage) == "en" else ("preis", "kaufen")
+        preis, kaufen = nachschauen.kaufwoerter(sprache or ("en" if such_sprache(frage) == "en" else "de"))
         anfragen = list(dict.fromkeys(anfragen + [f"{anfragen[0]} {preis}", f"{anfragen[0]} {kaufen}"]))[:3]
     mehr = {"lesen_max": VERGLEICH_LESEN, "seiten_max": VERGLEICH_SEITEN, "warten_s": VERGLEICH_WARTEN_S, "liste_immer": True} if vergleich else {}
     if vergleich or belege.preisfrage(frage):
         mehr["preis"] = True
+    if sprache:
+        mehr["sprache"] = sprache
     return anfragen, mehr
 SUCHRUNDEN = 3
 FRAGE_FOKUS = ("Gefragt ist genau: „{frage}“. Beantworte genau das. Steht die gefragte Angabe (zum Beispiel eine Dauer, eine Anzahl, ein Ort) "
@@ -5892,14 +5906,16 @@ FRAGE_FOKUS = ("Gefragt ist genau: „{frage}“. Beantworte genau das. Steht di
 REGEL_FOKUS = ("Es geht um eine Regel: beginne mit dem, was gilt, so wie es in den Quellen steht: für wen, ab wann und bis wann, was genau "
                "verlangt ist, Ausnahmen und was bei einem Verstoß droht. Was davon in keiner Quelle steht, lässt du einfach weg.")
 VERGLEICH_FOKUS = ("Die Person will Anbieter mit Preis vergleichen. Schreib eine Tabelle mit den Spalten Anbieter, Preis, Hinweis, nach Preis aufsteigend, "
-                   "eine Zeile je Händler aus den Quellen oben. Anbieter ist der Händler, der verkauft: eine Seite, die viele Händler mit Preis aufführt "
-                   "(ein Preisvergleich), oder ein Zahlungsdienst ist nie ein Anbieter; nimm von ihr die einzelnen Händler, jeden mit genau dem Preis, der "
-                   "bei ihm steht. Die Zeilen „Angebote laut den Produktdaten dieser Seite“ sind die verlässlichsten Preise; „diese Seite“ heißt dort: "
-                   "der Händler, dem die Seite gehört. Nimm nur Preise für genau das gefragte Produkt (gleiche Größe und Ausführung), nie aus ähnlichen "
-                   "Produkten und nie eine Zusatzleistung (Versicherung, Montage, Versand) als eigene Zeile. In den Hinweis kommt nur, was in der Quelle bei diesem Händler steht (Baujahr, Lieferzeit, Land); steht dort nichts, bleibt "
-                   "er leer. Zeigt der Anhang der Person ein Angebot mit Händler und Preis, gehört es als eigene Zeile dazu, mit dem Hinweis „aus deinem "
-                   "Anhang“ und dem Baujahr, wenn es dort steht. Ist ein Angebot älter (früheres Baujahr) als die anderen, sag das. Darunter ein Satz, wer "
-                   "am günstigsten ist. Steht bei keinem Anbieter ein Preis, sag das in einem Satz und nenne die gelesenen Seiten.")
+                   "eine Zeile je Händler aus den Quellen oben. Anbieter ist der Händler, der verkauft: eine Seite, die viele Händler mit Preis aufführt (ein "
+                   "Preisvergleich), oder ein Zahlungsdienst ist nie ein Anbieter; nimm von ihr die einzelnen Händler, jeden mit genau dem Preis, der bei ihm "
+                   "steht. Die Zeilen „Angebote laut den Produktdaten dieser Seite“ sind die verlässlichsten Preise; „diese Seite“ heißt dort: der Händler, "
+                   "dem die Seite gehört. Nimm nur Preise für genau das gefragte Produkt (gleiche Größe und Ausführung), nie aus ähnlichen Produkten und nie "
+                   "eine Zusatzleistung (Versicherung, Montage, Versand) als eigene Zeile. In den Hinweis kommt nur, was in der Quelle bei diesem Händler "
+                   "steht (Baujahr, Lieferzeit, Land); steht dort nichts, bleibt er leer. Zeigt der Anhang der Person ein Angebot mit Händler und Preis, "
+                   "gehört es als eigene Zeile dazu, mit dem Hinweis „aus deinem Anhang“ und dem Baujahr, wenn es dort steht. Ist ein Angebot älter (früheres "
+                   "Baujahr) als die anderen, sag das. Hängt ein Preis von Datum, Uhrzeit, Verbrauch oder Ort ab, schreib in den Hinweis, wofür er gilt, und "
+                   "„ab“ vor den Preis, wenn die Quelle ihn so nennt. Darunter ein Satz, wer am günstigsten ist. Steht bei keinem Anbieter ein Preis, sag das "
+                   "in einem Satz und nenne die gelesenen Seiten.")
 PREIS_FOKUS = ("Es geht um einen Preis: nenne jede Variante, die in den Quellen steht (zum Beispiel nach Dauer oder Fahrzeugklasse), jede mit "
                "ihrem Betrag aus den Quellen.")
 
@@ -5919,6 +5935,10 @@ def _preise(text: str) -> set[str]:
     return out
 
 
+TARIFKALKULATOR = ("Den genauen Vergleich aller Strom- und Gasanbieter für deine Postleitzahl rechnet der amtliche Tarifkalkulator der E-Control: "
+                   "https://www.e-control.at/tarifkalkulator")
+TARIFKALKULATOR_EN = ("The official E-Control tariff calculator works out the exact comparison of all electricity and gas suppliers for your postcode: "
+                      "https://www.e-control.at/tarifkalkulator")
 VERGLEICH_NAEHE = 300
 _DOMAIN = re.compile(r"(?i)\b((?:[a-z0-9-]+\.)+[a-z]{2,10})\b")
 

@@ -11,6 +11,11 @@ def dank(satz: str, wer: str, art: str = "Meldung") -> str:
 
 
 NEUERUNGEN: dict[str, list[str]] = {
+    "2026-10-24n": [
+        "Vergleichst du Strom, Gas, Flüge, Zugtickets oder Hotels, fragt KIplatz zuerst nach dem, wovon der Preis abhängt: bei Strom nach Postleitzahl und Jahresverbrauch, bei Reisen nach dem Datum. Dann vergleicht es mit Preisen, die für dich gelten, statt mit Beispielrechnungen.",
+        "Bei Strom und Gas in Österreich steht unter dem Vergleich jetzt auch der Link zum amtlichen Tarifkalkulator der E-Control.",
+        "Der Preisvergleich sucht jetzt in dem Land, in dem du kaufst, von Deutschland und Italien bis Großbritannien und den USA. Steht das Land nicht in deiner Frage, fragt KIplatz kurz danach.",
+    ],
     "2026-10-24m": [],
     "2026-10-24l": [
         "Längen, Strecken und Gewichte prüft KIplatz jetzt genauer: Eine Angabe wie „26 Minuten“ bleibt nur stehen, wenn eine Quelle wirklich diese Dauer nennt, nicht bloß irgendwo die Zahl 26.",
