@@ -70,6 +70,7 @@ import neuerungen
 import gespraeche_import
 import hausordnung
 import krisenhilfe
+import prompt_pruefer
 import heimnetz
 import ki_laufzeit
 import modell_katalog
@@ -2189,6 +2190,9 @@ class Api:
         vorige = next((str(n.get("content") or "") for n in reversed(nachrichten[:-1]) if n.get("role") == "assistant"), "")
         if uebersetzen and en_frage and ab.art == "sprache" and ab.sprache == "en" and vorige.strip():
             return ohne_auszuege(ohne_markdown(vorige)), "übersetzt", "die vorige Antwort, ins Englische übertragen.", ""
+        pp = prompt_pruefer.antwort(str(nachrichten[-1].get("content", "")) if nachrichten else frage)
+        if pp is not None:
+            return pp[0], prompt_pruefer.GEMACHT, prompt_pruefer.WOHER, pp[1]
         if waehrung:
             kw = self._waehrung_antwort(frage)
             if kw is not None:

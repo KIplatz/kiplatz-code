@@ -11,6 +11,9 @@ def dank(satz: str, wer: str, art: str = "Meldung") -> str:
 
 
 NEUERUNGEN: dict[str, list[str]] = {
+    "2026-10-24q": [
+        "Neu: KIplatz prüft deinen Prompt. Schreib „Prüf meinen Prompt:“ und füge deine Anweisung an, dann siehst du sofort, welche von acht Angaben fehlen, etwa Rolle, Länge oder Ton, und ob persönliche Daten drinstehen.",
+    ],
     "2026-10-24p": [
         "Sagt eine Antwort, auf welchen Wochentag ein Datum fällt, rechnet KIplatz das jetzt selbst nach und berichtigt einen falschen Tag.",
     ],
