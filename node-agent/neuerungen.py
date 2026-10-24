@@ -11,6 +11,7 @@ def dank(satz: str, wer: str, art: str = "Meldung") -> str:
 
 
 NEUERUNGEN: dict[str, list[str]] = {
+    "2026-10-24m": [],
     "2026-10-24l": [
         "Längen, Strecken und Gewichte prüft KIplatz jetzt genauer: Eine Angabe wie „26 Minuten“ bleibt nur stehen, wenn eine Quelle wirklich diese Dauer nennt, nicht bloß irgendwo die Zahl 26.",
     ],

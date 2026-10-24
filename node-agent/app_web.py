@@ -5896,7 +5896,7 @@ VERGLEICH_FOKUS = ("Die Person will Anbieter mit Preis vergleichen. Schreib eine
                    "(ein Preisvergleich), oder ein Zahlungsdienst ist nie ein Anbieter; nimm von ihr die einzelnen Händler, jeden mit genau dem Preis, der "
                    "bei ihm steht. Die Zeilen „Angebote laut den Produktdaten dieser Seite“ sind die verlässlichsten Preise; „diese Seite“ heißt dort: "
                    "der Händler, dem die Seite gehört. Nimm nur Preise für genau das gefragte Produkt (gleiche Größe und Ausführung), nie aus ähnlichen "
-                   "Produkten. In den Hinweis kommt nur, was in der Quelle bei diesem Händler steht (Baujahr, Lieferzeit, Land); steht dort nichts, bleibt "
+                   "Produkten und nie eine Zusatzleistung (Versicherung, Montage, Versand) als eigene Zeile. In den Hinweis kommt nur, was in der Quelle bei diesem Händler steht (Baujahr, Lieferzeit, Land); steht dort nichts, bleibt "
                    "er leer. Zeigt der Anhang der Person ein Angebot mit Händler und Preis, gehört es als eigene Zeile dazu, mit dem Hinweis „aus deinem "
                    "Anhang“ und dem Baujahr, wenn es dort steht. Ist ein Angebot älter (früheres Baujahr) als die anderen, sag das. Darunter ein Satz, wer "
                    "am günstigsten ist. Steht bei keinem Anbieter ein Preis, sag das in einem Satz und nenne die gelesenen Seiten.")
@@ -5983,10 +5983,18 @@ def vergleich_zeilen_pruefen(text: str, quellen: list[dict], *, englisch: bool =
             dort = set().union(*(_preise(t) for h in eigene for t in seiten[h])) if eigene else set()
             gut = bool(preise & dort) if dort else any(preise & _preis_nach_name(s, name) for s in stellen)
         if gut:
-            bleibt.append((min(float(p.replace(",", ".")) for p in preise), name, min(preise, key=lambda p: float(p.replace(",", ".")))))
+            bleibt.append((min(float(p.replace(",", ".")) for p in preise), name, min(preise, key=lambda p: float(p.replace(",", "."))), i))
         else:
             weg.append(i)
             gestrichen |= {k} | preise
+    if len(bleibt) >= 3:
+        mitte = sorted(b[0] for b in bleibt)[len(bleibt) // 2]
+        for b in [b for b in bleibt if b[0] < mitte / 3]:
+            bleibt.remove(b)
+            weg.append(b[3])
+            gestrichen.add(b[2])
+    bleibt = [b[:3] for b in bleibt]
+    weg.sort()
     if not weg:
         return text, 0
     if not bleibt:
