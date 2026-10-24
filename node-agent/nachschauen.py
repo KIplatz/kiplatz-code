@@ -262,13 +262,27 @@ ist sind war hat haben wird werden kann soll sollte gibt's""".split())
 _NICHT_SUCHEN |= set("""brauche brauchst braucht brauchen benötige benötigst benötigt benötigen muss musst müssen darf darfst dürfen als
 do does did i you we he she it they a an the to of for is are was were be can could should would will must need needs my your our their
 what how when where who which why there please tell me""".split())
+_NICHT_SUCHEN |= set("""bekomme bekommst bekommt bekommen kriege kriegst kriegt find get""".split())
+
+
+_VERGLEICH_WUNSCH = re.compile(r"(?i)^(?:günstig\w*|guenstig\w*|billig\w*|preiswert\w*|anbieter\w*|händler\w*|haendler\w*|shops?|angebot\w*|preisvergleich\w*|"
+                               r"vergleich\w*|bester?n?|cheap\w*|best|lowest|seller\w*|shops?|offers?|deals?|compare|comparison|price|prices)$")
+
+
+def ohne_vergleichswunsch(anfrage: str) -> str:
+    rest = [w for w in str(anfrage or "").split() if not _VERGLEICH_WUNSCH.match(w.strip(",.;:!?„“\"'"))]
+    return " ".join(rest) if len(rest) >= 2 else str(anfrage or "")
 
 
 def suchbegriffe_regel(text: str, frueher: str = "") -> str:
+    vergleich = belege.vergleichsfrage(text)
+
     def worte(t: str) -> list[str]:
         weg = {m.lower() for m in re.findall(r"\b(?:nicht|kein\w*)\s+(?:(?:von|um|über|nach|mit)\s+)?(?:(?:einer|einem|einen|eine|der|die|das|den|dem)\s+)?([\wäöüÄÖÜß-]+)", t or "", re.I)}
         out = []
-        for w in re.findall(r"[\wäöüÄÖÜß-]+", t or ""):
+        for w in re.findall(r"[\wäöüÄÖÜß-]+(?:/[\wäöüÄÖÜß-]+)*", t or ""):
+            if vergleich and _VERGLEICH_WUNSCH.match(w):
+                continue
             if len(w) < 2 or w.lower() in _NICHT_SUCHEN or w.lower() in weg or w.lower() in out:
                 continue
             out.append(w)
@@ -998,7 +1012,7 @@ def geldbetraege(text: str) -> set[str]:
 
 
 def preis_punkte(text: str) -> float:
-    if str(text or "").startswith(wissen.ANGEBOTE_KOPF):
+    if wissen.ANGEBOTE_KOPF in str(text or ""):
         return 3.0
     return 1.0 if geldbetraege(text) else 0.0
 

@@ -532,7 +532,7 @@ def angebote_aus_seite(roh: str) -> str:
         waehrung = next(iter(mikro("priceCurrency", r"[A-Za-z]{3}")), "").upper()
         tief, hoch = [p for p in map(_betrag, mikro("lowPrice")) if p][:1], [p for p in map(_betrag, mikro("highPrice")) if p][:1]
         anzahl = next(iter(mikro("offerCount", r"\d+")), "")
-        if tief or len(set(preise)) > 2:
+        if tief or anzahl:
             werte = sorted({float(p.replace(",", ".")) for p in preise + tief + hoch})
             von, bis = (tief or [f"{werte[0]:.2f}".replace(".", ",")])[0], (hoch or [f"{werte[-1]:.2f}".replace(".", ",")])[0]
             zeilen.append(f"- {MEHRERE_HAENDLER}: {von} bis {bis} {waehrung}".rstrip() + (f", {anzahl} Angebote" if anzahl else ""))

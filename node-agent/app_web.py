@@ -1267,6 +1267,7 @@ class Api:
         if lauf is None or lauf["runde"] or lauf["gesucht"] or "nebenher" in lauf or not hasattr(self._nachschauer, "suche_runde"):
             return
         anfragen = nachschauen.anfragen_aufteilen(self._suchwoerter(nachrichten, frage, ohne_modell=True) or [frage], frage)
+        anfragen, mehr = vergleich_runde(frage, anfragen)
         richtung = nachschauen.richtung(frage)
         erg: dict = {}
 
@@ -1278,7 +1279,7 @@ class Api:
             ki_laufzeit.zone_setzen(zone)
             try:
                 erg["r"] = self._nachschauer.suche_runde(anfragen, frage, sprache=sprache, zeit=nachschauen.zeitraum(frage),
-                                                          ausser=frozenset(), ziel=zeitziel(frage))
+                                                          ausser=frozenset(), ziel=zeitziel(frage), **mehr)
             except BaseException as exc:
                 erg["e"] = exc
 
@@ -1411,10 +1412,9 @@ class Api:
         else:
             neben = None
         vergleich = belege.vergleichsfrage(frage)
-        if vergleich and anfragen:
-            anfragen = list(dict.fromkeys(anfragen + [f"{anfragen[0]} preis", f"{anfragen[0]} kaufen"]))[:3]
-            if neben is not None and neben["anfragen"] != anfragen:
-                neben = None
+        anfragen, mehr = vergleich_runde(frage, anfragen)
+        if neben is not None and neben["anfragen"] != anfragen:
+            neben = None
         if vergleich:
             self._schritt("Einen Moment, ich vergleiche mehrere Anbieter, das dauert etwas …")
         elif len(anfragen) > 1:
@@ -1422,9 +1422,6 @@ class Api:
             self._schritt(f"sucht im Internet nach {vorne} und „{letzte}“ und liest die besten Seiten …")
         else:
             self._schritt(f"sucht im Internet nach „{''.join(anfragen)}“ und liest die besten Seiten …")
-        mehr = {"lesen_max": VERGLEICH_LESEN, "seiten_max": VERGLEICH_SEITEN, "warten_s": VERGLEICH_WARTEN_S, "liste_immer": True} if vergleich else {}
-        if vergleich or belege.preisfrage(frage):
-            mehr["preis"] = True
         try:
             ergebnisse, gelesen, woher = neben["holen"]() if neben is not None else self._nachschauer.suche_runde(
                 anfragen, frage, sprache=such_sprache(frage), zeit=nachschauen.zeitraum(frage),
@@ -5874,6 +5871,18 @@ SUCHWORT_ANDERS = ("Diese Suchen wurden schon gemacht und haben die Antwort nich
 VERGLEICH_LESEN = 10
 VERGLEICH_SEITEN = 8
 VERGLEICH_WARTEN_S = 15.0
+
+
+def vergleich_runde(frage: str, anfragen: list[str]) -> tuple[list[str], dict]:
+    vergleich = belege.vergleichsfrage(frage)
+    if vergleich and anfragen:
+        anfragen = list(dict.fromkeys(nachschauen.ohne_vergleichswunsch(q) for q in anfragen))
+        preis, kaufen = ("price", "buy") if such_sprache(frage) == "en" else ("preis", "kaufen")
+        anfragen = list(dict.fromkeys(anfragen + [f"{anfragen[0]} {preis}", f"{anfragen[0]} {kaufen}"]))[:3]
+    mehr = {"lesen_max": VERGLEICH_LESEN, "seiten_max": VERGLEICH_SEITEN, "warten_s": VERGLEICH_WARTEN_S, "liste_immer": True} if vergleich else {}
+    if vergleich or belege.preisfrage(frage):
+        mehr["preis"] = True
+    return anfragen, mehr
 SUCHRUNDEN = 3
 FRAGE_FOKUS = ("Gefragt ist genau: „{frage}“. Beantworte genau das. Steht die gefragte Angabe (zum Beispiel eine Dauer, eine Anzahl, ein Ort) "
                "in keiner Quelle, sag das in einem Satz, statt eine andere Zahl oder Angabe zu nennen. Schreib in eigenen Worten, nie mehr als 6 "
