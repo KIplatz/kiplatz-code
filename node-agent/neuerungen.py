@@ -11,6 +11,7 @@ def dank(satz: str, wer: str, art: str = "Meldung") -> str:
 
 
 NEUERUNGEN: dict[str, list[str]] = {
+    "2026-10-24o": [],
     "2026-10-24n": [
         "Vergleichst du Strom, Gas, Flüge, Zugtickets oder Hotels, fragt KIplatz zuerst nach dem, wovon der Preis abhängt: bei Strom nach Postleitzahl und Jahresverbrauch, bei Reisen nach dem Datum. Dann vergleicht es mit Preisen, die für dich gelten, statt mit Beispielrechnungen.",
         "Bei Strom und Gas in Österreich steht unter dem Vergleich jetzt auch der Link zum amtlichen Tarifkalkulator der E-Control.",

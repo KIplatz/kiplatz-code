@@ -5978,6 +5978,8 @@ def vergleich_zeilen_pruefen(text: str, quellen: list[dict], *, englisch: bool =
             seiten.setdefault(host, []).append(t)
         stellen.append(t)
     vergleiche = {h for h, ts in seiten.items() if any(nachschauen.PREISVERGLEICH_SATZ in t for t in ts) or nachschauen.preisvergleich("\n".join(ts))}
+    vergleiche |= {nachschauen._host(str(q.get("adresse", ""))) for q in quellen or []
+                   if nachschauen._PREISVERGLEICH_WORT.search(str(q.get("titel", ""))) and not str(q.get("titel", "")).startswith(nachschauen.SUCHERGEBNISSE_TITEL)}
     if anhang.strip():
         for h in {d.lower() for d in _DOMAIN.findall(anhang)}:
             seiten.setdefault(h, []).append(anhang)
