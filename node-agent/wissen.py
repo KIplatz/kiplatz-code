@@ -460,7 +460,25 @@ def seite_holen(adresse: str, *, oeffner=None, pruefer=None, fuer_frage: bool = 
 ANGEBOTE_KOPF = "Angebote laut den Produktdaten dieser Seite"
 ANGEBOTE_MAX = 25
 MEHRERE_HAENDLER = "mehrere Händler zusammen"
-_LD_JSON = re.compile(r"<script[^>]*type\s*=\s*[\"']?application/ld\+json[\"']?[^>]*>(.*?)</script>", re.S | re.I)
+ANGEBOTE_KNOTEN = 2000
+
+
+def _ld_bloecke(roh: str) -> list[str]:
+    klein, aus, p = roh.lower(), [], 0
+    while len(aus) < 20:
+        a = klein.find("<script", p)
+        if a < 0:
+            break
+        e = klein.find(">", a)
+        if e < 0:
+            break
+        z = klein.find("</script", e)
+        if z < 0:
+            break
+        if "application/ld+json" in klein[a:e]:
+            aus.append(roh[e + 1:z])
+        p = z + 8
+    return aus
 
 
 def _betrag(wert) -> str:
@@ -480,17 +498,22 @@ def angebote_aus_seite(roh: str) -> str:
     name = ""
 
     def knoten(d):
-        if isinstance(d, list):
-            for x in d:
-                yield from knoten(x)
-        elif isinstance(d, dict):
-            yield d
-            yield from knoten(d.get("@graph") or [])
+        offen, n = [d], 0
+        while offen and n < ANGEBOTE_KNOTEN:
+            x = offen.pop(0)
+            n += 1
+            if isinstance(x, list):
+                offen[:0] = x
+            elif isinstance(x, dict):
+                yield x
+                g = x.get("@graph")
+                if isinstance(g, (list, dict)):
+                    offen.insert(0, g)
 
-    for block in _LD_JSON.findall(roh):
+    for block in _ld_bloecke(roh):
         try:
             daten = json.loads(block.strip())
-        except ValueError:
+        except (ValueError, RecursionError):
             continue
         for k in knoten(daten):
             typ = k.get("@type")
@@ -523,7 +546,7 @@ def angebote_aus_seite(roh: str) -> str:
     if not zeilen:
         def mikro(feld: str, wert: str = r"[\d.,]+") -> list[str]:
             out = []
-            for m in re.finditer(r"<[^>]*\bitemprop\s*=\s*[\"']?" + feld + r"\b[^>]*>", roh, re.I):
+            for m in re.finditer(r"<[^<>]*\bitemprop\s*=\s*[\"']?" + feld + r"\b[^<>]*>", roh, re.I):
                 c = re.search(r"\bcontent\s*=\s*[\"']?(" + wert + ")", m.group(0), re.I)
                 if c:
                     out.append(c.group(1))
@@ -532,8 +555,8 @@ def angebote_aus_seite(roh: str) -> str:
         waehrung = next(iter(mikro("priceCurrency", r"[A-Za-z]{3}")), "").upper()
         tief, hoch = [p for p in map(_betrag, mikro("lowPrice")) if p][:1], [p for p in map(_betrag, mikro("highPrice")) if p][:1]
         anzahl = next(iter(mikro("offerCount", r"\d+")), "")
-        if tief or anzahl:
-            werte = sorted({float(p.replace(",", ".")) for p in preise + tief + hoch})
+        werte = sorted({float(p.replace(",", ".")) for p in preise + tief + hoch})
+        if (tief or anzahl) and werte:
             von, bis = (tief or [f"{werte[0]:.2f}".replace(".", ",")])[0], (hoch or [f"{werte[-1]:.2f}".replace(".", ",")])[0]
             zeilen.append(f"- {MEHRERE_HAENDLER}: {von} bis {bis} {waehrung}".rstrip() + (f", {anzahl} Angebote" if anzahl else ""))
         elif preise:

@@ -6,7 +6,7 @@ export const MAX_ANHAENGE = 3;
 export const MAX_NACHRICHT = 8000;
 export const MAX_SEITEN = 200;
 export const TEXT_ARTEN = [".txt", ".md", ".csv", ".html", ".htm"];
-export const DATEI_ARTEN = [".pdf", ".docx", ...TEXT_ARTEN];
+export const DATEI_ARTEN = [".pdf", ".docx", ".xlsx", ...TEXT_ARTEN];
 export const BILD_ARTEN = [".png", ".jpg", ".jpeg", ".webp", ".gif", ".heic", ".heif"];
 
 export class AnhangFehler extends Error {}
@@ -19,6 +19,7 @@ export function art(name, typ = "") {
   const e = endung(name);
   if (e === ".pdf") return "pdf";
   if (e === ".docx") return "docx";
+  if (e === ".xlsx") return "xlsx";
   if (e === ".html" || e === ".htm") return "html";
   if (TEXT_ARTEN.includes(e)) return "text";
   if (BILD_ARTEN.includes(e) || /^image\//.test(typ)) return "bild";
@@ -38,13 +39,13 @@ async function inflate(roh, grenze = MAX_ENTPACKT) {
       const { done, value } = await leser.read();
       if (done) break;
       n += value.length;
-      if (n > grenze) throw new AnhangFehler("Die Word-Datei ist zu groß.");
+      if (n > grenze) throw new AnhangFehler("Die Datei ist zu groß.");
       teile.push(value);
     }
   } catch (e) {
     leser.cancel().catch(() => {});
     if (e instanceof AnhangFehler) throw e;
-    throw new AnhangFehler("Die Word-Datei ist beschädigt.");
+    throw new AnhangFehler("Die Datei ist beschädigt.");
   }
   const aus = new Uint8Array(n);
   let p = 0;
@@ -57,7 +58,7 @@ export async function zipDatei(bytes, gesucht) {
   const d = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let ende = -1;
   for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557); i--) if (d.getUint32(i, true) === 0x06054b50) { ende = i; break; }
-  if (ende < 0) throw new AnhangFehler("Die Word-Datei ist beschädigt.");
+  if (ende < 0) throw new AnhangFehler("Die Datei ist beschädigt.");
   const anzahl = d.getUint16(ende + 10, true);
   let p = d.getUint32(ende + 16, true);
   const dec = new TextDecoder();
@@ -67,12 +68,12 @@ export async function zipDatei(bytes, gesucht) {
     const nl = d.getUint16(p + 28, true), el = d.getUint16(p + 30, true), kl = d.getUint16(p + 32, true), lokal = d.getUint32(p + 42, true);
     const name = dec.decode(bytes.subarray(p + 46, p + 46 + nl));
     if (name === gesucht) {
-      if (klein > MAX_ENTPACKT) throw new AnhangFehler("Die Word-Datei ist zu groß.");
+      if (klein > MAX_ENTPACKT) throw new AnhangFehler("Die Datei ist zu groß.");
       const start = lokal + 30 + d.getUint16(lokal + 26, true) + d.getUint16(lokal + 28, true);
       const roh = bytes.subarray(start, start + gross);
       if (methode === 0) return roh;
       if (methode === 8) return inflate(roh);
-      throw new AnhangFehler("Diese Word-Datei ist ungewöhnlich gepackt.");
+      throw new AnhangFehler("Diese Datei ist ungewöhnlich gepackt.");
     }
     p += 46 + nl + el + kl;
   }
@@ -96,6 +97,85 @@ export async function docxText(bytes) {
     absaetze.push(t);
   }
   return sauber(absaetze.join("\n"));
+}
+
+
+const XLSX_TABELLEN = 10;
+const XLSX_ZEILEN = 3000;
+const DATUM_FORMATE = new Set([14, 15, 16, 17, 18, 19, 20, 21, 22, 45, 46, 47]);
+
+function xmlDok(bytes) {
+  return new DOMParser().parseFromString(new TextDecoder().decode(bytes), "application/xml");
+}
+
+const XLSX_SPALTEN = 200;
+
+function spalte(ref) {
+  let n = 0;
+  for (const ch of (String(ref).match(/^[A-Z]{0,4}/) || [""])[0]) n = n * 26 + ch.charCodeAt(0) - 64;
+  return n <= XLSX_SPALTEN ? Math.max(n - 1, 0) : -1;
+}
+
+export async function xlsxText(bytes) {
+  const mappeXml = await zipDatei(bytes, "xl/workbook.xml");
+  const bezXml = await zipDatei(bytes, "xl/_rels/workbook.xml.rels");
+  if (!mappeXml || !bezXml) throw new AnhangFehler("Das ist keine Excel-Datei (.xlsx).");
+  const ziele = {};
+  for (const b of xmlDok(bezXml).getElementsByTagNameNS("*", "Relationship")) ziele[b.getAttribute("Id")] = b.getAttribute("Target") || "";
+  const geteilt = await zipDatei(bytes, "xl/sharedStrings.xml");
+  const texte = geteilt ? [...xmlDok(geteilt).getElementsByTagNameNS("*", "si")].map((si) => [...si.getElementsByTagNameNS("*", "t")].map((t) => t.textContent).join("")) : [];
+  const datumStil = new Set();
+  const stileXml = await zipDatei(bytes, "xl/styles.xml");
+  if (stileXml) {
+    const stile = xmlDok(stileXml);
+    const eigene = new Set([...stile.getElementsByTagNameNS("*", "numFmt")]
+      .filter((f) => /[dy]/i.test((f.getAttribute("formatCode") || "").replace(/"[^"]*"|\[[^\]]*\]/g, "")))
+      .map((f) => Number(f.getAttribute("numFmtId"))));
+    const xfs = stile.getElementsByTagNameNS("*", "cellXfs")[0];
+    [...(xfs ? xfs.getElementsByTagNameNS("*", "xf") : [])].forEach((xf, i) => {
+      const id = Number(xf.getAttribute("numFmtId") || 0);
+      if (DATUM_FORMATE.has(id) || eigene.has(id)) datumStil.add(i);
+    });
+  }
+  const R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+  const teile = [];
+  let zeilenGesamt = 0;
+  for (const blatt of [...xmlDok(mappeXml).getElementsByTagNameNS("*", "sheet")].slice(0, XLSX_TABELLEN)) {
+    const ziel = ziele[blatt.getAttributeNS(R, "id") || blatt.getAttribute("r:id")] || "";
+    const daten = await zipDatei(bytes, ziel.startsWith("/") ? ziel.slice(1) : "xl/" + ziel);
+    if (!daten) continue;
+    const zeilen = [];
+    for (const row of xmlDok(daten).getElementsByTagNameNS("*", "row")) {
+      const werte = new Map();
+      for (const c of row.getElementsByTagNameNS("*", "c")) {
+        const art = c.getAttribute("t") || "", v = c.getElementsByTagNameNS("*", "v")[0];
+        let w = "";
+        if (art === "s" && v && /^\d+$/.test(v.textContent) && Number(v.textContent) < texte.length) w = texte[Number(v.textContent)];
+        else if (art === "inlineStr") w = [...c.getElementsByTagNameNS("*", "t")].map((t) => t.textContent).join("");
+        else if (art === "b" && v) w = v.textContent === "1" ? "WAHR" : "FALSCH";
+        else if (v) {
+          w = v.textContent;
+          const zahl = Number(w);
+          if (datumStil.has(Number(c.getAttribute("s") ?? -1)) && (art === "" || art === "n") && Number.isFinite(zahl)) {
+            const d = new Date(Date.UTC(1899, 11, 30) + Math.round(zahl * 86400000));
+            w = `${String(d.getUTCDate()).padStart(2, "0")}.${String(d.getUTCMonth() + 1).padStart(2, "0")}.${d.getUTCFullYear()}`;
+          } else if (/^-?\d+\.\d{6,}$/.test(w)) w = String(Number(Number(w).toPrecision(6)));
+        }
+        const sp = spalte(c.getAttribute("r") || "");
+        if (sp >= 0) werte.set(sp, String(w).replace(/\s+/g, " ").trim());
+      }
+      if ([...werte.values()].some(Boolean)) {
+        const breite = Math.max(...werte.keys()) + 1;
+        zeilen.push(Array.from({ length: breite }, (_, i) => werte.get(i) || "").join(" | ").replace(/[ |]+$/, ""));
+      }
+      if (zeilen.length >= XLSX_ZEILEN) break;
+    }
+    zeilenGesamt += zeilen.length;
+    if (zeilen.length) teile.push(`[Tabelle „${blatt.getAttribute("name") || ""}“, ${zeilen.length} Zeilen]\n` + zeilen.join("\n"));
+  }
+  const text = teile.join("\n\n");
+  if (text.length < 5) throw new AnhangFehler("In dieser Excel-Datei steht nichts.");
+  return { text, info: teile.length === 1 ? `1 Tabelle, ${zeilenGesamt} Zeilen` : `${teile.length} Tabellen, ${zeilenGesamt} Zeilen` };
 }
 
 
@@ -187,12 +267,13 @@ async function bildText(datei, fortschritt) {
 
 export async function lesen(datei, fortschritt) {
   const a = art(datei.name, datei.type);
-  if (!a) throw new AnhangFehler(`„${datei.name}“ kann KIplatz nicht lesen. Es gehen PDF, Word (.docx), Text und Fotos.`);
+  if (!a) throw new AnhangFehler(`„${datei.name}“ kann KIplatz nicht lesen. Es gehen PDF, Word (.docx), Excel (.xlsx), Text und Fotos.`);
   if (datei.size > MAX_DATEI) throw new AnhangFehler(`„${datei.name}“ ist größer als 25 MB.`);
   if (a === "bild") return { name: datei.name, art: a, ...(await bildText(datei, fortschritt)) };
   const bytes = new Uint8Array(await datei.arrayBuffer());
   if (a === "pdf") return { name: datei.name, art: a, ...(await pdfText(bytes, fortschritt)) };
   if (a === "docx") return { name: datei.name, art: a, text: await docxText(bytes), info: "Word" };
+  if (a === "xlsx") return { name: datei.name, art: a, ...(await xlsxText(bytes)) };
   const roh = new TextDecoder().decode(bytes);
   const text = a === "html" ? htmlText(roh) : sauber(roh);
   if (!text) throw new AnhangFehler(`In „${datei.name}“ steht kein Text.`);

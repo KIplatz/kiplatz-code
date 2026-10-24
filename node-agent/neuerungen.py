@@ -11,6 +11,9 @@ def dank(satz: str, wer: str, art: str = "Meldung") -> str:
 
 
 NEUERUNGEN: dict[str, list[str]] = {
+    "2026-10-24s": [
+        "Neu: Häng eine Excel-Datei an, und KIplatz liest jede Tabelle darin, mit Datum statt Zahlencode. Frag dann zum Beispiel, wofür du am meisten ausgegeben hast. Das gilt in der App, im Programm und auf kiplatz.at.",
+    ],
     "2026-10-24r": [
         "Neu: Frag „Darf KI meine Website lesen?“ mit der Adresse dazu, und KIplatz sagt dir je KI-Programm, ob es die Seite für Antworten oder fürs Training lesen darf, so wie es in der robots.txt steht.",
         "Antworten, die KIplatz ohne KI-Modell selbst erarbeitet, etwa Rechnungen oder Prüfungen, stehen auf der Website jetzt auch so da.",

@@ -370,10 +370,47 @@ test("Anhang: ZIP-Bombe mit gelogener Größe wird nach 60 MB abgebrochen", asyn
   const bombe = await zipBauen("word/document.xml", new Uint8Array(61 * 1024 * 1024), 100);
   let fehler = "";
   try { await an.docxText(bombe); } catch (e) { fehler = e instanceof an.AnhangFehler ? e.message : "falscher Fehler: " + e; }
-  gleich(fehler, "Die Word-Datei ist zu groß.");
+  gleich(fehler, "Die Datei ist zu groß.");
   let keinWord = "";
   try { await an.docxText(await zipBauen("anderes.xml", "x")); } catch (e) { keinWord = e.message; }
   gleich(keinWord, "Das ist keine Word-Datei (.docx).");
+});
+
+async function zipViele(dateien) {
+  const teile = [], zentral = [];
+  let ort = 0;
+  for (const [name, inhalt] of Object.entries(dateien)) {
+    const roh = new TextEncoder().encode(inhalt);
+    const gepackt = new Uint8Array(await new Response(new Blob([roh]).stream().pipeThrough(new CompressionStream("deflate-raw"))).arrayBuffer());
+    const n = new TextEncoder().encode(name);
+    const lokal = new Uint8Array(30 + n.length), z = new Uint8Array(46 + n.length);
+    const l = new DataView(lokal.buffer), zv = new DataView(z.buffer);
+    l.setUint32(0, 0x04034b50, true); l.setUint16(8, 8, true); l.setUint32(18, gepackt.length, true); l.setUint32(22, roh.length, true); l.setUint16(26, n.length, true); lokal.set(n, 30);
+    zv.setUint32(0, 0x02014b50, true); zv.setUint16(10, 8, true); zv.setUint32(20, gepackt.length, true); zv.setUint32(24, roh.length, true); zv.setUint16(28, n.length, true); zv.setUint32(42, ort, true); z.set(n, 46);
+    teile.push(lokal, gepackt); zentral.push(z); ort += lokal.length + gepackt.length;
+  }
+  const groesseZ = zentral.reduce((s, z) => s + z.length, 0);
+  const ende = new Uint8Array(22), e = new DataView(ende.buffer);
+  e.setUint32(0, 0x06054b50, true); e.setUint16(8, zentral.length, true); e.setUint16(10, zentral.length, true); e.setUint32(12, groesseZ, true); e.setUint32(16, ort, true);
+  const alle = [...teile, ...zentral, ende], aus = new Uint8Array(alle.reduce((s, t) => s + t.length, 0));
+  let p = 0; for (const t of alle) { aus.set(t, p); p += t.length; }
+  return aus;
+}
+
+test("Anhang: Excel wie im Programm, Tabellen, geteilte Texte, Datum, leere Zellen (24.10.2026)", async () => {
+  const X = "http://schemas.openxmlformats.org/spreadsheetml/2006/main", R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+  const xlsx = await zipViele({
+    "xl/workbook.xml": `<?xml version="1.0"?><workbook xmlns="${X}" xmlns:r="${R}"><sheets><sheet name="Ausgaben" sheetId="1" r:id="rId1"/></sheets></workbook>`,
+    "xl/_rels/workbook.xml.rels": `<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Target="worksheets/sheet1.xml" Type="x"/></Relationships>`,
+    "xl/sharedStrings.xml": `<?xml version="1.0"?><sst xmlns="${X}"><si><t>Monat</t></si><si><t>Betrag</t></si><si><t>Strom</t></si></sst>`,
+    "xl/styles.xml": `<?xml version="1.0"?><styleSheet xmlns="${X}"><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="14"/></cellXfs></styleSheet>`,
+    "xl/worksheets/sheet1.xml": `<?xml version="1.0"?><worksheet xmlns="${X}"><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row>`
+      + `<row r="2"><c r="A2" s="1"><v>45930</v></c><c r="C2" t="s"><v>2</v></c><c r="D2"><v>84.5</v></c></row></sheetData></worksheet>`,
+  });
+  const r = await an.xlsxText(xlsx);
+  gleich(r.text, "[Tabelle „Ausgaben“, 2 Zeilen]\nMonat | Betrag\n30.09.2025 |  | Strom | 84.5");
+  gleich(r.info, "1 Tabelle, 2 Zeilen");
+  gleich(an.art("liste.XLSX"), "xlsx");
 });
 
 test("Anhang: HTML nur sichtbarer Text, Skripte und Stile fallen weg", () => {

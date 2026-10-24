@@ -3518,7 +3518,7 @@ class Api:
 
     def gespraech_anhang(self, kennung: str) -> dict:
         def go():
-            p = self._datei_waehlen(("Dokumente (*.pdf;*.docx;*.txt;*.md;*.html;*.htm;*.csv)", "Alle Dateien (*.*)"))
+            p = self._datei_waehlen(("Dokumente (*.pdf;*.docx;*.xlsx;*.txt;*.md;*.html;*.htm;*.csv)", "Alle Dateien (*.*)"))
             a = anhaenge.lesen(p)
             b = hausordnung.pruefen(a.text[:20_000])
             if not b.ok:
