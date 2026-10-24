@@ -500,6 +500,7 @@ def brauchbar(text: str) -> bool:
 WOERTLICH_WOERTER = antwortspeicher_basis.WOERTLICH_WOERTER
 WORTLAUT_FREI = antwortspeicher_basis.FREI_ARTEN
 _wortliste = antwortspeicher_basis.wortliste
+_LINK_MIT_TITEL = re.compile(r"https?://[^\s<>\"“”„()\[\]]+(?:\s*[–—:-]\s*[„\"“][^“\"”\n]{0,200}[“\"”])?", re.I)
 
 
 def fremde_texte(quellen) -> list[str]:
@@ -517,7 +518,7 @@ def woertliche_saetze(antwort: str, fremd: list[str], n: int = WOERTLICH_WOERTER
     woerter: list[str] = []
     satz_von: list[int] = []
     for k, s in enumerate(saetze):
-        w = _wortliste(s)
+        w = _wortliste(_LINK_MIT_TITEL.sub(" ", s))
         woerter += w
         satz_von += [k] * len(w)
     laenge = [satz_von.count(k) for k in range(len(saetze))]

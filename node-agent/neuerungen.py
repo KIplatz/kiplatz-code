@@ -11,6 +11,9 @@ def dank(satz: str, wer: str, art: str = "Meldung") -> str:
 
 
 NEUERUNGEN: dict[str, list[str]] = {
+    "2026-10-24j": [
+        "Videos mit Kurznamen erscheinen jetzt auch als Karte: Wer nach dem Trailer von „GTA VI“ fragt, bekommt das Video „Grand Theft Auto VI“, und nie eines zu GTA V. Ein Link in der Antwort bleibt stehen, auch wenn KIplatz den Satz daneben in eigenen Worten schreibt.",
+    ],
     "2026-10-24i": [
         "Der Preisvergleich findet jetzt die echten Shops: KIplatz liest jeden Preis so, wie ihn der Shop selbst für Suchmaschinen angibt, und zeigt jeden Händler mit seinem Preis. Preisvergleichsseiten und Zahlungsdienste stehen nicht mehr als Anbieter in der Tabelle.",
         "Hast du ein Angebot als Foto angehängt, steht es jetzt als eigene Zeile in der Tabelle, mit Baujahr, wenn es draufsteht. So siehst du gleich, ob es woanders günstiger geht.",

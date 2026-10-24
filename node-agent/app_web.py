@@ -6815,6 +6815,7 @@ def eigene_worte(text: str, fremd: list[str], umschreiben=None, *, englisch: boo
             neu = " ".join(str(neue.get(i) or "").split())
             if (neu and re.search(r"[.!?…“\")]$", neu) and belege.brauchbar(neu) and not belege.woertliche_saetze(neu, fremd)
                     and not _WEISS_NICHT.search(neu) and belege.zahlenwerte(alt) <= belege.zahlenwerte(neu) and belege.daten(alt) <= belege.daten(neu)
+                    and set(belege._LINK.findall(alt)) <= set(belege._LINK.findall(neu))
                     and alt in neu_text):
                 neu_text = neu_text.replace(alt, neu, 1)
                 ursprung = next((k for k, v in ersetzt.items() if v == alt), alt)

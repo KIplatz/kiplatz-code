@@ -1050,10 +1050,36 @@ _VIDEO_ALLGEMEIN = frozenset(wissen.woerter(
 _VIDEO_UNTERSCHEIDER = frozenset(wissen.woerter("trailer review test teil folge part episode deutsch german english englisch"))
 
 
+_ROEMISCH = {"ii": 2, "iii": 3, "iv": 4, "v": 5, "vi": 6, "vii": 7, "viii": 8, "ix": 9, "x": 10, "xi": 11, "xii": 12, "xiii": 13,
+             "xiv": 14, "xv": 15, "xvi": 16}
+_NAME_ZAHL = re.compile(r"\b([A-Za-zÄÖÜäöüß][\wÄÖÜäöüß:-]*)\s+(\d{1,2}|[IVXivx]{1,5})\b")
+
+
+def _teilnummern(text: str) -> set[int]:
+    out: set[int] = set()
+    for name, zahl in _NAME_ZAHL.findall(text or ""):
+        if name.lower() in {"teil", "part", "folge", "episode", "staffel", "season", "top", "nummer", "nr", "platz", "level", "kapitel", "chapter"}:
+            continue
+        if zahl.isdigit():
+            if name.isupper() or name[:1].isupper():
+                out.add(int(zahl))
+        elif zahl.lower() in _ROEMISCH and (zahl.isupper() or name.isupper() or name.lower() == name and len(name) <= 6):
+            out.add(_ROEMISCH[zahl.lower()])
+    return out
+
+
+def _kurzname_in(wort: str, titel: str) -> bool:
+    if not 2 <= len(wort) <= 6 or not wort.isalpha():
+        return False
+    anfaenge = "".join(w[0].lower() for w in re.findall(r"[A-Za-zÄÖÜäöüß]+", titel or ""))
+    return wort.lower() in anfaenge
+
+
 def videos_aus_quellen(quellen: list[dict], themenfrage: str, *, hoechstens: int = 2) -> list[dict]:
     sache = {w for w in wissen.woerter(themenfrage)} - _VIDEO_ALLGEMEIN
     if not sache:
         return []
+    teil = _teilnummern(themenfrage)
     gefunden: dict[str, tuple[int, int, int, str]] = {}
     fw = set(wissen.woerter(themenfrage))
     platz = 0
@@ -1066,8 +1092,10 @@ def videos_aus_quellen(quellen: list[dict], themenfrage: str, *, hoechstens: int
             if not m or m.group(1) in gefunden:
                 continue
             tw = set(wissen.woerter(titel))
-            treffer = len(sache & tw)
-            if treffer >= min(2, len(sache)):
+            if teil and not teil <= _teilnummern(titel):
+                continue
+            treffer = len(sache & tw) + len(teil) + sum(1 for w in sache - tw if _kurzname_in(w, titel))
+            if treffer >= min(2, len(sache) + len(teil)):
                 gefunden[m.group(1)] = (-treffer, -len(fw & _VIDEO_UNTERSCHEIDER & tw), platz, " ".join(titel.split())[:160])
     if not gefunden:
         return []
