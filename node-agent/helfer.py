@@ -107,7 +107,15 @@ def _ist_adresse(host: str) -> bool:
         return False
 
 
+_LESBAR_SPERRE = threading.Lock()
+
+
 def lesbar(core: app_core.AppCore, satz: str) -> None:
+    with _LESBAR_SPERRE:
+        _lesbar(core, satz)
+
+
+def _lesbar(core: app_core.AppCore, satz: str) -> None:
     try:
         core.ensure_directories()
         pfad = core.diagnosis_dir / LESBAR

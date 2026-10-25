@@ -385,11 +385,15 @@ class _Zwischenstand:
             pass
 
 
+_LOG_SPERRE = threading.Lock()
+
+
 def _log(core: app_core.AppCore, line: str) -> None:
     try:
         core.ensure_directories()
-        with open(core.diagnosis_dir / "protokoll.txt", "a", encoding="utf-8") as f:
-            f.write(datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") + " " + app_core._mask(line) + chr(10))
+        zeile = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") + " " + app_core._mask(line) + chr(10)
+        with _LOG_SPERRE, open(core.diagnosis_dir / "protokoll.txt", "a", encoding="utf-8") as f:
+            f.write(zeile)
     except Exception:
         pass
 
@@ -3063,6 +3067,7 @@ class Api:
             "kann_antworten": self._kann_fuer_andere_antworten(),
             "dunkel": self.dunkel(),
             "zoom": self.zoom(),
+            "leiste_breite": self.leiste_breite(),
             "schnittstelle": self._schnittstelle_dict(),
             "admin": self._community.ist_admin(),
             "neu": self.neu_liste(),
@@ -5060,6 +5065,26 @@ class Api:
     def zoom(self) -> float:
         z = self._ki.einstellung().get("zoom", 1.0)
         return z if z in self.ZOOM_STUFEN else 1.0
+
+    LEISTE_MIN, LEISTE_MAX = 200, 560
+
+    def leiste_breite(self) -> int:
+        try:
+            b = int(self._ki.einstellung().get("leiste_breite", 0) or 0)
+        except (TypeError, ValueError):
+            return 0
+        return min(max(b, self.LEISTE_MIN), self.LEISTE_MAX) if b else 0
+
+    def ansicht_leiste(self, breite: int) -> dict:
+        def go():
+            try:
+                b = int(breite or 0)
+            except (TypeError, ValueError):
+                b = 0
+            b = min(max(b, self.LEISTE_MIN), self.LEISTE_MAX) if b else 0
+            self._ki.einstellung_setzen(leiste_breite=b or None)
+            return {"breite": b}
+        return self._guarded("ansicht_leiste", go)
 
     def ansicht_zoom(self, richtung: str) -> dict:
         def go():

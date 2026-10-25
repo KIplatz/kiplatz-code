@@ -143,6 +143,40 @@ function leisteAuf() { zeichneListe(); $("#leiste").inert = false; document.body
 function leisteZu() { if ($("#leiste").contains(document.activeElement)) document.activeElement.blur(); document.body.classList.remove("leiste-offen"); $("#schleier").hidden = true; $("#leiste").inert = schmal(); }
 
 
+const LEISTE_MIN = 220, LEISTE_MAX = 560;
+function leisteBreite(b) {
+  if (b) document.documentElement.style.setProperty("--leiste-breite", Math.round(Math.min(Math.max(b, LEISTE_MIN), LEISTE_MAX)) + "px");
+  else document.documentElement.style.removeProperty("--leiste-breite");
+}
+function leisteGriff() {
+  const griff = $("#leiste-griff");
+  if (!griff) return;
+  leisteBreite(ablageLesen("leiste-breite", 0));
+  const jetzt = () => Math.round($("#leiste").getBoundingClientRect().width);
+  const merken = () => { const v = document.documentElement.style.getPropertyValue("--leiste-breite"); ablageSchreiben("leiste-breite", v ? parseInt(v, 10) : 0); };
+  griff.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0 || schmal()) return;
+    e.preventDefault();
+    try { griff.setPointerCapture(e.pointerId); } catch { }
+    const start = e.clientX, breite = jetzt();
+    document.body.classList.add("leiste-ziehen");
+    const bewegen = (m) => leisteBreite(breite + (m.clientX - start));
+    const los = () => { griff.removeEventListener("pointermove", bewegen); document.body.classList.remove("leiste-ziehen"); merken(); };
+    griff.addEventListener("pointermove", bewegen);
+    griff.addEventListener("pointerup", los, { once: true });
+    griff.addEventListener("pointercancel", los, { once: true });
+  });
+  griff.addEventListener("dblclick", () => { leisteBreite(0); merken(); });
+  griff.addEventListener("keydown", (e) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    leisteBreite(jetzt() + (e.key === "ArrowRight" ? 16 : -16));
+    merken();
+  });
+}
+leisteGriff();
+
+
 function sucheAuf() {
   $("#leiste-oben").hidden = true; $("#suche-feld").hidden = false; $("#btn-suche").setAttribute("aria-expanded", "true"); $("#suche").focus();
 }

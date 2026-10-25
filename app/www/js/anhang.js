@@ -229,6 +229,38 @@ function zeitgrenze(versprechen, s, text) {
     .finally(() => clearTimeout(uhr));
 }
 
+
+const SICHER = 60;
+
+
+async function gedreht(datei, grad) {
+  const bild = await createImageBitmap(datei);
+  const quer = grad === 90 || grad === 270;
+  const leinwand = document.createElement("canvas");
+  leinwand.width = quer ? bild.height : bild.width;
+  leinwand.height = quer ? bild.width : bild.height;
+  const g = leinwand.getContext("2d");
+  g.filter = "grayscale(1) contrast(1.4)";
+  g.translate(leinwand.width / 2, leinwand.height / 2);
+  g.rotate((grad * Math.PI) / 180);
+  g.drawImage(bild, -bild.width / 2, -bild.height / 2);
+  bild.close?.();
+  return leinwand;
+}
+
+
+async function besteLage(w, datei, fortschritt) {
+  let beste = null;
+  for (const grad of [0, 90, 270, 180]) {
+    if (grad) fortschritt?.("Das Foto wird gedreht und noch einmal gelesen …");
+    const { data } = await zeitgrenze(w.recognize(await gedreht(datei, grad)), FOTO_ZEIT_S, "Das Foto zu lesen hat zu lange gedauert.");
+    const sicher = Number(data?.confidence) || 0;
+    if (!beste || sicher > beste.sicher) beste = { sicher, text: data?.text || "" };
+    if (beste.sicher >= SICHER) break;
+  }
+  return beste.text;
+}
+
 async function bildText(datei, fortschritt) {
   fortschritt?.("Die Texterkennung wird vorbereitet …");
 
@@ -254,8 +286,7 @@ async function bildText(datei, fortschritt) {
       logger: (m) => { if (m.status === "recognizing text") fortschritt?.(`Text im Foto wird gelesen: ${Math.round((m.progress || 0) * 100)} %`); },
       errorHandler: () => {},
     }), FOTO_ZEIT_S, "Die Texterkennung ließ sich nicht starten. Bitte noch einmal versuchen.");
-    const { data } = await zeitgrenze(w.recognize(datei), FOTO_ZEIT_S, "Das Foto zu lesen hat zu lange gedauert.");
-    const text = sauber(data?.text || "");
+    const text = sauber(await besteLage(w, datei, fortschritt));
     if (text.length < 3) throw new AnhangFehler("Auf diesem Foto war kein Text zu lesen. KIplatz liest nur den Text aus Fotos, das Foto selbst bleibt auf deinem Handy.");
     return { text, info: "Text aus dem Foto" };
   } finally {

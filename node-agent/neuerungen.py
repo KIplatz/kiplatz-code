@@ -11,7 +11,11 @@ def dank(satz: str, wer: str, art: str = "Meldung") -> str:
 
 
 NEUERUNGEN: dict[str, list[str]] = {
+    "2026-10-25j": [
+        "Die Seitenleiste mit deinen Gesprächen ziehst du jetzt mit der Maus breiter oder schmaler, im Programm und in der App am großen Bildschirm, damit lange Titel ganz zu sehen sind. Ein Doppelklick auf den Rand stellt die normale Breite wieder her, KIplatz merkt sich deine Breite.",
+    ],
     "2026-10-25i": [
+        "Fotos, die quer oder auf dem Kopf liegen, liest die App jetzt richtig: Ist sich die Texterkennung unsicher, dreht sie das Foto und liest es noch einmal, etwa die Seite aus dem Schulbuch, die du quer fotografiert hast.",
         "Schickst du ein Foto oder eine Datei mit einem Auftrag, etwa „Schreibe mir Punkt 1“ zur Seite aus dem Schulbuch, „Übersetze das“ oder „Fasse den Brief zusammen“, erledigt KIplatz genau das aus deinem Anhang, statt im Internet zu suchen. Und es antwortet immer in der Sprache, in der du schreibst, egal welche Sprache auf dem Foto steht.",
         "Fragst du nach dem neuen Buch einer Autorin, der neuen Staffel einer Serie, dem neuesten Album oder einer neuen Kollektion, sagt dir KIplatz jetzt beides: was zuletzt erschienen ist und was als Nächstes kommt, jeweils mit Datum, und ob die deutsche Ausgabe später erscheint.",
         "KIplatz prüft jetzt jedes Datum in einer Antwort gegen den heutigen Tag. Was schon erschienen ist, steht nie mehr so da, als käme es erst, in jeder Sprache.",
