@@ -9,6 +9,7 @@ import re
 import time
 import urllib.parse
 import urllib.request
+import dataclasses
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -165,6 +166,7 @@ class Ergebnis:
     text: str
     gueltig_bis: str
     woher: str
+    treffer: tuple = ()
 
 
 def _jetzt() -> datetime:
@@ -666,6 +668,35 @@ class Nachschauer:
                 return [], SUCHE_NICHT_DURCH
         return [], SUCHE_NICHT_DURCH
 
+    def seiten_lesen(self, kandidaten: list[dict], frage: str, *, hoechstens: int = 8, warten_s: float = 10.0) -> list[Ergebnis]:
+        from concurrent.futures import ThreadPoolExecutor, wait
+        frei = [t for t in ohne_vorbehalt([t for t in kandidaten if not gesperrt(t["adresse"])], oeffner=self._seiten_oeffner, fuer_frage=True)][:hoechstens]
+        if not frei:
+            return []
+
+        def eine(t: dict):
+            try:
+                return t, wissen.live_lesen(t["adresse"], frage, n=4, oeffner=self._seiten_oeffner, fuer_frage=True, extra=preis_punkte)
+            except wissen.WissenError:
+                sperren(t["adresse"])
+                return t, None
+        pool = ThreadPoolExecutor(max_workers=len(frei), thread_name_prefix="haendler")
+        try:
+            futures = [pool.submit(eine, t) for t in frei]
+            wait(futures, timeout=warten_s)
+            fertig = [f.result() for f in futures if f.done() and not f.exception()]
+        finally:
+            pool.shutdown(wait=False)
+        gueltig, tag = gueltig_bis("suche", self._jetzt()), self._jetzt().strftime("%d.%m.%Y")
+        out = []
+        for t, e in fertig:
+            if e is None:
+                continue
+            q, text, tr = e
+            inhalt = "\n\n".join([frage_kennung(frage), gefunden_zeile(q.titel, q.adresse, tag, text)] + [x.text for x in tr])
+            out.append(Ergebnis("suche", f"Nachgeschaut: {q.titel}"[:160], q.adresse, inhalt[:MAX_TEXT], gueltig, "beim Händler nachgesehen"))
+        return out
+
     def suche_runde(self, anfragen: list[str], frage: str, *, sprache: str = "", zeit: str = "", ausser=frozenset(), heute=None,
                     ziel: tuple = (None, None), lesen_max: int = 0, seiten_max: int = 0, warten_s: float = 0.0, liste_immer: bool = False,
                     preis: bool = False) -> tuple[list[Ergebnis], list[str], str]:
@@ -773,7 +804,8 @@ class Nachschauer:
             out.insert(0, uebersicht)
         if not out:
             raise NachschauError("NACHSCHAU_LEER", "die gefundenen Seiten ließen sich nicht lesen oder waren veraltet")
-        return out, gelesen, woher
+        roh = tuple({"titel": str(t.get("titel", "")), "adresse": str(t.get("adresse", "")), "text": str(t.get("text", ""))} for t in gemischt)
+        return [dataclasses.replace(e, treffer=roh) for e in out], gelesen, woher
 
 
 _SAISON_ALT = re.compile(r"\b(20\d\d)\s*[/-]\s*(?:20)?(\d\d)\b")
@@ -1109,8 +1141,10 @@ def geldbetraege(text: str) -> set[str]:
 
 
 def preis_punkte(text: str) -> float:
-    if wissen.ANGEBOTE_KOPF in str(text or ""):
+    if wissen.ANGEBOTE_KOPF in str(text or "") or wissen.HAENDLER_LISTE_KOPF in str(text or ""):
         return 3.0
+    if wissen.PRODUKTSEITEN_KOPF in str(text or ""):
+        return 2.0
     return 1.0 if geldbetraege(text) else 0.0
 
 

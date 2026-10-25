@@ -11,6 +11,10 @@ def dank(satz: str, wer: str, art: str = "Meldung") -> str:
 
 
 NEUERUNGEN: dict[str, list[str]] = {
+    "2026-10-25g": [
+        "Fragst du, wo ein bestimmtes Gerät oder ein Reifen am günstigsten ist, liest KIplatz jetzt die Händlerlisten der Preisvergleiche und die Seiten der Shops selbst. In der Tabelle steht nur, was es genau in deiner Größe oder Variante gibt, neu und nicht gebraucht, und daneben, wo der Preis geprüft wurde.",
+        "Findet KIplatz für genau dein Modell keinen Händler mit Preis, sagt es dir das ehrlich und nennt dir Preisvergleiche zum Weitersuchen, statt einen Preis für etwas anderes hinzuschreiben. Neu, wir verbessern es laufend.",
+    ],
     "2026-10-25f": [
         "Hängst du ein Foto oder mehrere an und fragst nur „Wo ist das günstiger?“ oder „Welcher hat die besten Tests?“, sucht KIplatz jetzt genau die Dinge auf deinen Fotos, jedes für sich, auch nach einer Rückfrage nach dem Land.",
     ],

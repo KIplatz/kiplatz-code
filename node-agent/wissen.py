@@ -440,7 +440,9 @@ def seite_holen(adresse: str, *, oeffner=None, pruefer=None, fuer_frage: bool = 
     except Exception as exc:
         raise WissenError("WISSEN_HOLEN", f"die Seite ließ sich nicht lesen ({type(exc).__name__})") from None
     if len(roh) > MAX_SEITE:
-        raise WissenError("WISSEN_GROSS", "die Seite ist größer als 2 MB")
+        if not fuer_frage:
+            raise WissenError("WISSEN_GROSS", "die Seite ist größer als 2 MB")
+        roh = roh[:MAX_SEITE]
     text_roh = roh.decode("utf-8", "replace")
     grund = vorbehalt_in_seite(kopf, text_roh if art.startswith("text/html") else "")
     if grund:
@@ -450,6 +452,13 @@ def seite_holen(adresse: str, *, oeffner=None, pruefer=None, fuer_frage: bool = 
         angebote = angebote_aus_seite(text_roh) if fuer_frage else ""
         if angebote:
             text = angebote + "\n\n" + text
+        liste = haendler_eines_vergleichs(text_roh) if fuer_frage else ""
+        if liste:
+            text = liste + "\n\n" + text
+        elif fuer_frage:
+            verweise = produktseiten_eines_vergleichs(text_roh, endgueltig)
+            if verweise:
+                text = verweise + "\n\n" + text
     else:
         titel, text = "", text_roh.strip()
     if len(text) < 40:
@@ -565,6 +574,56 @@ def angebote_aus_seite(roh: str) -> str:
         return ""
     zeilen = list(dict.fromkeys(zeilen))[:ANGEBOTE_MAX]
     return f"{ANGEBOTE_KOPF}" + (f" (Produkt „{name}“)" if name else "") + ":\n" + "\n".join(zeilen)
+
+
+HAENDLER_LISTE_KOPF = "Händler laut diesem Preisvergleich"
+_VERGLEICH_ANGEBOT = re.compile(r"product:\s*\{\s*id:\s*'[^'{}]{0,40}',\s*name:\s*'((?:[^'\\{}]|\\.){1,200})'[^{}]{0,600}?price:\s*'(\d{1,6}(?:\.\d{1,2})?)',"
+                                r"\s*merchant:\s*'((?:[^'\\{}]|\\.){1,80})'")
+
+
+def _js_text(t: str) -> str:
+    return re.sub(r"\\u([0-9a-fA-F]{4})", lambda m: chr(int(m.group(1), 16)), t).replace("\\'", "'")
+
+
+def haendler_eines_vergleichs(roh: str) -> str:
+    preise: dict[str, tuple[float, str]] = {}
+    for m in _VERGLEICH_ANGEBOT.finditer((roh or "")[:MAX_SEITE]):
+        name = " ".join(_js_text(m.group(1)).split())[:160]
+        wer = " ".join(_js_text(m.group(3)).split())[:60]
+        wert = float(m.group(2))
+        if wer and wert > 0 and (wer not in preise or wert < preise[wer][0]):
+            preise[wer] = (wert, name)
+    if not preise:
+        return ""
+    zeilen = [f"- {wer}: {f'{p:.2f}'.replace('.', ',')} EUR | {name}" for wer, (p, name) in sorted(preise.items(), key=lambda x: x[1][0])][:ANGEBOTE_MAX]
+    return f"{HAENDLER_LISTE_KOPF}:\n" + "\n".join(zeilen)
+
+
+PRODUKTSEITEN_KOPF = "Produktseiten dieses Preisvergleichs"
+_PRODUKT_LINK = re.compile(r'href="((?:https?://(?:www\.)?geizhals\.(?:at|de|eu)/)?([a-z0-9-]{4,160})-a(\d{4,10})\.html)[^"]*"[^>]{0,300}>([^<]{0,200})', re.I)
+
+
+def produktseiten_eines_vergleichs(roh: str, adresse: str) -> str:
+    m = re.match(r"^(https?://(?:www\.)?geizhals\.(?:at|de|eu))/", adresse or "", re.I)
+    if not m:
+        return ""
+    seiten: dict[str, str] = {}
+    zahl: dict[str, int] = {}
+    for link in _PRODUKT_LINK.finditer((roh or "")[:MAX_SEITE]):
+        a = f"{m.group(1)}/{link.group(2)}-a{link.group(3)}.html"
+        if a not in seiten and len(seiten) >= 40:
+            break
+        name = seiten.get(a) or re.sub(r"(\d{3}) (\d{2}) (z?r) ?(\d{2})", r"\1/\2 \3\4", link.group(2).replace("-", " "), flags=re.I)
+        wort = " ".join(html.unescape(link.group(4)).split())
+        anzahl = re.match(r"^(\d+) Angebot", wort)
+        if anzahl:
+            zahl[a] = max(zahl.get(a, 0), int(anzahl.group(1)))
+        elif len(wort) >= 6 and wort not in name:
+            name = f"{name} | {wort}"[:300]
+        seiten[a] = name
+    if not seiten:
+        return ""
+    return f"{PRODUKTSEITEN_KOPF}:\n" + "\n".join(f"- {name}" + (f" ({zahl[a]} Angebote)" if a in zahl else "") + f": {a}" for a, name in seiten.items())
 
 
 @dataclass(frozen=True)
@@ -1053,11 +1112,11 @@ class Wissensspeicher:
 def live_lesen(adresse: str, frage: str, *, n: int = TREFFER, oeffner=None, extra=None, fuer_frage: bool = False) -> tuple[Quelle, str, list[Treffer]]:
     endgueltig, titel, text = seite_holen(adresse, oeffner=oeffner, fuer_frage=fuer_frage)
     q = Quelle(hashlib.sha256(("seite|" + endgueltig).encode("utf-8")).hexdigest()[:12], "seite", titel, endgueltig, _jetzt(), len(text))
-    if text.startswith(ANGEBOTE_KOPF):
-        block, _, rest = text.partition("\n\n")
-        teile = [block] + abschnitte(rest)
-    else:
-        teile = abschnitte(text)
+    teile, rest = [], text
+    while rest.startswith((ANGEBOTE_KOPF, HAENDLER_LISTE_KOPF, PRODUKTSEITEN_KOPF)):
+        block, _, rest = rest.partition("\n\n")
+        teile.append(block)
+    teile += abschnitte(rest)
     fw = set(woerter(frage))
     mass = mass_punkte(frage) if extra is None else None
     zusatz = [(float(extra(t)) if extra is not None else 0.0) + (mass(t) if mass is not None else 0.0) for t in teile]

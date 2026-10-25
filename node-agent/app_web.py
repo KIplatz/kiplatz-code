@@ -75,6 +75,7 @@ import ki_sichtbarkeit
 import fluggastrechte
 import ki_verordnung
 import pdf_werkzeug
+import einkauf
 import heimnetz
 import ki_laufzeit
 import modell_katalog
@@ -1272,6 +1273,7 @@ class Api:
         if lauf is None or lauf["runde"] or lauf["gesucht"] or "nebenher" in lauf or not hasattr(self._nachschauer, "suche_runde"):
             return
         anfragen = je_anhang(nachschauen.anfragen_aufteilen(self._suchwoerter(nachrichten, frage, ohne_modell=True) or [frage], frage), nachrichten or [])
+        anfragen = einkauf_anfragen(frage, nachrichten or [], anfragen)
         anfragen, mehr = vergleich_runde(frage, anfragen)
         richtung = nachschauen.richtung(frage)
         erg: dict = {}
@@ -1357,6 +1359,7 @@ class Api:
                 return [], "Eine weitere Suche mit anderen Wörtern war nicht möglich."
             alle = nachschauen.anfragen_aufteilen(alle, frage)
             alle = je_anhang(alle, nachrichten)
+            alle = einkauf_anfragen(frage, nachrichten, alle)
             if hasattr(self._nachschauer, "suche_runde"):
                 return self._suchrunde(frage, alle, lauf, treffer, frisch=frisch or spaeter)
             a, weitere = nachschauen.Auftrag("suche", alle[0]), alle[1:]
@@ -1448,6 +1451,27 @@ class Api:
             _q, tr = nachschauen.als_quelle(e)
             je_seite.append(tr)
             self._nachgeschaut_merken(e)
+        if lauf is not None and einkauf.ist_einkauf(frage):
+            v = einkauf.variante(einkauf.sache(frage))
+            markt = nachschauen.vergleich_markt(frage)
+            roh = list(ergebnisse[0].treffer) if ergebnisse else []
+            ek = lauf.setdefault("einkauf", {"angebote": [], "portale": []})
+            gelesen_hier = {e.adresse for e in ergebnisse} | set(lauf["gelesen"])
+            ziele = [t for t in roh if t["adresse"] not in gelesen_hier and not einkauf.ist_vergleichsseite(t["adresse"], t["titel"])
+                     and not einkauf.kein_haendler(t["adresse"]) and einkauf.markt_passt(t["adresse"], markt) and v.passt(t["titel"] + " " + t["text"], t["titel"])]
+            ziele = list({einkauf.host(t["adresse"]): t for t in reversed(ziele)}.values())[::-1]
+            vergleich = [dict(t, adresse=einkauf.im_markt(t["adresse"], markt)) for t in roh if einkauf.ist_vergleich_produktseite(t["adresse"])
+                         and v.passt(t["titel"], t["titel"])]
+            ziele = list({t["adresse"]: t for t in vergleich if t["adresse"] not in gelesen_hier and einkauf.markt_passt(t["adresse"], markt)}.values())[:2] + ziele
+            ziele = [t for t in einkauf.produktseiten(ergebnisse, v, markt) if t["adresse"] not in gelesen_hier
+                     and all(t["adresse"] != z["adresse"] for z in ziele)] + ziele
+            haendlerseiten = []
+            if ziele and hasattr(self._nachschauer, "seiten_lesen"):
+                self._schritt("sieht bei den Händlern nach …")
+                haendlerseiten = self._nachschauer.seiten_lesen(ziele, frage)
+                lauf["gelesen"] |= {e.adresse for e in haendlerseiten}
+            ek["angebote"] = einkauf.zusammenfassen(list(ek["angebote"]) + einkauf.angebote(roh, list(ergebnisse) + haendlerseiten, v, markt))
+            ek["portale"] = list(dict.fromkeys(ek["portale"] + einkauf.vergleichsseiten(roh, ergebnisse)))[:3]
         out = [tr[i] for i in range(max((len(x) for x in je_seite), default=0)) for tr in je_seite if i < len(tr)]
         wohin = _wohin_gemerkt()
         self._letzter_stand = {"art": "suche", "titel": ergebnisse[0].titel, "nachgeschaut": wissen._jetzt(), "gilt_bis": ergebnisse[0].gueltig_bis, "aus_gedaechtnis": False}
@@ -2395,7 +2419,7 @@ class Api:
                 if bisher:
                     lieferschein["videos"] = bisher
                     antwort_text = ohne_kann_nicht_zeigen(antwort_text)
-            if not fern and belege.vergleichsfrage(suchfrage(nachrichten)):
+            if not fern and belege.vergleichsfrage(suchfrage(nachrichten)) and not (lauf and lauf.get("einkauf") is not None):
                 letzte = next((str(n.get("content", "")) for n in reversed(nachrichten) if n.get("role") == "user"), "")
                 antwort_text, weg = vergleich_zeilen_pruefen(antwort_text, quellen, englisch=such_sprache(suchfrage(nachrichten)) == "en",
                                                              anhang=letzte[len(schriftstueck.eigene_worte(letzte)[0]):])
@@ -2431,6 +2455,15 @@ class Api:
             antwort_text, lieferschein["gemacht"] = _schriftstueck_nachbearbeiten(antwort_text, schrift[1], lieferschein, schrift[0])
         elif not frisch and not fern and self.nachschauen_an() and _WEISS_NICHT.search(antwort_text):
             antwort_text = _weiss_nicht_anwenden(antwort_text, lieferschein, gesucht=im_netz_gesucht(nachgeholt, quellen, lauf), vorher=vorher_text)
+        ek = (lauf or {}).get("einkauf")
+        if not fern and ek is not None and schrift is None:
+            englisch_e = such_sprache(suchfrage(nachrichten)) == "en"
+            antwort_text = einkauf.einsetzen(antwort_text, ek["angebote"], ek.get("portale", []), englisch=englisch_e,
+                                             stand=datetime.now().strftime("%d.%m.%Y" if not englisch_e else "%d %B %Y"))
+            seiten_n = sum(1 for g in ek["angebote"] if g.herkunft == "seite")
+            vergleich_n = sum(1 for g in ek["angebote"] if g.herkunft.startswith("vergleich"))
+            lieferschein["quellen"] = (lieferschein.get("quellen", "") + f" Einkauf: {len(ek['angebote'])} Angebote geprüft (Variante neben dem Preis), "
+                                       f"{seiten_n} auf der Seite des Händlers, {vergleich_n} laut Preisvergleich, die übrigen im Suchtreffer.").strip()
         _woertlich_markieren(antwort_text, quellen, lieferschein)
         weg = getattr(_MESSWEG, "d", None)
         if isinstance(weg, dict):
@@ -5867,7 +5900,9 @@ MAX_ANHANG_SACHEN = 4
 
 def _nennt_keine_sache(eigen: str) -> bool:
     staemme = wissen.woerter(eigen)
-    return any(_ANHANG_WUNSCH.match(s) for s in staemme) and all(_ANHANG_WUNSCH.match(s) or _ANHANG_ALLGEMEIN.match(s) for s in staemme)
+    if not any(_ANHANG_WUNSCH.match(s) for s in staemme):
+        return False
+    return all(_ANHANG_WUNSCH.match(s) or _ANHANG_ALLGEMEIN.match(s) for s in staemme) or not einkauf.sache(eigen)
 
 
 def _anhang_kennzeilen(anhang: str) -> list[str]:
@@ -5875,7 +5910,8 @@ def _anhang_kennzeilen(anhang: str) -> list[str]:
     koepfe = schriftstueck._ANHANG_KOPF.findall("\n" + anhang)
     out = []
     for kopf, inhalt in zip(koepfe, teile[1:]):
-        k = " ".join(_anhang_kennzeile(kopf.strip() + "\n" + inhalt).split()[:6])
+        zeile = re.sub(r"(?i)\bDOT\s*\d{2,4}\b|\b3PMSF\b|\bM\s*\+\s*S\b", " ", _anhang_kennzeile(kopf.strip() + "\n" + inhalt))
+        k = " ".join(zeile.split()[:8])
         if k and k not in out:
             out.append(k)
     return out[:MAX_ANHANG_SACHEN]
@@ -5898,6 +5934,14 @@ def ohne_anhang(text: str) -> str:
     return " ".join(f"{' und '.join(sachen)} {_ANHANG_BEZUG.sub(' ', eigen)}".split())
 
 
+def einkauf_anfragen(frage: str, nachrichten: list[dict], anfragen: list[str]) -> list[str]:
+    if not einkauf.ist_einkauf(frage):
+        return anfragen
+    users = [str(n.get("content", "")) for n in nachrichten or [] if n.get("role") == "user"]
+    sachen = next((s for s in (anhang_sachen(t) for t in reversed(users[-2:])) if s), [])
+    return einkauf.anfragen(frage, sachen) or anfragen
+
+
 def je_anhang(anfragen: list[str], nachrichten: list[dict]) -> list[str]:
     users = [str(n.get("content", "")) for n in nachrichten or [] if n.get("role") == "user"]
     for i in range(len(users) - 1, max(len(users) - 3, -1), -1):
@@ -5910,7 +5954,7 @@ def je_anhang(anfragen: list[str], nachrichten: list[dict]) -> list[str]:
         return anfragen
     wuensche = " ".join([_ANHANG_BEZUG.sub(" ", schriftstueck.eigene_worte(users[i])[0])] + users[i + 1:])
     rest = nachschauen.suchbegriffe_regel(wuensche)
-    return [" ".join(f"{s} {rest}".split()[:10]) for s in sachen][:MAX_ANHANG_SACHEN]
+    return [" ".join(f"{s} {rest}".split()[:14]) for s in sachen][:MAX_ANHANG_SACHEN]
 
 
 def suchfrage(nachrichten: list[dict]) -> str:
@@ -6019,7 +6063,7 @@ VERGLEICH_WARTEN_S = 15.0
 
 
 def vergleich_runde(frage: str, anfragen: list[str]) -> tuple[list[str], dict]:
-    vergleich = belege.vergleichsfrage(frage)
+    vergleich = belege.vergleichsfrage(frage) or einkauf.ist_einkauf(frage)
     sprache = nachschauen.markt_sprache(nachschauen.vergleich_markt(frage)) if vergleich else ""
     if vergleich and anfragen:
         anfragen = list(dict.fromkeys(nachschauen.ohne_vergleichswunsch(q) for q in anfragen))
@@ -6231,10 +6275,18 @@ def _nennt_gestrichenes(zeile: str, gestrichen: set[str]) -> bool:
     return any(g and ("," in g and g in _preise(zeile) or "," not in g and len(g) >= 3 and g in k) for g in gestrichen)
 
 
+EINKAUF_FOKUS = ("Die Preise und Händler setzt KIplatz selbst als geprüfte Tabelle unter deine Antwort. Schreib darum keine Preise, keine "
+                 "Händlerliste und keine Tabelle. Schreib in ein bis drei Sätzen, was zur gefragten Sache aus den Quellen wichtig ist, etwa "
+                 "Testergebnisse oder worauf man beim Kauf achtet; steht dazu nichts in den Quellen, schreib nur einen kurzen Satz zur Sache.")
+
+
 def frage_fokus(frage: str) -> str:
     f = " ".join(str(frage or "").split())[:300]
     teile = [FRAGE_FOKUS.format(frage=f)]
-    if belege.vergleichsfrage(f):
+    lauf = getattr(_SUCHLAUF, "stand", None)
+    if einkauf.ist_einkauf(f) and isinstance(lauf, dict) and lauf.get("einkauf") is not None:
+        teile.append(EINKAUF_FOKUS)
+    elif belege.vergleichsfrage(f):
         teile.append(VERGLEICH_FOKUS)
     elif belege.preisfrage(f):
         teile.append(PREIS_FOKUS)

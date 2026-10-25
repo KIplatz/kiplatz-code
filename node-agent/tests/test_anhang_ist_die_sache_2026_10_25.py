@@ -27,9 +27,11 @@ def _g(*texte):
 
 
 def test_der_fall_vom_iphone_sucht_den_reifen():
-    f = app_web.suchfrage(_g("Suche mir günstigere Angebote" + CONTI, RUECKFRAGE, "Deutschland und Österreich"))
-    w = nachschauen.suchbegriffe_regel(f)
-    assert w.startswith("CONTINENTAL WINTERCONTACT TS870P 255/55 R20") and "Deutschland" in w
+    n = _g("Suche mir günstigere Angebote" + CONTI, RUECKFRAGE, "Deutschland und Österreich")
+    f = app_web.suchfrage(n)
+    assert nachschauen.suchbegriffe_regel(f).startswith("CONTINENTAL WINTERCONTACT TS870P 255/55 R20")
+    assert app_web.einkauf_anfragen(f, n, ["x"]) == ["CONTINENTAL WINTERCONTACT TS870P 255/55 R20 110V XL"]
+    assert "Deutschland" in f
 
 
 @pytest.mark.parametrize("frage", ["Suche mir günstigere Angebote", "Wo bekomme ich das billiger?", "Was kostet der?", "Find me a cheaper offer",
@@ -51,8 +53,8 @@ def test_mehrere_anhaenge_je_eine_suche_mit_den_wuenschen():
     assert [a.split()[0] for a in anfragen] == ["CONTINENTAL", "MICHELIN", "BRIDGESTONE"]
     assert all("Testbewertungen" in a and "kostengünstigsten" in a for a in anfragen)
     n2 = _g("Welcher ist günstiger?" + CONTI + MICHELIN, RUECKFRAGE, "Österreich")
-    assert app_web.je_anhang(["x"], n2) == ["CONTINENTAL WINTERCONTACT TS870P 255/55 R20 110V günstiger Österreich",
-                                             "MICHELIN PILOT ALPIN 5 255/55 R20 günstiger Österreich"]
+    assert app_web.je_anhang(["x"], n2) == ["CONTINENTAL WINTERCONTACT TS870P 255/55 R20 110V XL günstiger Österreich",
+                                             "MICHELIN PILOT ALPIN 5 255/55 R20 110V XL günstiger Österreich"]
     assert app_web.je_anhang(["eins"], _g("Was kostet der?" + CONTI)) == ["eins"]
 
 
