@@ -44,6 +44,7 @@ if ($LASTEXITCODE -ne 0) { throw "Das Fenster ließ sich nicht reinigen (Exit $L
 Copy-Item -Recurse (Join-Path $here "skills_vorlagen") (Join-Path $arbeit "node-agent\skills_vorlagen")
 Copy-Item (Join-Path $here "requirements.txt") (Join-Path $arbeit "node-agent")
 Copy-Item (Join-Path $here "neuerungen_en.json") (Join-Path $arbeit "node-agent")
+Copy-Item (Join-Path $here "flughaefen.tsv") (Join-Path $arbeit "node-agent")
 Copy-Item (Join-Path $here "..\SCHNITTSTELLE.md") (Join-Path $arbeit "node-agent")
 
 $eingebettet = Join-Path $arbeit "python\python.exe"

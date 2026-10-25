@@ -11,6 +11,9 @@ def dank(satz: str, wer: str, art: str = "Meldung") -> str:
 
 
 NEUERUNGEN: dict[str, list[str]] = {
+    "2026-10-25a": [
+        "Neu: Frag „Mein Flug von Wien nach London war 4 Stunden verspätet, was steht mir zu?“, und KIplatz rechnet dir nach der EU-Verordnung für Fluggastrechte aus, ob dir 250, 400 oder 600 € zustehen. Fehlt die Strecke oder die Verspätung, fragt KIplatz kurz nach.",
+    ],
     "2026-10-24s": [
         "Neu: Häng eine Excel-Datei an, und KIplatz liest jede Tabelle darin, mit Datum statt Zahlencode. Frag dann zum Beispiel, wofür du am meisten ausgegeben hast. Das gilt in der App, im Programm und auf kiplatz.at.",
     ],
@@ -1184,6 +1187,9 @@ ZURUECKGEHALTEN: dict[str, list[str]] = {
 }
 
 KURZ_JE_TAG: dict[str, list[str]] = {
+    "2026-10-25": [
+        "Ist dein Flug verspätet oder gestrichen, rechnet KIplatz dir aus, wie viel Entschädigung dir zusteht",
+    ],
     "2026-10-24": [
         "KIplatz zeigt dir YouTube-Videos jetzt direkt in der Antwort, abgespielt wird erst nach deinem Klick",
         "Frag nach dem günstigsten Anbieter, und KIplatz vergleicht mehrere Shops in einer Tabelle",
@@ -1291,6 +1297,10 @@ KURZ_JE_TAG: dict[str, list[str]] = {
 
 
 GESCHICHTE_JE_TAG: dict[str, dict[str, str]] = {
+    "2026-10-25": {
+        "haken": "Frag KIplatz ab heute „Flug Linz nach Antalya 5 Stunden verspätet, was steht mir zu?“, und du bekommst den Betrag nach der EU-Verordnung.",
+        "text": "KIplatz misst dafür die Luftlinie zwischen den Flughäfen, so wie es die Verordnung verlangt. Es sagt dir auch, wann die Fluglinie nicht zahlen muss und wo du Hilfe bekommst, wenn sie sich querlegt.",
+    },
     "2026-10-24": {
         "haken": "Frag KIplatz ab heute „Zeig mir Gameplay zu Enshrouded“, und das Video steht gleich in der Antwort, mit Vorschaubild.",
         "text": "Und wer „Wo bekomme ich diesen Reifen am günstigsten?“ fragt, bekommt jetzt eine Tabelle mehrerer Shops nach Preis. Jeder Preis wird gegen die Seite des Shops geprüft, bevor er dasteht.",

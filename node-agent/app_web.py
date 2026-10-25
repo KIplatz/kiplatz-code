@@ -72,6 +72,7 @@ import hausordnung
 import krisenhilfe
 import prompt_pruefer
 import ki_sichtbarkeit
+import fluggastrechte
 import heimnetz
 import ki_laufzeit
 import modell_katalog
@@ -2194,6 +2195,10 @@ class Api:
         pp = prompt_pruefer.antwort(str(nachrichten[-1].get("content", "")) if nachrichten else frage)
         if pp is not None:
             return pp[0], prompt_pruefer.GEMACHT, prompt_pruefer.WOHER, pp[1]
+        fg = fluggastrechte.antwort(nachrichten)
+        if fg is not None:
+            _log(self._core, "OK antwort: Fluggastrechte, ohne Modell")
+            return fg[0], fluggastrechte.GEMACHT, fluggastrechte.WOHER, fg[1]
         if self.nachschauen_an():
             ks = ki_sichtbarkeit.antwort(frage)
             if ks is not None:
