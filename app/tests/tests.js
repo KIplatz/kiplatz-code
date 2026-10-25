@@ -10,6 +10,8 @@ import * as an from "/js/anhang.js";
 import * as sp from "/js/sprache.js";
 import { ausGemeinsam } from "/js/abgleich.js";
 import * as hf from "/js/helfer.js";
+import * as pz from "/js/pdf-zusammen.js";
+import * as ap from "/js/antwort-pdf.js";
 import { HELFER_SHA256 } from "/js/helfer-pruefsummen.js";
 import * as kt from "/js/konten.js";
 import * as mk from "/js/meine-ki.js";
@@ -411,6 +413,46 @@ test("Anhang: Excel wie im Programm, Tabellen, geteilte Texte, Datum, leere Zell
   gleich(r.text, "[Tabelle „Ausgaben“, 2 Zeilen]\nMonat | Betrag\n30.09.2025 |  | Strom | 84.5");
   gleich(r.info, "1 Tabelle, 2 Zeilen");
   gleich(an.art("liste.XLSX"), "xlsx");
+});
+
+
+test("PDF: zusammenfügen nach Dateinamen, keine PDF, kaputt, Kennwort (25.10.2026)", async () => {
+  const lib = await hf.modul("pdflib/pdf-lib.esm.min.js");
+  const pdf = async (name, seiten, breite, { verschluesselt = false } = {}) => {
+    const d = await lib.PDFDocument.create();
+    for (let i = 0; i < seiten; i++) d.addPage([breite, 300]);
+    let b = await d.save({ useObjectStreams: false });
+    if (verschluesselt) b = new TextEncoder().encode(new TextDecoder("latin1").decode(b).replace("trailer\n<<", "trailer\n<<\n/Encrypt << /Filter /Standard /V 1 /R 2 >>"));
+    return new File([b], name, { type: "application/pdf" });
+  };
+  const r = await pz.zusammenfuegen([await pdf("2 Zeugnis.pdf", 2, 222), await pdf("3 Lebenslauf.PDF", 3, 333), await pdf("1 Anschreiben.pdf", 1, 111)]);
+  gleich([r.dateien, r.seiten, r.reihenfolge], [3, 6, ["1 Anschreiben.pdf", "2 Zeugnis.pdf", "3 Lebenslauf.PDF"]]);
+  const neu = await lib.PDFDocument.load(await r.datei.arrayBuffer());
+  gleich(neu.getPages().map((s) => Math.round(s.getWidth())), [111, 222, 222, 333, 333, 333]);
+  wahr(/^Zusammengefügt \d{4}-\d\d-\d\d \d{4}\.pdf$/.test(r.datei.name), r.datei.name);
+  const fehler = async (dateien) => { try { await pz.zusammenfuegen(dateien); return ""; } catch (e) { return e.message; } };
+  const a = await pdf("a.pdf", 1, 100);
+  gleich(await fehler([a]), "Wähle mindestens zwei PDF-Dateien aus.");
+  gleich(await fehler([a, new File(["kein PDF"], "b.txt", { type: "text/plain" })]), "„b.txt“ ist keine PDF-Datei.");
+  gleich(await fehler([a, new File(["%PDF-1.4 nichts"], "kaputt.pdf", { type: "application/pdf" })]), "„kaputt.pdf“ ließ sich nicht als PDF lesen.");
+  wahr((await fehler([a, await pdf("geheim.pdf", 1, 100, { verschluesselt: true })])).includes("mit einem Kennwort geschützt"), "Kennwort");
+});
+
+
+test("PDF: Antwort als PDF, Name aus der Überschrift, fremde Zeichen, mehrere Seiten (25.10.2026)", async () => {
+  const lib = await hf.modul("pdflib/pdf-lib.esm.min.js");
+  const lebenslauf = "# Lebenslauf Anna Huber\n\n**Adresse:** Hauptstraße 1, 4810 Gmunden\n\n## Berufserfahrung\n\n- 2020 bis heute: Bürokauffrau, Beispiel GmbH\n"
+    + "- 2016 bis 2020: Lehre, „Muster & Söhne“\n\n## Sprachen\n\n| Sprache | Niveau |\n|---|---|\n| Deutsch | Muttersprache |\n| Polnisch (Łódź) | gut 🙂 |\n\n"
+    + "1. Erster Punkt\n2. Zweiter Punkt\n\n```\ncode zeile\n```\n";
+  const f = await ap.alsPdf(lebenslauf);
+  gleich(f.name, "Lebenslauf Anna Huber.pdf");
+  const d = await lib.PDFDocument.load(await f.arrayBuffer());
+  gleich([d.getPageCount(), Math.round(d.getPage(0).getWidth()), d.getTitle()], [1, 595, "Lebenslauf Anna Huber"]);
+  const lang = await ap.alsPdf("Absatz mit vielen Wörtern. ".repeat(900));
+  wahr((await lib.PDFDocument.load(await lang.arrayBuffer())).getPageCount() >= 3, "mehrere Seiten");
+  wahr(/^KIplatz-Antwort \d{4}-\d\d-\d\d\.pdf$/.test(lang.name), lang.name);
+  gleich(ap.zeichenFuer(new Set([..."Lodz ?"].map((c) => c.codePointAt(0))))("Łódź 🙂"), "Lodz ");
+  gleich(ap.dateiname("## A/B: C?\ntext"), "A B C.pdf");
 });
 
 test("Anhang: HTML nur sichtbarer Text, Skripte und Stile fallen weg", () => {

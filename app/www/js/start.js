@@ -20,6 +20,8 @@ import * as skillAblage from "./skills.js";
 import * as meineKi from "./meine-ki.js";
 import { trennen as platzlTrennen, entwicklungSetzen as platzlEntwicklung, skillHolen, FORUM as platzlForum, verbunden as platzlVerbunden } from "./platzl.js";
 import * as anhang from "./anhang.js";
+import * as pdfZusammen from "./pdf-zusammen.js";
+import * as antwortPdf from "./antwort-pdf.js";
 import { Sprechen, anhaengen as sprAnhaengen, GROESSE_MB as SPRACHE_MB } from "./sprache.js";
 import * as zuhause from "./zuhause.js";
 
@@ -666,6 +668,23 @@ function anhaengeVerdrahten() {
   for (const id of ["#datei-waehlen", "#foto-waehlen"]) {
     $(id).onchange = async (e) => { const f = [...e.target.files]; e.target.value = ""; await anhaengeLesen(f); };
   }
+
+  $("#btn-pdf-zusammen").onclick = () => { zu(); $("#pdf-waehlen").click(); };
+  $("#pdf-waehlen").onchange = async (e) => {
+    const f = [...e.target.files]; e.target.value = "";
+    if (!f.length) return;
+    $("#pdf-fertig").hidden = true; z.pdfFertig = null;
+    status("Fügt die PDFs zusammen …");
+    try {
+      const r = await pdfZusammen.zusammenfuegen(f);
+      z.pdfFertig = r.datei;
+      $("#pdf-fertig-text").textContent = `${r.dateien} PDFs mit zusammen ${r.seiten} Seiten zusammengefügt, nach dem Dateinamen geordnet.`;
+      $("#pdf-fertig").hidden = false; status("");
+      $("#btn-pdf-teilen").focus();
+    } catch (err) { status(err?.message || "Das Zusammenfügen hat nicht geklappt."); }
+  };
+  $("#btn-pdf-teilen").onclick = () => { if (z.pdfFertig) dateienTeilen([z.pdfFertig]); };
+  $("#btn-pdf-weg").onclick = () => { $("#pdf-fertig").hidden = true; z.pdfFertig = null; };
   anhaengeZeichnen();
 }
 
@@ -2005,6 +2024,15 @@ function verdrahten() {
       case "kopieren": kopieren(n.text); break;
       case "melden": z.platzl?.fehlerMelden({ frage: frage?.text || "", antwort: n.text, modell: n.lieferschein?.modell || "", skill: n.lieferschein?.skill || "" }); break;
       case "teilen": teilen(teilText(frage?.text || "", n.text)); break;
+      case "als-pdf":
+        status("Erstellt die PDF …");
+        try {
+          z.pdfFertig = await antwortPdf.alsPdf(n.text);
+          $("#pdf-fertig-text").textContent = `„${z.pdfFertig.name}“ ist fertig.`;
+          $("#pdf-fertig").hidden = false; status("");
+          $("#btn-pdf-teilen").focus();
+        } catch (err) { status(err?.message || "Die PDF ließ sich nicht erstellen."); }
+        break;
       case "nochmal":
 
         if (!frage || z.laufend) return;

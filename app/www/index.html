@@ -92,11 +92,13 @@
           <div class="plus-menue" id="plus-menue" role="menu" hidden>
             <button type="button" role="menuitem" id="btn-datei"><span data-icon="datei"></span><span><b>Datei anhängen</b><small>PDF, Word, Excel oder Text</small></span></button>
             <button type="button" role="menuitem" id="btn-foto"><span data-icon="foto"></span><span><b>Foto anhängen</b><small>der Text darauf wird gelesen</small></span></button>
+            <button type="button" role="menuitem" id="btn-pdf-zusammen"><span data-icon="datei"></span><span><b>PDFs zusammenfügen</b><small>aus mehreren PDFs eine, am Handy</small></span></button>
             <button type="button" role="menuitem" id="btn-plus-skills"><span data-icon="platzl"></span><span><b>Skills</b><small>für dieses Gespräch oder immer an</small></span></button>
             <button type="button" role="menuitemcheckbox" aria-checked="false" id="btn-daheim-suchen" hidden><span data-icon="datei"></span><span><b>In meinen Dateien suchen</b><small>auf deinem PC daheim, nie im Internet</small></span></button>
           </div>
           <input type="file" id="datei-waehlen" multiple hidden>
           <input type="file" id="foto-waehlen" accept="image/*" multiple hidden>
+          <input type="file" id="pdf-waehlen" accept=".pdf,application/pdf" multiple hidden>
         </div>
         <textarea id="eingabe" rows="1" placeholder="Frag KIplatz etwas …" enterkeyhint="send" aria-label="Deine Frage an KIplatz" maxlength="8000"></textarea>
         <button class="werkzeug" id="btn-mikro" type="button" aria-label="Sprechen statt tippen" aria-pressed="false" title="Sprechen statt tippen: drücken, sprechen, noch einmal drücken. Der Text landet im Eingabefeld. Der Ton bleibt auf deinem Handy." data-icon="mikro"></button>
@@ -104,6 +106,12 @@
         <button class="senden stopp" id="btn-stopp" type="button" aria-label="Anhalten" data-icon="stopp" hidden></button>
       </div>
       
+      
+      <div class="daheim-leiste" id="pdf-fertig" hidden>
+        <span id="pdf-fertig-text"></span>
+        <button type="button" class="knopf haupt" id="btn-pdf-teilen">Sichern oder teilen</button>
+        <button type="button" class="knopf klein" id="btn-pdf-weg">Schließen</button>
+      </div>
       <div class="daheim-leiste" id="daheim-leiste" hidden>
         <label class="daheim-schalter"><input type="checkbox" id="daheim-an"> <span>In meinen Dateien suchen</span></label>
         <select id="daheim-pc" aria-label="Auf welchem PC suchen"></select>
@@ -460,6 +468,7 @@
   <form method="dialog">
     <h3 id="am-titel">Antwort</h3>
     <button class="zeile" value="teilen" data-icon="teilen">Teilen</button>
+    <button class="zeile" value="als-pdf" data-icon="datei">Als PDF sichern</button>
     <button class="zeile" value="antwort-melden" data-icon="antwortmelden">Antwort melden</button>
     <button class="zeile" value="wiki-vorschlag" data-icon="stift">Bessere Antwort vorschlagen</button>
     <button class="zeile" value="melden" data-icon="melden">Fehler im Platzl melden</button>

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 export const HELFER_SHA256 = Object.freeze({
   "lizenzen/onnxruntime-web-package.json": "ce2ce78732a15ddcaf52fe5f26c801a05ff149abda4e875dc2837d8a99e455b2",
+  "lizenzen/pdf-lib.txt": "f2c9fc00fdb66eb99ac156ba52d734af66d8d309f65753ae809ad34ee2883bcb",
   "lizenzen/pdfjs.txt": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
   "lizenzen/tesseract.js-core.txt": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08",
   "lizenzen/tesseract.js.txt": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1",
@@ -17,6 +18,7 @@ export const HELFER_SHA256 = Object.freeze({
   "modelle/whisper-base/tokenizer_config.json": "2e036e4dbacfdeb7242c7d4ec4149f4a16e86026048f94d1637e3a8ee9c6a573",
   "pdfjs/pdf.min.mjs": "f80490490320511e5df18c580b9edd6b5db8058dceebaf6f161992e0a964b9e2",
   "pdfjs/pdf.worker.min.mjs": "8ab0e5e30031b4a06ecfddd5ae9562f0227f830ee7ec9ed1a968b134243d2386",
+  "pdflib/pdf-lib.esm.min.js": "72c052d97b4d5d9fa6cdbdcb7ad709f03d4ddb1122390cb3afeba4d88651d969",
   "tesseract/core/tesseract-core-lstm.wasm.js": "eef5f8b2f8e20e150680b20adaec4a60babafee3adbe8a94583c81fee46e8680",
   "tesseract/core/tesseract-core-simd-lstm.wasm.js": "c58b46a4c796c0b8afccf77591d5b875b6896b45d402bbce8caa6f5362447b38",
   "tesseract/lang/deu.traineddata.gz": "306c4280d0cbed46fbff727486bd43b92730181bae80f56941a091f363bdf28b",

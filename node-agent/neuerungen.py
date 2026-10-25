@@ -11,8 +11,12 @@ def dank(satz: str, wer: str, art: str = "Meldung") -> str:
 
 
 NEUERUNGEN: dict[str, list[str]] = {
+    "2026-10-25d": [
+        "Neu: Lass dir von KIplatz einen Lebenslauf, ein Anschreiben oder einen Brief schreiben und sichere die Antwort gleich als PDF, in der App über „Mehr zu dieser Antwort“, im Programm über „…“ und „Drucken oder als PDF“. Ohne Wasserzeichen, und nichts geht hinaus.",
+    ],
     "2026-10-25c": [
         "Neu im Programm: Über das Plus fügst du mehrere PDFs am PC zu einer zusammen, etwa Anschreiben, Lebenslauf und Zeugnisse für eine Bewerbung. Die Dateien verlassen deinen PC dabei nicht.",
+        "Neu in der App: Auch am Handy fügst du über das Plus mehrere PDFs zu einer zusammen und sicherst oder teilst sie gleich. Die Dateien verlassen dein Handy dabei nicht.",
     ],
     "2026-10-25b": [
         "Neu: Frag „Betrifft die KI-Verordnung meinen Betrieb?“, und KIplatz sagt dir nach vier kurzen Angaben, was davon jetzt für dich gilt, was erst später kommt und was du nicht brauchst, etwa einen Kurs oder ein Zertifikat.",
@@ -1196,7 +1200,7 @@ ZURUECKGEHALTEN: dict[str, list[str]] = {
 KURZ_JE_TAG: dict[str, list[str]] = {
     "2026-10-25": [
         "Ist dein Flug verspätet oder gestrichen, rechnet KIplatz dir aus, wie viel Entschädigung dir zusteht",
-        "Im Programm fügst du jetzt mehrere PDFs am PC zu einer zusammen, ohne Hochladen",
+        "In Programm und App fügst du jetzt mehrere PDFs zu einer zusammen, ohne Hochladen",
         "Frag, ob die KI-Verordnung deinen Betrieb betrifft, und KIplatz sagt dir, was jetzt gilt und was später kommt",
     ],
     "2026-10-24": [
