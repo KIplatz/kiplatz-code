@@ -443,19 +443,21 @@ def seite_holen(adresse: str, *, oeffner=None, pruefer=None, fuer_frage: bool = 
         if not fuer_frage:
             raise WissenError("WISSEN_GROSS", "die Seite ist größer als 2 MB")
         roh = roh[:MAX_SEITE]
-    text_roh = roh.decode("utf-8", "replace")
+    text_roh = _entschluesseln(roh, art)
     grund = vorbehalt_in_seite(kopf, text_roh if art.startswith("text/html") else "")
     if grund:
         raise WissenError("WISSEN_ROBOTS", f"diese Website sagt Nein zu KI ({grund}), darum liest KIplatz sie nicht; bitte selbst dort nachlesen")
     if art.startswith("text/html"):
         titel, text = html_zu_text(text_roh)
+        for kopf_programm in (ANGEBOTE_KOPF, HAENDLER_LISTE_KOPF, PRODUKTSEITEN_KOPF):
+            text = text.replace(kopf_programm, kopf_programm.lower() + " (Text der Seite)")
         angebote = angebote_aus_seite(text_roh) if fuer_frage else ""
         if angebote:
             text = angebote + "\n\n" + text
         liste = haendler_eines_vergleichs(text_roh) if fuer_frage else ""
         if liste:
             text = liste + "\n\n" + text
-        elif fuer_frage:
+        elif fuer_frage and _ist_vergleich(titel, angebote):
             verweise = produktseiten_eines_vergleichs(text_roh, endgueltig)
             if verweise:
                 text = verweise + "\n\n" + text
@@ -577,50 +579,99 @@ def angebote_aus_seite(roh: str) -> str:
 
 
 HAENDLER_LISTE_KOPF = "Händler laut diesem Preisvergleich"
-_VERGLEICH_ANGEBOT = re.compile(r"product:\s*\{\s*id:\s*'[^'{}]{0,40}',\s*name:\s*'((?:[^'\\{}]|\\.){1,200})'[^{}]{0,600}?price:\s*'(\d{1,6}(?:\.\d{1,2})?)',"
-                                r"\s*merchant:\s*'((?:[^'\\{}]|\\.){1,80})'")
+_DATENOBJEKT = re.compile(r"\{[^{}]{20,1500}\}")
+_FELD = re.compile(r"""["']?([A-Za-z_]{2,30})["']?\s*:\s*("(?:[^"\\]|\\.){0,200}"|'(?:[^'\\]|\\.){0,200}'|-?\d+(?:\.\d+)?)""")
+_PREIS_FELDER = frozenset({"price", "preis", "prix", "prezzo", "precio", "preco", "prijs", "cena", "amount", "saleprice", "offerprice", "pricevalue",
+                           "lowprice", "minprice"})
+_HAENDLER_FELDER = frozenset({"merchant", "merchantname", "seller", "sellername", "shop", "shopname", "vendor", "vendorname", "store", "storename",
+                              "retailer", "retailername", "dealer", "dealername", "haendler", "negozio", "boutique", "tienda", "winkel", "sklep"})
+_NAME_FELDER = frozenset({"name", "title", "productname", "product_name", "produktname", "nome", "nom", "nombre", "naam", "nazwa", "offertitle"})
+_WAEHRUNG_FELDER = frozenset({"currency", "pricecurrency", "currencycode", "waehrung", "devise", "valuta", "moneda"})
 
 
 def _js_text(t: str) -> str:
-    return re.sub(r"\\u([0-9a-fA-F]{4})", lambda m: chr(int(m.group(1), 16)), t).replace("\\'", "'")
+    return re.sub(r"\\u([0-9a-fA-F]{4})", lambda m: chr(int(m.group(1), 16)), t).replace("\\'", "'").replace('\\"', '"')
+
+
+def _entschluesseln(roh: bytes, art: str) -> str:
+    m = re.search(r"(?i)charset=[\"']?([\w.:-]{2,40})", art or "") or re.search(rb"(?i)<meta[^>]{0,200}charset=[\"']?([\w.:-]{2,40})", roh[:4096])
+    name = (m.group(1).decode("ascii", "replace") if isinstance(m.group(1), bytes) else m.group(1)) if m else "utf-8"
+    try:
+        return roh.decode(name, "replace")
+    except LookupError:
+        return roh.decode("utf-8", "replace")
+
+
+def _ist_vergleich(titel: str, angebote: str) -> bool:
+    try:
+        import einkauf
+    except ImportError:
+        return MEHRERE_HAENDLER in (angebote or "")
+    return einkauf.ist_vergleichsseite("", titel) or MEHRERE_HAENDLER in (angebote or "")
 
 
 def haendler_eines_vergleichs(roh: str) -> str:
-    preise: dict[str, tuple[float, str]] = {}
-    for m in _VERGLEICH_ANGEBOT.finditer((roh or "")[:MAX_SEITE]):
-        name = " ".join(_js_text(m.group(1)).split())[:160]
-        wer = " ".join(_js_text(m.group(3)).split())[:60]
-        wert = float(m.group(2))
-        if wer and wert > 0 and (wer not in preise or wert < preise[wer][0]):
-            preise[wer] = (wert, name)
-    if not preise:
+    preise: dict[str, tuple[float, str, str]] = {}
+    for o in _DATENOBJEKT.finditer((roh or "")[:MAX_SEITE]):
+        felder: dict[str, str] = {}
+        for f in _FELD.finditer(o.group(0)):
+            schluessel = f.group(1).lower()
+            felder.setdefault(schluessel, _js_text(f.group(2).strip("\"'")))
+        preis = next((felder[k] for k in _PREIS_FELDER if k in felder), "")
+        wer = next((felder[k] for k in _HAENDLER_FELDER if k in felder), "")
+        name = next((felder[k] for k in _NAME_FELDER if k in felder), "")
+        waehrung = next((felder[k].upper() for k in _WAEHRUNG_FELDER if k in felder and re.fullmatch(r"[A-Za-z]{3}", felder[k])), "")
+        betrag = _betrag(preis)
+        wer, name = " ".join(wer.split())[:60], " ".join(name.split())[:160]
+        if not (betrag and wer and name) or wer == name:
+            continue
+        wert = float(betrag.replace(",", "."))
+        if wer not in preise or wert < preise[wer][0]:
+            preise[wer] = (wert, name, waehrung)
+    if len(preise) < 2:
         return ""
-    zeilen = [f"- {wer}: {f'{p:.2f}'.replace('.', ',')} EUR | {name}" for wer, (p, name) in sorted(preise.items(), key=lambda x: x[1][0])][:ANGEBOTE_MAX]
+    zeilen = [f"- {wer}: {f'{p:.2f}'.replace('.', ',')} {w}".rstrip() + f" | {name}"
+              for wer, (p, name, w) in sorted(preise.items(), key=lambda x: x[1][0])][:ANGEBOTE_MAX]
     return f"{HAENDLER_LISTE_KOPF}:\n" + "\n".join(zeilen)
 
 
 PRODUKTSEITEN_KOPF = "Produktseiten dieses Preisvergleichs"
-_PRODUKT_LINK = re.compile(r'href="((?:https?://(?:www\.)?geizhals\.(?:at|de|eu)/)?([a-z0-9-]{4,160})-a(\d{4,10})\.html)[^"]*"[^>]{0,300}>([^<]{0,200})', re.I)
+_LINK = re.compile(r'<a\b[^<>]{0,400}?href="([^"]{2,300})"[^<>]{0,400}>((?:[^<]|<(?!/a>)){0,400})</a>', re.I)
 
 
 def produktseiten_eines_vergleichs(roh: str, adresse: str) -> str:
-    m = re.match(r"^(https?://(?:www\.)?geizhals\.(?:at|de|eu))/", adresse or "", re.I)
-    if not m:
+    try:
+        import einkauf
+    except ImportError:
         return ""
+    from urllib.parse import urljoin
+    eigen = einkauf.host(adresse)
     seiten: dict[str, str] = {}
     zahl: dict[str, int] = {}
-    for link in _PRODUKT_LINK.finditer((roh or "")[:MAX_SEITE]):
-        a = f"{m.group(1)}/{link.group(2)}-a{link.group(3)}.html"
-        if a not in seiten and len(seiten) >= 40:
+    for link in _LINK.finditer((roh or "")[:MAX_SEITE]):
+        a = urljoin(adresse, html.unescape(link.group(1))).split("#")[0]
+        if not a.startswith(("https://", "http://")) or einkauf.host(a) != eigen or a.rstrip("/") == adresse.rstrip("/") or "?" in a:
+            continue
+        wort = " ".join(html.unescape(re.sub(r"<[^>]*>", " ", link.group(2))).split())
+        if a not in seiten and len(seiten) >= 120:
             break
-        name = seiten.get(a) or re.sub(r"(\d{3}) (\d{2}) (z?r) ?(\d{2})", r"\1/\2 \3\4", link.group(2).replace("-", " "), flags=re.I)
-        wort = " ".join(html.unescape(link.group(4)).split())
-        anzahl = re.match(r"^(\d+) Angebot", wort)
+        anzahl = re.match(r"^(\d{1,5})\s+(?:" + "|".join(re.escape(w) for w in einkauf.ANGEBOTE_WORTE) + r")\b", wort, re.I)
         if anzahl:
             zahl[a] = max(zahl.get(a, 0), int(anzahl.group(1)))
-        elif len(wort) >= 6 and wort not in name:
+            seiten.setdefault(a, "")
+            continue
+        pfad = re.sub(r"[-_/]+", " ", re.sub(r"\.\w{2,5}$", "", a.split("?")[0].rsplit("/", 1)[-1]))
+        pfad = re.sub(r"(\d{3}) (\d{2}) (z?r) ?(\d{2})", r"\1/\2 \3\4", pfad, flags=re.I)
+        if not re.search(r"\d", wort + pfad):
+            continue
+        name = seiten.get(a) or pfad
+        if len(wort) >= 4 and wort not in name:
             name = f"{name} | {wort}"[:300]
         seiten[a] = name
+    seiten = {a: n for a, n in seiten.items() if n}
+    if any(a in zahl for a in seiten):
+        seiten = {a: n for a, n in seiten.items() if a in zahl}
+    seiten = dict(list(seiten.items())[:40])
     if not seiten:
         return ""
     return f"{PRODUKTSEITEN_KOPF}:\n" + "\n".join(f"- {name}" + (f" ({zahl[a]} Angebote)" if a in zahl else "") + f": {a}" for a, name in seiten.items())

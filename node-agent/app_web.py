@@ -1452,17 +1452,20 @@ class Api:
             je_seite.append(tr)
             self._nachgeschaut_merken(e)
         if lauf is not None and einkauf.ist_einkauf(frage):
-            v = einkauf.variante(einkauf.sache(frage))
+            v, ohne = einkauf.suchvariante(frage)
+            alternativen = einkauf.ist_alternative(frage)
             markt = nachschauen.vergleich_markt(frage)
             roh = list(ergebnisse[0].treffer) if ergebnisse else []
             ek = lauf.setdefault("einkauf", {"angebote": [], "portale": []})
             gelesen_hier = {e.adresse for e in ergebnisse} | set(lauf["gelesen"])
-            ziele = [t for t in roh if t["adresse"] not in gelesen_hier and not einkauf.ist_vergleichsseite(t["adresse"], t["titel"])
-                     and not einkauf.kein_haendler(t["adresse"]) and einkauf.markt_passt(t["adresse"], markt) and v.passt(t["titel"] + " " + t["text"], t["titel"])]
+            ziele = [t for t in roh if t["adresse"] not in gelesen_hier and not einkauf.ist_vergleichsseite(t["adresse"], t["titel"], t["text"])
+                     and not einkauf.kein_haendler(t["adresse"], t["titel"]) and einkauf.markt_passt(t["adresse"], markt) and v.passt(t["titel"] + " " + t["text"], t["titel"])]
             ziele = list({einkauf.host(t["adresse"]): t for t in reversed(ziele)}.values())[::-1]
-            vergleich = [dict(t, adresse=einkauf.im_markt(t["adresse"], markt)) for t in roh if einkauf.ist_vergleich_produktseite(t["adresse"])
+            vergleich = [dict(t, adresse=einkauf.im_markt(t["adresse"], markt)) for t in roh if einkauf.ist_vergleichsseite(t["adresse"], t["titel"], t["text"])
                          and v.passt(t["titel"], t["titel"])]
-            ziele = list({t["adresse"]: t for t in vergleich if t["adresse"] not in gelesen_hier and einkauf.markt_passt(t["adresse"], markt)}.values())[:2] + ziele
+            vergleich = [t for t in vergleich if t["adresse"] not in gelesen_hier and einkauf.markt_passt(t["adresse"], markt)
+                         and not nachschauen.gesperrt(t["adresse"])]
+            ziele = list({einkauf.host(t["adresse"]): t for t in reversed(vergleich)}.values())[::-1][:3] + ziele
             ziele = [t for t in einkauf.produktseiten(ergebnisse, v, markt) if t["adresse"] not in gelesen_hier
                      and all(t["adresse"] != z["adresse"] for z in ziele)] + ziele
             haendlerseiten = []
@@ -1470,7 +1473,8 @@ class Api:
                 self._schritt("sieht bei den Händlern nach …")
                 haendlerseiten = self._nachschauer.seiten_lesen(ziele, frage)
                 lauf["gelesen"] |= {e.adresse for e in haendlerseiten}
-            ek["angebote"] = einkauf.zusammenfassen(list(ek["angebote"]) + einkauf.angebote(roh, list(ergebnisse) + haendlerseiten, v, markt))
+            ek["angebote"] = einkauf.zusammenfassen(list(ek["angebote"]) + einkauf.angebote(roh, list(ergebnisse) + haendlerseiten, v, markt,
+                                                                                            ohne, alternativen))
             ek["portale"] = list(dict.fromkeys(ek["portale"] + einkauf.vergleichsseiten(roh, ergebnisse)))[:3]
         out = [tr[i] for i in range(max((len(x) for x in je_seite), default=0)) for tr in je_seite if i < len(tr)]
         wohin = _wohin_gemerkt()
@@ -5880,13 +5884,23 @@ _ANHANG_BEZUG = re.compile(r"(?i)\b(?:im\s+anhang|anhang|angehängt\w*|auf\s+(?:
 
 
 def _anhang_kennzeile(anhang: str) -> str:
-    beste, punkte = "", 0
-    for z in [z.strip() for z in anhang.splitlines() if z.strip()][1:16]:
-        if re.search(r"[€$£]|https?://|\bwww\.", z):
+    zeilen = [z.strip() for z in anhang.splitlines() if z.strip()][1:16]
+    gut = [not re.search(r"[€$£¥]|https?://|\bwww\.", z) for z in zeilen]
+    beste, punkte, i_beste = "", 0, -1
+    for i, z in enumerate(zeilen):
+        if not gut[i]:
             continue
-        p = len(wissen.woerter(z))
+        p = len(wissen.woerter(z)) + 3 * bool(re.search(r"\d", z)) - 2 * len(re.findall(r"[<>|›»]", z))
         if p > punkte:
-            beste, punkte = z, p
+            beste, punkte, i_beste = z, p, i
+    def name(z: str) -> bool:
+        return bool(re.search(r"[^\W\d_]{4,}", z))
+
+    if 0 <= i_beste:
+        if not name(beste) and i_beste > 0 and gut[i_beste - 1] and name(zeilen[i_beste - 1]):
+            beste, punkte = zeilen[i_beste - 1] + " " + beste, punkte + len(wissen.woerter(zeilen[i_beste - 1]))
+        elif not re.search(r"\d", beste) and i_beste + 1 < len(zeilen) and gut[i_beste + 1] and re.search(r"\d", zeilen[i_beste + 1]):
+            beste, punkte = beste + " " + zeilen[i_beste + 1], punkte + len(wissen.woerter(zeilen[i_beste + 1]))
     return " ".join(beste.split())[:120] if punkte >= 3 else ""
 
 
@@ -5910,7 +5924,7 @@ def _anhang_kennzeilen(anhang: str) -> list[str]:
     koepfe = schriftstueck._ANHANG_KOPF.findall("\n" + anhang)
     out = []
     for kopf, inhalt in zip(koepfe, teile[1:]):
-        zeile = re.sub(r"(?i)\bDOT\s*\d{2,4}\b|\b3PMSF\b|\bM\s*\+\s*S\b", " ", _anhang_kennzeile(kopf.strip() + "\n" + inhalt))
+        zeile = re.sub(r"(?i)\bDOT\b(?:\s*\d{2,4}\b)?|\b3PMSF\b|\bM\s*\+\s*S\b", " ", _anhang_kennzeile(kopf.strip() + "\n" + inhalt))
         k = " ".join(zeile.split()[:8])
         if k and k not in out:
             out.append(k)

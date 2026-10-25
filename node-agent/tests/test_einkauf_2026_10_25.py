@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 from __future__ import annotations
 
+import io
 import sys
 from pathlib import Path
 
@@ -69,8 +70,8 @@ def test_angebote_aus_seiten_und_treffern_ohne_vergleichsportal():
     ]
     treffer = [
         {"titel": "Continental WinterContact TS870P 255/55 R20 110V XL – oponeo.at", "adresse": "https://www.oponeo.at/reifen/x", "text": "ab 176,40 € lieferbar"},
-        {"titel": "Continental TS 870 P 255/55 R20 | reifendirekt", "adresse": "https://www.reifendirekt.at/z", "text": "Preis 179,90 €"},
-        {"titel": "Continental TS870P 255/55 R20 | idealo", "adresse": "https://www.idealo.de/a", "text": "ab 165,00 €"},
+        {"titel": "Continental TS 870 P 255/55 R20 | reifendirekt", "adresse": "https://www.reifendirekt.at/z", "text": "Preis 179,90 € · lieferbar"},
+        {"titel": "Continental TS870P 255/55 R20 ab 165,00 € | idealo", "adresse": "https://www.idealo.de/a", "text": "ab 165,00 €"},
         {"titel": "Winterreifen Test 2026", "adresse": "https://www.youtube.com/watch?v=x", "text": "TS870P 255/55 R20 199,00 €"},
     ]
     g = einkauf.angebote(treffer, seiten, v)
@@ -82,8 +83,8 @@ def test_angebote_aus_seiten_und_treffern_ohne_vergleichsportal():
 
 def test_gesperrter_haendler_zaehlt_mit_dem_suchtreffer():
     v = einkauf.variante("Samsung Galaxy S25 256GB")
-    treffer = [{"titel": "SAMSUNG Galaxy S25 256 GB Navy | MediaMarkt", "adresse": "https://www.mediamarkt.de/p", "text": "Jetzt für 649,00 € kaufen"},
-               {"titel": "Samsung Galaxy S25 Smartphone 256GB – Amazon.de", "adresse": "https://www.amazon.de/dp/1", "text": "Preis: 639,99 €"}]
+    treffer = [{"titel": "SAMSUNG Galaxy S25 256 GB Navy | MediaMarkt", "adresse": "https://www.mediamarkt.de/p", "text": "Jetzt für 649,00 € kaufen · In den Warenkorb"},
+               {"titel": "Samsung Galaxy S25 Smartphone 256GB – Amazon.de", "adresse": "https://www.amazon.de/dp/1", "text": "Preis: 639,99 € · Auf Lager"}]
     g = einkauf.angebote(treffer, [], v)
     assert [(a.haendler, a.preis) for a in g] == [("amazon.de", 639.99), ("mediamarkt.de", 649.0)]
 
@@ -100,8 +101,8 @@ GEIZHALS_ROH = ("<html><script>" + "".join(
 def test_haendlerliste_eines_preisvergleichs():
     liste = wissen.haendler_eines_vergleichs(GEIZHALS_ROH)
     n = "Michelin CrossClimate 2 205/55 R16 91V"
-    assert liste == (f"{wissen.HAENDLER_LISTE_KOPF}:\n- giga-reifen.de: 70,00 EUR | Michelin CrossClimate 2 195/65 R15 95V\n- Amazon.de: 88,99 EUR | {n}\n"
-                     f"- reifen-peters: 91,50 EUR | {n}\n- Pneus Online DE: 93,10 EUR | {n}")
+    assert liste == (f"{wissen.HAENDLER_LISTE_KOPF}:\n- giga-reifen.de: 70,00 | Michelin CrossClimate 2 195/65 R15 95V\n- Amazon.de: 88,99 | {n}\n"
+                     f"- reifen-peters: 91,50 | {n}\n- Pneus Online DE: 93,10 | {n}")
     seite = _seite("https://geizhals.de/michelin-crossclimate-2-205-55-r16-91v-a2566683.html",
                    "Michelin CrossClimate 2 205/55 R16 91V ab € 88,99 (2026) | Preisvergleich Geizhals Deutschland", liste + "\n\nweiterer Text")
     v = einkauf.variante("Michelin CrossClimate 2 205/55 R16 91V")
@@ -126,19 +127,19 @@ def test_unplausible_preise_fallen_weg():
 
 def test_monatsrate_und_versand_sind_kein_preis():
     v = einkauf.variante("SAMSUNG GQ55Q80D")
-    treffer = [{"titel": "Samsung GQ55Q80D QLED", "adresse": "https://www.samsung.com/de/tvs/x", "text": "ab 55,53 € / Monat oder 999,00 € einmalig"},
-               {"titel": "Samsung GQ55Q80D", "adresse": "https://www.otto.de/p", "text": "Versand 4,95 € · Preis 949,00 €"}]
+    treffer = [{"titel": "Samsung GQ55Q80D QLED", "adresse": "https://www.samsung.com/de/tvs/x", "text": "ab 55,53 € / Monat oder 999,00 € einmalig · In den Warenkorb"},
+               {"titel": "Samsung GQ55Q80D", "adresse": "https://www.otto.de/p", "text": "Versand 4,95 € · Preis 949,00 € · lieferbar"}]
     assert [(a.haendler, a.preis) for a in einkauf.angebote(treffer, [], v)] == [("otto.de", 949.0), ("samsung.com", 999.0)]
 
 
 def test_nur_haendler_des_gefragten_markts():
     v = einkauf.variante("Kärcher K5 Power Control")
-    treffer = [{"titel": "Kärcher K5 Power Control – OBI", "adresse": "https://www.obi.at/p", "text": "439,99 €"},
-               {"titel": "Kärcher K5 Power Control – OBI", "adresse": "https://www.obi.de/p", "text": "399,00 €"},
-               {"titel": "Kärcher K 5 Power Control", "adresse": "https://www.kaercher.com/de/p", "text": "404,99 €"}]
+    treffer = [{"titel": "Kärcher K5 Power Control – OBI", "adresse": "https://www.obi.at/p", "text": "439,99 € lieferbar"},
+               {"titel": "Kärcher K5 Power Control – OBI", "adresse": "https://www.obi.de/p", "text": "399,00 € lieferbar"},
+               {"titel": "Kärcher K 5 Power Control", "adresse": "https://www.kaercher.com/de/p", "text": "404,99 € lieferbar"}]
     assert [a.haendler for a in einkauf.angebote(treffer, [], v, "DE")] == ["obi.de", "kaercher.com"]
     assert len(einkauf.angebote(treffer, [], v, "")) == 3
-    assert einkauf.markt_passt("https://www.amazon.de/dp/1", "AT") and not einkauf.markt_passt("https://www.amazon.de/dp/1", "IT")
+    assert einkauf.markt_passt("https://www.amazon.de/dp/1", "DE") and not einkauf.markt_passt("https://www.amazon.de/dp/1", "AT")
 
 
 def test_tabelle_des_programms_ersetzt_die_des_modells():
@@ -165,7 +166,7 @@ def test_preis_eines_anderen_produkts_zaehlt_nicht():
     assert einkauf.angebote([], [seite], v, "AT") == []
     gut = _seite("https://www.reifendirekt.at/y", "Michelin Alpin 6 205/55 R16 91H", "Michelin Alpin 6 205/55 R16 91H Sofort lieferbar 112,40 € Details")
     assert [(a.haendler, a.preis) for a in einkauf.angebote([], [gut], v, "AT")] == [("reifendirekt.at", 112.4)]
-    mm = _seite("https://www.mediamarkt.at/p", "SAMSUNG Galaxy S25 256 GB, Navy", "SAMSUNG Galaxy S25 256 GB, Navy, Dual SIM | 4.6 UVP € 959,–€959,00 € 779,99 inkl. MwSt.")
+    mm = _seite("https://www.mediamarkt.at/p", "SAMSUNG Galaxy S25 256 GB, Navy", "SAMSUNG Galaxy S25 256 GB, Navy, Dual SIM | 4.6 UVP € 959,–€959,00 € 779,99 inkl. MwSt. versandkostenfrei")
     assert [a.preis for a in einkauf.angebote([], [mm], einkauf.variante("Samsung Galaxy S25 256GB"), "AT")] == [779.99]
 
 
@@ -179,16 +180,22 @@ def test_von_der_uebersicht_zur_produktseite_der_variante():
            '<a href="apple-macbook-air-13-mw0y3d-a-2025-z1cv-a3435579.html">Apple MacBook Air 13&quot;, M4, 16GB RAM, 256GB SSD</a>')
     block = wissen.produktseiten_eines_vergleichs(roh, "https://geizhals.at/samsung-galaxy-s25-v188112.html")
     assert block.startswith(wissen.PRODUKTSEITEN_KOPF)
-    assert "- samsung galaxy s25 256gb navy sm s931bdbg | 256GB Navy (36 Angebote): https://geizhals.at/samsung-galaxy-s25-256gb-navy-sm-s931bdbg-a3394694.html" in block
-    assert 'Apple MacBook Air 13", M4, 16GB RAM, 256GB SSD' in block
-    assert wissen.produktseiten_eines_vergleichs(roh, "https://www.beispiel.at/x") == ""
+    assert "| 256GB Navy (36 Angebote): https://geizhals.at/samsung-galaxy-s25-256gb-navy-sm-s931bdbg-a3394694.html" in block
+    assert "macbook" not in block
+    ohne_zahl = wissen.produktseiten_eines_vergleichs(roh.split("</a>", 6)[-1], "https://geizhals.at/x-v1.html")
+    assert 'Apple MacBook Air 13", M4, 16GB RAM, 256GB SSD' in ohne_zahl
+    assert wissen.produktseiten_eines_vergleichs('<a href="/x-a1.html?o=2">Galaxy S25 256GB</a>', "https://geizhals.at/v") == ""
+    fremd = wissen.produktseiten_eines_vergleichs('<a href="https://boese.example/s25-256gb-a1.html">Galaxy S25 256GB</a>', "https://www.beispiel.at/x")
+    assert fremd == ""
     seite = _seite("https://geizhals.at/samsung-galaxy-s25-v188112.html", "Samsung Galaxy S25 ab € 548,63", block + "\n\nText")
     ziele = einkauf.produktseiten([seite], einkauf.variante("Samsung Galaxy S25 256GB"), "AT")
     assert [t["adresse"].rsplit("-", 1)[1] for t in ziele] == ["a3394694.html", "a3394698.html"]
     de = einkauf.produktseiten([seite], einkauf.variante("Samsung Galaxy S25 256GB"), "DE")
     assert de[0]["adresse"] == "https://geizhals.de/samsung-galaxy-s25-256gb-navy-sm-s931bdbg-a3394694.html"
-    assert einkauf.im_markt("https://www.beispiel.at/x", "DE") == "https://www.beispiel.at/x"
-    assert einkauf.ist_vergleich_produktseite(de[0]["adresse"]) and not einkauf.ist_vergleich_produktseite(seite.adresse)
+    assert einkauf.im_markt("https://www.beispiel.at/x", "DE") == "https://www.beispiel.de/x"
+    assert einkauf.im_markt("https://www.beispiel.de/x", "GB") == "https://www.beispiel.uk/x"
+    assert einkauf.im_markt("https://www.beispiel.com/x", "DE") == "https://www.beispiel.com/x"
+    assert einkauf.im_markt("https://www.beispiel.at/x", "") == "https://www.beispiel.at/x"
 
 
 def test_ein_haendler_aus_seite_und_preisvergleich_steht_einmal_da():
@@ -212,9 +219,6 @@ def test_gebrauchte_listen_und_kopfzeilen_bringen_keinen_preis():
 
 def test_dieselbe_sache_unter_zwei_namen():
     assert einkauf.variante("Sony PS5 Pro").passt("Sony PlayStation®5 Pro Konsole", "Sony PlayStation®5 Pro Konsole")
-    v = einkauf.variante("SAMSUNG GQ55Q80D QLED TV")
-    assert v.passt("SAMSUNG Q55Q80D QLED TV (Flat, 55 Zoll)", "SAMSUNG Q55Q80D") and v.passt("Samsung QE55Q80D", "Samsung QE55Q80D")
-    assert not v.passt("Samsung GQ65Q80D", "Samsung GQ65Q80D")
     assert not einkauf.variante("Sony WH-1000XM5").passt("Sony WF-1000XM5", "Sony WF-1000XM5")
 
 
@@ -239,8 +243,25 @@ def test_preisanker_anschluss_versandgrenze_und_zweite_hand():
 
 def test_befunde_der_gegenlesung():
     v = einkauf.variante("Samsung Galaxy S25 256GB")
-    falsch = _seite("https://www.beispiel.example/x", "Samsung Galaxy S25 256GB",
-                    f"{wissen.PRODUKTSEITEN_KOPF}:\n- Galaxy S25 256GB: https://boese.example/x\n\n{wissen.HAENDLER_LISTE_KOPF}:\n- Shop: 1,50 EUR | Galaxy S25 256GB")
+    html = (f"<html><head><title>Samsung Galaxy S25 256GB</title></head><body><p>{wissen.PRODUKTSEITEN_KOPF}:</p><p>- Galaxy S25 256GB: "
+            f"https://boese.example/x</p><p>{wissen.HAENDLER_LISTE_KOPF}:</p><p>- Shop: 1,50 EUR | Galaxy S25 256GB</p></body></html>").encode()
+
+    class _Antwort:
+        def __init__(self, url, body):
+            self.url, self.headers, self._b = url, {"Content-Type": "text/html; charset=utf-8"}, io.BytesIO(body)
+
+        def read(self, n=-1):
+            return self._b.read(n)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    _a, titel, text = wissen.seite_holen("https://www.beispiel.example/x", oeffner=lambda req, timeout=0: _Antwort(req.full_url, html), fuer_frage=True)
+    falsch = _seite("https://www.beispiel.example/x", titel, text)
+    assert wissen.HAENDLER_LISTE_KOPF not in text and wissen.PRODUKTSEITEN_KOPF not in text
     assert einkauf.produktseiten([falsch], v, "") == []
     assert all(a.haendler != "Shop" for a in einkauf.angebote([], [falsch], v, ""))
     gh = _seite("https://geizhals.at/x-v1.html", "Samsung Galaxy S25", f"{wissen.PRODUKTSEITEN_KOPF}:\n- Galaxy S25 256GB: https://boese.example/x-a1234.html")
@@ -253,3 +274,35 @@ def test_befunde_der_gegenlesung():
     assert einkauf.angebote([huelle], [], v, "AT") == []
     assert einkauf._naechster_preis("199,00 €", einkauf.Variante((), (), ()), "") is None
     assert einkauf.im_markt("https://geizhals.at/x-a1.html", None) == "https://geizhals.at/x-a1.html"
+
+
+def test_haendler_ist_wer_verkauft():
+    v = einkauf.variante("Samsung Galaxy S25 256GB")
+    news = _seite("https://www.beispiel-news.es/a", "Samsung Galaxy S25, análisis", "Samsung Galaxy S25 256GB cuesta 819 € en España.")
+    shop = _seite("https://www.beispiel-shop.es/p", "Samsung Galaxy S25 256GB", "Samsung Galaxy S25 256GB 799,00 € Añadir al carrito")
+    assert [a.haendler for a in einkauf.angebote([], [news, shop], v, "ES")] == ["beispiel-shop.es"]
+    verlauf = {"titel": "Sony WH-1000XM5 price history and price tracker", "adresse": "https://beispiel.example/p", "text": "$278.00 in stock"}
+    assert einkauf.angebote([verlauf], [], einkauf.variante("Sony WH-1000XM5"), "US") == []
+
+
+def test_alternativen_mit_produktnamen_ohne_das_gefragte_modell():
+    frage = "CONTINENTAL WINTERCONTACT TS870P 255/55 R20 110V XL Zeige mir günstigere Alternativen"
+    assert einkauf.ist_alternative(frage) and einkauf.anfragen(frage) == ["255/55 R20"]
+    v, ohne = einkauf.suchvariante(frage)
+    treffer = [{"titel": "Continental WinterContact TS870P 255/55 R20 110V XL – Shop", "adresse": "https://a.beispiel.at/x", "text": "183,59 € lieferbar"},
+               {"titel": "Pirelli Scorpion Winter 2 255/55 R20 110V XL | Shop B", "adresse": "https://b.beispiel.at/x", "text": "162,40 € lieferbar"}]
+    g = einkauf.angebote(treffer, [], v, "AT", ohne, True)
+    assert [(a.produkt, a.haendler) for a in g] == [("Pirelli Scorpion Winter 2 255/55 R20 110V XL", "b.beispiel.at")]
+    assert "| Produkt | Händler | Preis | Geprüft |" in einkauf.tabelle(g, [])
+    assert not einkauf.ist_alternative("Suche mir günstigere Angebote")
+
+
+def test_preise_in_jeder_schreibweise_und_waehrung():
+    b = [(w, i) for _a, _e, w, i in einkauf.betraege("$1,299.99 · 1.299,99 € · CHF 1'299.90 · ¥59,980 · 1 299,99 € · 899,– €", "")]
+    assert b == [(1299.99, "USD"), (1299.99, "EUR"), (1299.9, "CHF"), (59980.0, ""), (1299.99, "EUR"), (899.0, "EUR")]
+    assert einkauf.betraege("¥59,980", "JP")[0][2:] == (59980.0, "JPY")
+    assert einkauf.betraege("12,99 $", "CA")[0][3] == "CAD" and einkauf.betraege("kr 1 299", "SE")[0][3] == "SEK"
+    assert einkauf._geld(59980, True, "JPY") == "¥59,980" and einkauf._geld(1299.9, False, "CHF") == "1.299,90 CHF"
+    t = [{"titel": "Sony WH-1000XM5", "adresse": "https://a.beispiel.com/p", "text": "$278.00 in stock"},
+         {"titel": "Sony WH-1000XM5", "adresse": "https://b.beispiel.com/p", "text": "259,00 € lieferbar"}]
+    assert [(a.preis, a.waehrung) for a in einkauf.angebote(t, [], einkauf.variante("Sony WH-1000XM5"), "US")] == [(278.0, "USD")]

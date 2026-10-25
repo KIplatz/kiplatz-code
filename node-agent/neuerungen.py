@@ -11,6 +11,10 @@ def dank(satz: str, wer: str, art: str = "Meldung") -> str:
 
 
 NEUERUNGEN: dict[str, list[str]] = {
+    "2026-10-25h": [
+        "Der Preisvergleich funktioniert jetzt in jedem Land und jeder Sprache: Fragst du auf Italienisch, Französisch, Spanisch oder Japanisch nach dem günstigsten Preis, sucht KIplatz bei den Händlern dort und zeigt die Preise in der Währung des Landes, ob Euro, Dollar, Pfund, Franken oder Yen.",
+        "Fragst du nach günstigeren Alternativen, etwa zu deinem Reifen auf dem Foto, zeigt die Tabelle andere Produkte in derselben Größe, jedes mit seinem Namen. Und als Händler zählt nur, wer wirklich verkauft, keine Nachrichtenseite und kein Preisverlauf. Neu, wir verbessern es laufend.",
+    ],
     "2026-10-25g": [
         "Fragst du, wo ein bestimmtes Gerät oder ein Reifen am günstigsten ist, liest KIplatz jetzt die Händlerlisten der Preisvergleiche und die Seiten der Shops selbst. In der Tabelle steht nur, was es genau in deiner Größe oder Variante gibt, neu und nicht gebraucht, und daneben, wo der Preis geprüft wurde.",
         "Findet KIplatz für genau dein Modell keinen Händler mit Preis, sagt es dir das ehrlich und nennt dir Preisvergleiche zum Weitersuchen, statt einen Preis für etwas anderes hinzuschreiben. Neu, wir verbessern es laufend.",
