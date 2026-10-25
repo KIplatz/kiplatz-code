@@ -171,7 +171,7 @@ def test_only_wikimedia_and_the_program_wires_it_in():
     except wikipedia.WikiError as exc:
         assert exc.code == "WIKI_ADRESSE"
     src = (HIER / "app_web.py").read_text(encoding="utf-8")
-    assert "self._wiki.suchen(frage, vektor=vektor, n=WIKI_KANDIDATEN if bewerten else 3, abbrechen=" in src
+    assert "self._wiki.suchen(" not in src
     assert "speicher_mb - self._wiki.belegt_mb()" in src
     assert "if not self.spielwiese:" in src and "self._wiki.start()" in src and "Profile.TEST and not self.spielwiese" not in src
 

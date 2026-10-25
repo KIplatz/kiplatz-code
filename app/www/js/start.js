@@ -35,7 +35,7 @@ const ENTWICKLUNG = !nativ && ["localhost", "127.0.0.1"].includes(location.hostn
 if (!nativ) basisSetzen("");
 if (ENTWICKLUNG) platzlEntwicklung(location.origin);
 
-const z = { geraet: null, gespraeche: null, laufend: null, einst: { aussehen: "system", schrift: "normal", standort: false }, sperre: false, anhaenge: [], anhangLiest: false, zuhause: [] };
+const z = { geraet: null, gespraeche: null, laufend: null, einst: { aussehen: "system", schrift: "normal", standort: false }, sperre: false, anhaenge: [], anhangLiest: false, sendenNachLesen: false, zuhause: [] };
 
 
 function ablageLesen(name, sonst) { try { return JSON.parse(localStorage.getItem("kiplatz." + konten.name(name)) ?? "null") ?? sonst; } catch { return sonst; } }
@@ -672,20 +672,34 @@ function anhaengeZeichnen() {
   $("#anhang-hinweis").hidden = !z.anhaenge.length;
 }
 
+
+function anhangMelden(t) {
+  const p = $("#anhang-lesen");
+  p.textContent = t || "";
+  p.hidden = !t;
+}
+
 async function anhaengeLesen(dateien) {
+  let fehler = false;
   for (const datei of dateien) {
-    if (z.anhaenge.length >= anhang.MAX_ANHAENGE) { status(`Höchstens ${anhang.MAX_ANHAENGE} Dateien je Frage.`); break; }
+    if (z.anhaenge.length >= anhang.MAX_ANHAENGE) { anhangMelden(`Höchstens ${anhang.MAX_ANHAENGE} Dateien je Frage.`); break; }
     z.anhangLiest = true; $("#btn-plus").disabled = true;
-    status(`„${datei.name}“ wird gelesen …`);
+    anhangMelden(`„${datei.name}“ wird gelesen …`);
     try {
-      const a = await anhang.lesen(datei, (t) => statusDauerhaft(t));
+      const a = await anhang.lesen(datei, (t) => { statusDauerhaft(t); if (!z.sendenNachLesen) anhangMelden(t); });
       z.anhaenge.push(a);
-      status(`„${a.name}“ gelesen. Frag jetzt etwas dazu.`);
+      anhangMelden(z.sendenNachLesen ? "" : `„${a.name}“ gelesen. Frag jetzt etwas dazu.`);
     } catch (e) {
-      status(e instanceof anhang.AnhangFehler ? e.message : `„${datei.name}“ ließ sich nicht lesen.`);
+      fehler = true;
+      anhangMelden(e instanceof anhang.AnhangFehler ? e.message : `„${datei.name}“ ließ sich nicht lesen.`);
     } finally {
       statusDauerhaft(""); z.anhangLiest = false; $("#btn-plus").disabled = false; anhaengeZeichnen();
     }
+  }
+
+  if (z.sendenNachLesen) {
+    z.sendenNachLesen = false;
+    if (!fehler && $("#eingabe").value.trim()) $("#eingabe-form").requestSubmit();
   }
 }
 
@@ -1905,12 +1919,15 @@ function verdrahten() {
 
   const ta = $("#eingabe");
   $("#eingabe-form").onsubmit = (e) => {
-    e.preventDefault(); const t = ta.value.trim(); if (z.laufend || z.anhangLiest) return;
+    e.preventDefault(); const t = ta.value.trim(); if (z.laufend) return;
+
+
+    if (z.anhangLiest) { if (t) { z.sendenNachLesen = true; anhangMelden("Deine Frage geht los, sobald das Foto gelesen ist."); } return; }
     if (!t) { if (z.anhaenge.length) status("Schreib dazu, was KIplatz mit der Datei machen soll, etwa „Fasse das zusammen“."); return; }
 
 
     const daheim = z.zuhause.length && $("#daheim-an").checked;
-    const mit = z.anhaenge; z.anhaenge = []; anhaengeZeichnen();
+    const mit = z.anhaenge; z.anhaenge = []; anhaengeZeichnen(); anhangMelden("");
     ta.value = ""; ta.style.height = "auto"; ta.closest(".eingabe-box").classList.remove("breit");
     if (daheim) { dateienFragen(t, daheimPcs()); return; }
     fragen(t, { anhaenge: mit });

@@ -69,20 +69,7 @@ def test_eine_reisefrage_ueberspringt_die_wikipedia_und_sucht_gleich(tmp_path, m
     monkeypatch.setattr(api, "_nachschauen", nachschauen_)
     monkeypatch.setattr(api, "nachschauen_an", lambda: True)
     _z, _q, _n, hinweis = api._mit_wissen([{"role": "user", "content": "Wie lange brauche ich mit dem Zug von Linz nach Graz?"}])
-    assert wiki.gesucht == 0 and gesucht == [(None, True)] and "Wikipedia wurde übersprungen" in hinweis
+    assert wiki.gesucht == 0 and gesucht == [(None, True)] and "steht in keinem Lexikon, darum gleich im Internet gesucht" in hinweis
     gesucht.clear()
     _z, _q, _n, hinweis = api._mit_wissen([{"role": "user", "content": "Wann wurde der Stephansdom gebaut?"}])
     assert wiki.gesucht == 0 and "Wikipedia-Kopie" not in hinweis
-    monkeypatch.setattr(app_web, "WIKI_ALS_QUELLE", True)
-    gesucht.clear()
-    api._mit_wissen([{"role": "user", "content": "Wann wurde der Stephansdom gebaut?"}])
-    assert wiki.gesucht >= 1 and all(not s for _f, s in gesucht)
-
-
-def test_die_wikipedia_meldet_ihre_zeiten_im_ablauf():
-    ki_laufzeit.messung_beginnen()
-    app_web.wiki_messen(_Wiki(), 5.02)
-    z = ki_laufzeit.messung_ende()
-    arten = {e["art"]: e["s"] for e in z}
-    assert arten["wikigrenze"] == 5.02 and arten["wwoerter"] == 4.6 and arten["wstellen"] == 120
-    app_web.wiki_messen(object(), 1.0)

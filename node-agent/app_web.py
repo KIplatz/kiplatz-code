@@ -123,8 +123,6 @@ UPDATE_ANTWORT_HOECHSTENS_S = 600
 ABHOLEN_FEHLVERSUCHE = 2
 KNAPP_TREFFER = 2
 KNAPP_ZEICHEN = 500
-WIKI_KANDIDATEN = 8
-WIKI_ALS_QUELLE = False
 LIVE_STELLEN = 6
 LIVE_STELLEN_LISTE = 8
 LIVE_STELLEN_VERGLEICH = 10
@@ -721,17 +719,12 @@ class Api:
         self._wiki = wikipedia.WikiKopie(lambda: wiki_pfad(self._core.load_freigabe().speicher_ort, self._core.base_dir),
                                          vorgesehen=lambda: self._community.ist_admin(),
                                          freigabe_mb=lambda: self._core.load_freigabe().speicher_mb, darf=self._wiki_darf, karte_frei=self._wiki_karte_frei,
-                                         vektoren=lambda texte: self._bedeutung.server.vektoren(texte, timeout_s=300),
-                                         vektoren_bereit=lambda: self._bedeutung.bereit(), log=lambda line: _log(core, line),
-                                         gemeinschaft=lambda: self._community if self._community.geraet() is not None else None,
-                                         modell=lambda: ki_laufzeit.EMBEDDING.sha256[:16], ablage=lambda: self._halter.dir)
+                                         log=lambda line: _log(core, line))
         self._wiki_en = wikipedia.WikiKopie(lambda: wiki_pfad(self._core.load_freigabe().speicher_ort, self._core.base_dir, wikipedia.SIMPLE.dirname),
                                             vorgesehen=lambda: self._community.ist_admin(),
                                             freigabe_mb=lambda: self._core.load_freigabe().speicher_mb,
                                             darf=lambda: self._wiki_darf() and self._wiki.phase not in WIKI_ARBEITET,
-                                            karte_frei=self._wiki_karte_frei,
-                                            vektoren=lambda texte: self._bedeutung.server.vektoren(texte, timeout_s=300),
-                                            vektoren_bereit=lambda: self._bedeutung.bereit(), log=lambda line: _log(core, line),
+                                            karte_frei=self._wiki_karte_frei, log=lambda line: _log(core, line),
                                             sprache=wikipedia.SIMPLE)
         self._wortliste = wortliste.Wortlisten(lambda: self._core.base_dir / "wortliste", log=lambda line: _log(core, line))
         self._osm = osm_orte.OrteKopie(lambda: osm_pfad(self._core.load_freigabe().speicher_ort, self._core.base_dir),
@@ -1043,63 +1036,24 @@ class Api:
                 and massfrage(frage) and nachschauen.erkennen(frage) is None and not _frueher_gefragt(nachrichten)
                 and not nachschauen.richtung(frage)):
             self._suche_nebenher(frage, nachrichten)
-        wiki: list[wissen.Treffer] = []
-        wiki_titel: list[wissen.Treffer] = []
         zeitgebunden = ziel != (None, None)
         art = nachschauen.erkennen(frage)
         bewerten = self._bewertung.bereit()
         if ohne_wiki and vorab is not None:
-            hinweis = "Die Wikipedia wurde übersprungen: so etwas steht in keinem Lexikon, darum gleich im Internet gesucht. " + hinweis
+            hinweis = "So etwas steht in keinem Lexikon, darum gleich im Internet gesucht. " + hinweis
         elif rechen:
-            hinweis = "Eine Rechenaufgabe mit den Zahlen der Frage: nicht in der Wikipedia nachgeschlagen und nicht im Internet gesucht. " + hinweis
+            hinweis = "Eine Rechenaufgabe mit den Zahlen der Frage: gerechnet, nicht im Internet gesucht. " + hinweis
         elif listen and vorab is not None:
             hinweis = "Eine Frage nach mehreren Dingen mit Zahlen: die Suche im Internet lief gleich mit. " + hinweis
-        if (WIKI_ALS_QUELLE and not live and not selbst and not rechen and not (ohne_wiki and vorab is not None) and self._wiki.bereit()
-                and not (art is not None and art.art in ("wetter", "schlagzeilen"))):
-            self._schritt("schlägt in der Wikipedia nach …")
-            t_wiki = time.time()
-            try:
-                teile = nachschauen.teilfragen(frage)
-                if teile:
-                    je = max(2, (WIKI_KANDIDATEN if bewerten else 3) // len(teile) + 1)
-                    wiki_listen = [self._wiki.suchen(tf, vektor=self._bedeutung.frage_vektor(tf), n=je, abbrechen=lambda: self.abbruch_gewuenscht) for _d, tf in teile]
-                    gesehen_w: set[tuple[str, str]] = set()
-                    for i in range(max((len(x) for x in wiki_listen), default=0)):
-                        for liste in wiki_listen:
-                            if i < len(liste) and (liste[i].quelle.kennung, liste[i].text[:80]) not in gesehen_w:
-                                gesehen_w.add((liste[i].quelle.kennung, liste[i].text[:80]))
-                                wiki.append(liste[i])
-                else:
-                    wiki = self._wiki.suchen(frage, vektor=vektor, n=WIKI_KANDIDATEN if bewerten else 3, abbrechen=lambda: self.abbruch_gewuenscht)
-            except Exception as exc:
-                _log(self._core, f"FEHLER wikipedia suchen: {type(exc).__name__}")
-            wiki_messen(self._wiki, time.time() - t_wiki)
-            if self.abbruch_gewuenscht:
-                raise app_core.AppError("ABGEBROCHEN", "auf deinen Wunsch abgebrochen")
-            if not zeitgebunden:
-                try:
-                    wiki_titel = self._wiki.einleitung(frage)
-                except Exception as exc:
-                    _log(self._core, f"FEHLER wikipedia einleitung: {type(exc).__name__}")
-            if wiki_titel and wiki and belege.zahlenfrage(frage):
-                namen = [_titel_name(t) for t in wiki_titel]
-                vorher_w = len(wiki)
-                wiki = [t for t in wiki if not _ortsteil_stelle(t, namen)]
-                if len(wiki) < vorher_w:
-                    hinweis = f"{vorher_w - len(wiki)} Stellen aus Ortsteil-Artikeln weggelassen. " + hinweis
-            if wiki:
-                a_ = self._wiki.ausgabe()
-                hinweis = (f"In der Wikipedia-Kopie auf diesem Gerät nachgeschlagen (Stand {a_[6:8]}.{a_[4:6]}.{a_[:4]}). " if privat_erlaubt is True
-                           else f"In der Wikipedia-Kopie auf dem PC, der geantwortet hat, nachgeschlagen (Stand {a_[6:8]}.{a_[4:6]}.{a_[:4]}). ") + hinweis
         sortiert: bewertung.Sortierung | None = None
         live_sortiert = False
         if bewerten and not selbst:
-            kandidaten = ergaenzend + orte + server + lokal + ([] if zeitgebunden else wiki + wiki_titel)
+            kandidaten = ergaenzend + orte + server + lokal
             if kandidaten:
                 self._schritt("prüft, welche Fundstellen wirklich passen …")
                 sortiert = self._bewertung.sortieren(frage, kandidaten)
         if not live and self.nachschauen_an():
-            nach, satz = vorab() if vorab is not None else self._nachschauen(frage, ergaenzend + orte + server + lokal + ([] if zeitgebunden else wiki + wiki_titel), frisch=frisch,
+            nach, satz = vorab() if vorab is not None else self._nachschauen(frage, ergaenzend + orte + server + lokal, frisch=frisch,
                                                                              nachrichten=nachrichten, abgedeckt=sortiert.deckt_ab if sortiert is not None else None)
             if nach and sortiert is not None and (art is None or art.art == "suche"):
                 s2 = self._bewertung.sortieren(frage, nach)
@@ -1121,20 +1075,10 @@ class Api:
             sortiert = _fach_vorziehen(sortiert, fachgebiete)
         if sortiert is not None:
             rest = sortiert.treffer[:n_rest]
-            if zeitgebunden and wiki:
-                rest = rest + wiki[:1]
             hinweis = ("Die gespeicherten Fundstellen wurden gelesen und nach Passung sortiert. " if sortiert.treffer
                        else "Keine gespeicherte Fundstelle passte wirklich zur Frage. ") + hinweis
         else:
             rest = wissen.treffer_mischen(wissen.fachgebiet_gewichten(server, fachgebiete), wissen.fachgebiet_gewichten(lokal, fachgebiete), n=n_rest)
-            if wiki:
-                rest = (wiki[:2] + rest[: max(1, n_treffer - 2)]) if not (zeitgebunden or live) else (rest + wiki[:1])
-        if wiki_titel:
-            da = {(t.quelle.kennung, t.text[:80]) for t in rest}
-            vorn = [t for t in wiki_titel if (t.quelle.kennung, t.text[:80]) not in da]
-            if vorn:
-                rest = vorn + [t for t in rest][: max(1, n_treffer - len(vorn))]
-                hinweis = "Der Wikipedia-Artikel zum genannten Namen steht vorn. " + hinweis
         if knapp:
             rest = [wissen.Treffer(t.quelle, t.text[:KNAPP_ZEICHEN], t.punkte) for t in rest]
         if fachgebiete and any(t.quelle.fachgebiet in fachgebiete for t in rest):
@@ -5780,19 +5724,6 @@ def _schriftstueck_nachbearbeiten(text: str, runde: str, lieferschein: dict | No
     return neu, "geschrieben"
 
 
-def wiki_messen(wiki, sekunden: float) -> None:
-    try:
-        z = wiki.zeiten_der_suche() if hasattr(wiki, "zeiten_der_suche") else {}
-        ki_laufzeit._messen("wiki" + str(z.get("ausgang") or ""), sekunden)
-        for teil in ("zaehlen", "woerter", "titel", "lesen"):
-            if isinstance(z.get(teil), (int, float)):
-                ki_laufzeit._messen("w" + teil, float(z[teil]))
-        if isinstance(z.get("kandidaten"), int):
-            ki_laufzeit._messen("wstellen", float(z["kandidaten"]))
-    except Exception:
-        pass
-
-
 _AUFTRAG_WEG = {"live", "online", "internet", "netz", "web"}
 
 
@@ -7232,29 +7163,6 @@ def namen_fehlen(frage: str, antwort: str) -> list[str]:
     if len(dinge) < 2:
         return []
     return [d for d in dinge if not re.search(r"(?i)(?<![\wäöüß])" + re.escape(d), antwort or "")]
-
-
-_ORTSTEIL = re.compile(r"\b(?:Ortsteil|Stadtteil|Bezirk|Stadtbezirk|Gemeindebezirk|Gemeindeteil|Katastralgemeinde|Ortschaft|Stadtviertel|Quartier|Siedlung)\b", re.I)
-
-
-def _titel_name(t) -> str:
-    titel = str(getattr(t.quelle, "titel", "") or "")
-    titel = titel.split(": ", 1)[1] if titel.startswith("Wikipedia: ") else titel
-    return titel.split(" (")[0].strip()
-
-
-def _ortsteil_stelle(t, namen: list[str]) -> bool:
-    name_t = _titel_name(t)
-    text = (t.text or "")[:400]
-    for n in namen:
-        if not n or name_t.lower() == n.lower():
-            continue
-        e = re.escape(n)
-        if re.match(rf"(?i)^{e}[-–]", name_t) or re.search(rf"(?i)\({e}\)", str(getattr(t.quelle, "titel", ""))):
-            return True
-        if _ORTSTEIL.search(text) and re.search(rf"(?i)\b(?:{e}|{e}er)\b", text[:400]):
-            return True
-    return False
 
 
 def nebenher_satz(lauf: dict | None) -> str:

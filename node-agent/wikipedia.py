@@ -1440,6 +1440,9 @@ class WikiKopie:
             self._db.hash_index_anlegen()
             self._log(f"OK wikipedia: Index über die Hashes nachgetragen ({time.monotonic() - s:.0f} s); Scheiben der Community gehen jetzt schnell")
             return 0
+        if self._vektoren is None:
+            self.phase = "fertig"
+            return 600
         pos = int(st.get("vektor_pos", 0))
         if pos >= z["vorrat"]:
             w = self._gemeinschaft_schritt(st, anbieten=True)

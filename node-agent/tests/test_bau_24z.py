@@ -77,4 +77,4 @@ def test_a_word_that_takes_long_to_count_counts_as_common(tmp_path):
 
 def test_the_copy_answers_nothing_instead_of_hanging():
     src = (Path(__file__).resolve().parent.parent / "app_web.py").read_text(encoding="utf-8")
-    assert "abbrechen=lambda: self.abbruch_gewuenscht" in src
+    assert "self._wiki.suchen(" not in src and "self._wiki.einleitung(" not in src

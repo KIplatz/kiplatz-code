@@ -231,34 +231,47 @@ function zeitgrenze(versprechen, s, text) {
 
 
 const SICHER = 60;
+const LAGEN = [0, 90, 270, 180];
 
 
-async function gedreht(datei, grad) {
+const MAX_SEITE = 2000;
+
+
+const PROBE_SEITE = 800;
+const TEXT_MIN = 50;
+
+
+async function gedreht(datei, grad, seite = MAX_SEITE) {
   const bild = await createImageBitmap(datei);
+  const mass = Math.min(1, seite / Math.max(bild.width, bild.height));
+  const b = Math.round(bild.width * mass), h = Math.round(bild.height * mass);
   const quer = grad === 90 || grad === 270;
   const leinwand = document.createElement("canvas");
-  leinwand.width = quer ? bild.height : bild.width;
-  leinwand.height = quer ? bild.width : bild.height;
+  leinwand.width = quer ? h : b;
+  leinwand.height = quer ? b : h;
   const g = leinwand.getContext("2d");
   g.filter = "grayscale(1) contrast(1.4)";
   g.translate(leinwand.width / 2, leinwand.height / 2);
   g.rotate((grad * Math.PI) / 180);
-  g.drawImage(bild, -bild.width / 2, -bild.height / 2);
+  g.drawImage(bild, -b / 2, -h / 2, b, h);
   bild.close?.();
   return leinwand;
 }
 
 
-async function besteLage(w, datei, fortschritt) {
+async function besteLage(w, datei, lage) {
   let beste = null;
-  for (const grad of [0, 90, 270, 180]) {
-    if (grad) fortschritt?.("Das Foto wird gedreht und noch einmal gelesen …");
-    const { data } = await zeitgrenze(w.recognize(await gedreht(datei, grad)), FOTO_ZEIT_S, "Das Foto zu lesen hat zu lange gedauert.");
+  for (const [nr, grad] of LAGEN.entries()) {
+    lage.nr = nr;
+    const { data } = await zeitgrenze(w.recognize(await gedreht(datei, grad, PROBE_SEITE)), FOTO_ZEIT_S, "Das Foto zu lesen hat zu lange gedauert.");
     const sicher = Number(data?.confidence) || 0;
-    if (!beste || sicher > beste.sicher) beste = { sicher, text: data?.text || "" };
+    if (!beste || sicher > beste.sicher) beste = { sicher, grad };
     if (beste.sicher >= SICHER) break;
   }
-  return beste.text;
+  if (beste.sicher < TEXT_MIN) return "";
+  lage.nr = LAGEN.length;
+  const { data } = await zeitgrenze(w.recognize(await gedreht(datei, beste.grad)), FOTO_ZEIT_S, "Das Foto zu lesen hat zu lange gedauert.");
+  return data?.text || "";
 }
 
 async function bildText(datei, fortschritt) {
@@ -280,14 +293,19 @@ async function bildText(datei, fortschritt) {
   ], { type: "text/javascript" }));
   const createWorker = T.createWorker || T.default?.createWorker;
   let w = null;
+  const lage = { nr: 0 };
   try {
     w = await zeitgrenze(createWorker("deu", 1, {
       workerPath: huelle, corePath: kern + "#kern.js", langPath: SPRACHDATEN, workerBlobURL: false, cacheMethod: "none", gzip: true,
-      logger: (m) => { if (m.status === "recognizing text") fortschritt?.(`Text im Foto wird gelesen: ${Math.round((m.progress || 0) * 100)} %`); },
+      logger: (m) => {
+        if (m.status !== "recognizing text") return;
+
+        fortschritt?.(`Text im Foto wird gelesen: ${Math.round(((lage.nr + (m.progress || 0)) / (LAGEN.length + 1)) * 100)} %`);
+      },
       errorHandler: () => {},
     }), FOTO_ZEIT_S, "Die Texterkennung ließ sich nicht starten. Bitte noch einmal versuchen.");
-    const text = sauber(await besteLage(w, datei, fortschritt));
-    if (text.length < 3) throw new AnhangFehler("Auf diesem Foto war kein Text zu lesen. KIplatz liest nur den Text aus Fotos, das Foto selbst bleibt auf deinem Handy.");
+    const text = sauber(await besteLage(w, datei, lage));
+    if (text.length < 3) throw new AnhangFehler("Auf diesem Foto steht kein Text. KIplatz liest aus Fotos nur den Text, etwa eine Buchseite, einen Brief oder ein Schild; das Foto selbst bleibt auf deinem Handy.");
     return { text, info: "Text aus dem Foto" };
   } finally {
     URL.revokeObjectURL(huelle);
