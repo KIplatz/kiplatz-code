@@ -11,6 +11,9 @@ def dank(satz: str, wer: str, art: str = "Meldung") -> str:
 
 
 NEUERUNGEN: dict[str, list[str]] = {
+    "2026-10-25c": [
+        "Neu im Programm: Über das Plus fügst du mehrere PDFs am PC zu einer zusammen, etwa Anschreiben, Lebenslauf und Zeugnisse für eine Bewerbung. Die Dateien verlassen deinen PC dabei nicht.",
+    ],
     "2026-10-25b": [
         "Neu: Frag „Betrifft die KI-Verordnung meinen Betrieb?“, und KIplatz sagt dir nach vier kurzen Angaben, was davon jetzt für dich gilt, was erst später kommt und was du nicht brauchst, etwa einen Kurs oder ein Zertifikat.",
         "Fehlt bei einer Frage zur Flugverspätung nur der Abflug oder nur das Ziel, fragt KIplatz jetzt nur danach.",
@@ -1193,6 +1196,7 @@ ZURUECKGEHALTEN: dict[str, list[str]] = {
 KURZ_JE_TAG: dict[str, list[str]] = {
     "2026-10-25": [
         "Ist dein Flug verspätet oder gestrichen, rechnet KIplatz dir aus, wie viel Entschädigung dir zusteht",
+        "Im Programm fügst du jetzt mehrere PDFs am PC zu einer zusammen, ohne Hochladen",
         "Frag, ob die KI-Verordnung deinen Betrieb betrifft, und KIplatz sagt dir, was jetzt gilt und was später kommt",
     ],
     "2026-10-24": [

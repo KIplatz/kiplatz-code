@@ -74,6 +74,7 @@ import prompt_pruefer
 import ki_sichtbarkeit
 import fluggastrechte
 import ki_verordnung
+import pdf_werkzeug
 import heimnetz
 import ki_laufzeit
 import modell_katalog
@@ -3525,6 +3526,19 @@ class Api:
             r["text"] = f"Gespeichert als Textdatei: {r['daten']['pfad']}"
         return r
 
+    def pdf_zusammenfuegen(self) -> dict:
+        def go():
+            pfade = self._dateien_waehlen(("PDF (*.pdf)",))
+            ziel = Path.home() / "Downloads"
+            if not ziel.is_dir():
+                ziel = Path.home()
+            return pdf_werkzeug.zusammenfuegen(pfade, pdf_werkzeug.zielname(ziel))
+        r = self._guarded("pdf_zusammenfuegen", go)
+        if r["ok"]:
+            d = r["daten"]
+            r["text"] = f"{d['dateien']} PDFs mit zusammen {d['seiten']} Seiten zusammengefügt, nach dem Dateinamen geordnet: {d['pfad']}"
+        return r
+
 
     def gespraech_anhang(self, kennung: str) -> dict:
         def go():
@@ -4076,6 +4090,15 @@ class Api:
         if not r:
             raise app_core.AppError("ABBRUCH", "keine Datei gewählt")
         return Path(str(r[0] if isinstance(r, (list, tuple)) else r))
+
+    def _dateien_waehlen(self, file_types: tuple) -> list[Path]:
+        if self._window is None:
+            raise app_core.AppError("DIALOG", "ohne Fenster gibt es keinen Dateidialog")
+        import webview
+        r = self._window.create_file_dialog(webview.OPEN_DIALOG, allow_multiple=True, file_types=file_types)
+        if not r:
+            raise app_core.AppError("ABBRUCH", "keine Datei gewählt")
+        return [Path(str(x)) for x in (r if isinstance(r, (list, tuple)) else [r])]
 
 
     def gespraeche_importieren(self) -> dict:
