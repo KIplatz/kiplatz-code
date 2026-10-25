@@ -23,6 +23,7 @@ ZIEL_ZEICHEN = 4_000_000
 REIFE_S = 24 * 3600
 KOPIEN = 3
 GESEHEN_S = 7 * 24 * 3600
+VERGESSEN_S = 14 * 24 * 3600
 STICHPROBE_S = 24 * 3600
 AUFTRAG_FRIST_S = 6 * 3600
 TAKT_JE_GERAET_S = 300
@@ -684,6 +685,24 @@ class Scheiben:
     def veraltet_bei(self, geraet: str) -> list[str]:
         k = self._karte()
         return sorted(kennung for kennung, s in k["scheiben"].items() if s.get("veraltet") and geraet in s.get("halter", {}))
+
+    @_gesperrt
+    def verschwundene_streichen(self) -> int:
+        k = self._karte()
+        jetzt = self._jetzt()
+        weg = {g for g, e in k["geraete"].items() if jetzt - _iso_zu_s(e.get("zuletzt", "")) >= VERGESSEN_S}
+        n = 0
+        for kennung, s in k["scheiben"].items():
+            if not (s.get("veraltet") or self.pfad(kennung).is_file()):
+                continue
+            for g in [g for g in s.get("halter", {}) if g in weg]:
+                s["halter"].pop(g, None)
+                s.get("offen", {}).pop(g, None)
+                n += 1
+        if n:
+            self._schreiben(k)
+            self._log(f"SCHEIBE {n} Halter-Einträge von Geräten gestrichen, die {VERGESSEN_S // 86400} Tage nicht gesehen wurden")
+        return n
 
     @_gesperrt
     def veraltet_entsorgen(self) -> int:
