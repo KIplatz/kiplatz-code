@@ -1271,7 +1271,7 @@ class Api:
         lauf = getattr(_SUCHLAUF, "stand", None)
         if lauf is None or lauf["runde"] or lauf["gesucht"] or "nebenher" in lauf or not hasattr(self._nachschauer, "suche_runde"):
             return
-        anfragen = nachschauen.anfragen_aufteilen(self._suchwoerter(nachrichten, frage, ohne_modell=True) or [frage], frage)
+        anfragen = je_anhang(nachschauen.anfragen_aufteilen(self._suchwoerter(nachrichten, frage, ohne_modell=True) or [frage], frage), nachrichten or [])
         anfragen, mehr = vergleich_runde(frage, anfragen)
         richtung = nachschauen.richtung(frage)
         erg: dict = {}
@@ -1356,6 +1356,7 @@ class Api:
             if not alle:
                 return [], "Eine weitere Suche mit anderen Wörtern war nicht möglich."
             alle = nachschauen.anfragen_aufteilen(alle, frage)
+            alle = je_anhang(alle, nachrichten)
             if hasattr(self._nachschauer, "suche_runde"):
                 return self._suchrunde(frage, alle, lauf, treffer, frisch=frisch or spaeter)
             a, weitere = nachschauen.Auftrag("suche", alle[0]), alle[1:]
@@ -5856,14 +5857,60 @@ def _anhang_kennzeile(anhang: str) -> str:
     return " ".join(beste.split())[:120] if punkte >= 3 else ""
 
 
+_ANHANG_WUNSCH = re.compile(r"^(?:kost|billig|guenstig|angebot|prei|kauf|bestell|haendl|anbiet|shop|vergleich|cheap|offer|buy|price|deal|sale|teur|"
+                            r"test|bewert|bericht|review|rating|best|bess|empfehl|empfiehl|lohnt|qualit|erfahr|recommend|compar|worth)")
+_ANHANG_ALLGEMEIN = re.compile(r"^(?:such|find|zeig|gib|gibt|bekomm|hol|woand|sonst|gut|ok|okay|online|internet|wher|can|this|that|these|those|get|"
+                               r"sell|store|look|me|bitt|schnell|aktuell|heut|jetzt|mehr|ander|alternativ|which|one|has|have|the|and|is|it|dazu|davon|"
+                               r"beid|welch|modell|model|wuerd|nehm|take|du|ich|mir|alle|zwei|drei|dies|am|von|den|dem)")
+MAX_ANHANG_SACHEN = 4
+
+
+def _nennt_keine_sache(eigen: str) -> bool:
+    staemme = wissen.woerter(eigen)
+    return any(_ANHANG_WUNSCH.match(s) for s in staemme) and all(_ANHANG_WUNSCH.match(s) or _ANHANG_ALLGEMEIN.match(s) for s in staemme)
+
+
+def _anhang_kennzeilen(anhang: str) -> list[str]:
+    teile = schriftstueck._ANHANG_KOPF.split("\n" + anhang)
+    koepfe = schriftstueck._ANHANG_KOPF.findall("\n" + anhang)
+    out = []
+    for kopf, inhalt in zip(koepfe, teile[1:]):
+        k = " ".join(_anhang_kennzeile(kopf.strip() + "\n" + inhalt).split()[:6])
+        if k and k not in out:
+            out.append(k)
+    return out[:MAX_ANHANG_SACHEN]
+
+
+def anhang_sachen(text: str) -> list[str]:
+    eigen, mit = schriftstueck.eigene_worte(text)
+    if not mit or not (_ANHANG_BEZUG.search(eigen) or _nennt_keine_sache(eigen)):
+        return []
+    return _anhang_kennzeilen(text[len(eigen):])
+
+
 def ohne_anhang(text: str) -> str:
     eigen, mit = schriftstueck.eigene_worte(text)
     if not mit:
         return text
-    if not _ANHANG_BEZUG.search(eigen):
+    sachen = anhang_sachen(text)
+    if not sachen:
         return eigen.strip()
-    kenn = " ".join(_anhang_kennzeile(text[len(eigen):]).split()[:6])
-    return " ".join(f"{kenn} {_ANHANG_BEZUG.sub(' ', eigen)}".split())
+    return " ".join(f"{' und '.join(sachen)} {_ANHANG_BEZUG.sub(' ', eigen)}".split())
+
+
+def je_anhang(anfragen: list[str], nachrichten: list[dict]) -> list[str]:
+    users = [str(n.get("content", "")) for n in nachrichten or [] if n.get("role") == "user"]
+    for i in range(len(users) - 1, max(len(users) - 3, -1), -1):
+        sachen = anhang_sachen(users[i])
+        if sachen:
+            break
+    else:
+        return anfragen
+    if len(sachen) < 2:
+        return anfragen
+    wuensche = " ".join([_ANHANG_BEZUG.sub(" ", schriftstueck.eigene_worte(users[i])[0])] + users[i + 1:])
+    rest = nachschauen.suchbegriffe_regel(wuensche)
+    return [" ".join(f"{s} {rest}".split()[:10]) for s in sachen][:MAX_ANHANG_SACHEN]
 
 
 def suchfrage(nachrichten: list[dict]) -> str:
@@ -6089,6 +6136,9 @@ def _preis_nach_name(text: str, name: str) -> set[str]:
     return out
 
 
+_TRENNZEILE = re.compile(r"^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$")
+
+
 def vergleich_zeilen_pruefen(text: str, quellen: list[dict], *, englisch: bool = False, anhang: str = "") -> tuple[str, int]:
     seiten: dict[str, list[str]] = {}
     stellen: list[str] = []
@@ -6109,16 +6159,27 @@ def vergleich_zeilen_pruefen(text: str, quellen: list[dict], *, englisch: bool =
             seiten.setdefault(h, []).append(anhang)
         stellen.append(anhang)
     zeilen = text.split("\n")
-    tabelle = [i for i, z in enumerate(zeilen) if z.strip().startswith("|")]
+    tabelle: list[int] = []
+    for i in range(len(zeilen) - 1):
+        if "|" in zeilen[i] and _TRENNZEILE.match(zeilen[i + 1]):
+            j = i + 2
+            while j < len(zeilen) and "|" in zeilen[j] and zeilen[j].strip():
+                j += 1
+            tabelle = list(range(i, j))
+            break
     if len(tabelle) < 3:
         return text, 0
     daten = [i for i in tabelle[1:] if not re.fullmatch(r"[\s|:\-–—]+", zeilen[i])]
+    kopf = [c.strip() for c in zeilen[tabelle[0]].strip().strip("|").split("|")]
+    spalte = next((s for s, c in enumerate(kopf) if re.search(r"(?i)preis|price|kosten|cost|€", c)), 1)
+    if spalte == 1 and not re.search(r"(?i)preis|price|kosten|cost|€", " ".join(kopf)) and not any(_preise(zeilen[i]) for i in daten):
+        return text, 0
     weg, bleibt = [], []
     gestrichen: set[str] = set()
     for i in daten:
         zellen = [c.strip() for c in zeilen[i].strip().strip("|").split("|")]
         name = zellen[0].split("(")[0].strip()
-        preise = _preise(zellen[1] if len(zellen) > 1 else "")
+        preise = _preise(zellen[spalte] if len(zellen) > spalte else "")
         k = _name_schluessel(name)
         eigene = [h for h in seiten if k and k in _host_schluessel(h)]
         if not preise or len(k) < 3 or _KEIN_HAENDLER.match(k):
@@ -6130,8 +6191,8 @@ def vergleich_zeilen_pruefen(text: str, quellen: list[dict], *, englisch: bool =
             gut = bool(preise & dort) if dort else any(preise & _preis_nach_name(s, name) for s in stellen)
         if gut:
             bleibt.append((min(float(p.replace(",", ".")) for p in preise), name, min(preise, key=lambda p: float(p.replace(",", "."))), i))
-            if len(zellen) > 1 and not re.search(r"(?i)\b(?:ab|from)\b", zellen[1]) and _ab_preis(preise, stellen + [t for ts in seiten.values() for t in ts]):
-                zellen[1] = ("from " if englisch else "ab ") + zellen[1]
+            if len(zellen) > spalte and not re.search(r"(?i)\b(?:ab|from)\b", zellen[spalte]) and _ab_preis(preise, stellen + [t for ts in seiten.values() for t in ts]):
+                zellen[spalte] = ("from " if englisch else "ab ") + zellen[spalte]
                 zeilen[i] = "| " + " | ".join(zellen) + " |"
         else:
             weg.append(i)
