@@ -73,6 +73,7 @@ import krisenhilfe
 import prompt_pruefer
 import ki_sichtbarkeit
 import fluggastrechte
+import ki_verordnung
 import heimnetz
 import ki_laufzeit
 import modell_katalog
@@ -2199,6 +2200,10 @@ class Api:
         if fg is not None:
             _log(self._core, "OK antwort: Fluggastrechte, ohne Modell")
             return fg[0], fluggastrechte.GEMACHT, fluggastrechte.WOHER, fg[1]
+        kv = ki_verordnung.antwort(nachrichten)
+        if kv is not None:
+            _log(self._core, "OK antwort: KI-Verordnung, ohne Modell")
+            return kv[0], ki_verordnung.GEMACHT, ki_verordnung.WOHER, kv[1]
         if self.nachschauen_an():
             ks = ki_sichtbarkeit.antwort(frage)
             if ks is not None:

@@ -191,7 +191,13 @@ def antwort(nachrichten: list[dict]) -> tuple[str, str] | None:
     von, nach = _strecke(text)
     std = _stunden(text)
     fehlt = []
-    if von is None or nach is None:
+    if von is None and nach is not None:
+        fehlt.append((f"von welchem Flughafen du nach {name_de(nach)} geflogen bist, etwa „ab Wien“",
+                      f"which airport you flew to {name_en(nach)} from, for example “from Vienna”"))
+    elif nach is None and von is not None:
+        fehlt.append((f"wohin du ab {name_de(von)} geflogen bist, etwa „nach London“",
+                      f"where you flew to from {name_en(von)}, for example “to London”"))
+    elif von is None:
         fehlt.append(("von welchem Flughafen nach welchem du geflogen bist, etwa „von Wien nach London“",
                       "which airport you flew from and to, for example “from Vienna to London”"))
     if art == "verspaetung" and std is None:

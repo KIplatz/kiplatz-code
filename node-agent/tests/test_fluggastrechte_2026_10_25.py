@@ -84,3 +84,13 @@ def test_der_ganze_weg_ohne_modell(tmp_path):
     assert "250 € je Person" in text and ls["gemacht"] == fg.GEMACHT
     text, _ = api._antwort_fuer_mitglied(_g("My flight from Vienna to London was 4 hours late, what compensation am I entitled to?"), [], "ein Mitglied")
     assert "€250 per person" in text
+
+
+def test_rueckfrage_nur_nach_der_fehlenden_seite():
+    de, en = fg.antwort(_g("Mein Flug nach Rom war verspätet, steht mir Geld zu?"))
+    assert "nach Rom geflogen bist" in de and "to Rome from" in en and "nach welchem" not in de
+    q = "Mein Flug ab Wien wurde annulliert, was steht mir zu?"
+    de, _ = fg.antwort(_g(q))
+    assert "wohin du ab Wien geflogen bist" in de
+    de2, _ = fg.antwort(_g(q, de, "nach Lissabon"))
+    assert "Wien (VIE) nach Lissabon (LIS)" in de2 and "400 € je Person" in de2
