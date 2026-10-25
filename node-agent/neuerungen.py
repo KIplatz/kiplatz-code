@@ -14,6 +14,9 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-10-25q": [
+        "Stellst du auf kiplatz.at eine Frage, ist sie jetzt als erste dran, vor allen anderen. Und während der PC die Antwort erarbeitet, siehst du auf der deutschen Seite gleich, was er gerade tut, etwa dass er im Internet nachschaut.",
+    ],
     "2026-10-25o": [],
     "2026-10-25n": [],
     "2026-10-25m": [],
@@ -1230,6 +1233,9 @@ ZURUECKGEHALTEN: dict[str, list[str]] = {
 }
 
 KURZ_JE_TAG: dict[str, list[str]] = {
+    "2026-10-26": [
+        "Fragen auf kiplatz.at kommen jetzt als erste dran, und du siehst, woran der PC gerade arbeitet",
+    ],
     "2026-10-25": [
         "Ist dein Flug verspätet oder gestrichen, rechnet KIplatz dir aus, wie viel Entschädigung dir zusteht",
         "In Programm und App fügst du jetzt mehrere PDFs zu einer zusammen, ohne Hochladen",
