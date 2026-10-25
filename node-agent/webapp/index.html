@@ -45,7 +45,11 @@
   #menubar .menu > button:hover, #menubar .menu.open > button { background: var(--accent-soft); color: var(--accent-dark); }
   #menubar .items { display: none; position: absolute; top: 30px; left: 0; min-width: 260px; background: var(--surface); border: 1px solid var(--border); border-radius: 0 0 10px 10px; box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 6px 0; }
   #menubar .menu.open .items { display: block; }
-  #menubar .items button { display: block; width: 100%; text-align: left; padding: 7px 14px; border: 0; background: transparent; color: var(--text); font: inherit; }
+  #menubar .items button { display: flex; align-items: center; justify-content: space-between; gap: 28px; width: 100%; text-align: left; padding: 7px 14px 7px 30px; border: 0; background: transparent; color: var(--text); font: inherit; white-space: nowrap; position: relative; }
+
+  #menubar .items button kbd { font: inherit; font-size: 12px; color: var(--text2); background: none; border: 0; padding: 0; }
+  #menubar .items button.an::before { content: "✓"; position: absolute; left: 11px; color: var(--accent-dark); }
+  #menubar .items { max-height: calc(100vh - 40px); max-width: calc(100vw - 8px); overflow-y: auto; }
   #menubar .items button:hover { background: var(--accent-soft); color: var(--accent-dark); }
   #menubar .items hr { border: 0; border-top: 1px solid var(--border); margin: 6px 0; }
 
@@ -149,7 +153,7 @@
   main { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--surface); }
   header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 24px; border-bottom: 1px solid var(--border); background: var(--surface); }
   header h2 { font-size: 17px; }
-  .page { display: none; flex: 1; min-height: 0; flex-direction: column; }
+  .page { display: none; flex: 1; min-height: 0; min-width: 0; flex-direction: column; }
   .page.active { display: flex; }
   .scroll { flex: 1; overflow: auto; padding: 22px 28px; }
   .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
@@ -252,7 +256,7 @@
 
   #kibanner { margin: 12px 28px 0; padding: 12px 16px; border-radius: var(--radius); border: 1px solid var(--accent-line); background: var(--accent-soft); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
   #kibanner.bereit { display: none; }
-  #kibanner .grow { flex: 1; min-width: 220px; }
+  #kibanner .grow { flex: 1; min-width: min(220px, 100%); }
   #messages { flex: 1; overflow: auto; padding: 18px 28px; display: flex; flex-direction: column; gap: 14px; }
   .empty { margin: auto; text-align: center; max-width: 520px; color: var(--text2); }
   .empty h2 { color: var(--text); margin-bottom: 8px; }
@@ -395,6 +399,20 @@
   #daumen-dialog textarea { box-sizing: border-box; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
   #daumen-dialog textarea:focus { border-color: var(--accent); outline: 2px solid var(--accent-line); }
 
+  @media (max-width: 760px) {
+    :root { --sidebar: 210px; }
+    .seitenbereich { flex-direction: column; }
+    .reiter { width: auto; flex-direction: row; overflow-x: auto; overflow-y: hidden; padding: 8px 10px; border-right: 0; border-bottom: 1px solid var(--border); }
+    .reiter button { white-space: nowrap; flex: none; }
+    #messages { padding: 14px 14px; }
+    #kibanner { margin: 10px 14px 0; }
+  }
+  @media (max-width: 560px) {
+    #app, #app.seite-zu { grid-template-columns: minmax(0, 1fr); }
+    #app aside { display: none; }
+    #app.leiste-schmal aside { display: flex; position: fixed; top: 30px; bottom: 0; left: 0; width: min(280px, 85vw); z-index: 25; box-shadow: 0 8px 30px rgba(0,0,0,.25); }
+  }
+
   #druck { display: none; }
   @media print {
     @page { size: A4; margin: 20mm; }
@@ -409,12 +427,38 @@
 </head>
 <body>
 <div id="menubar">
-  <div class="menu"><button type="button">Programm</button><div class="items">
-    <button type="button" data-seite="gespraeche">Gespräche</button><button type="button" data-seite="mitrechnen">Rechenkraft teilen</button><button type="button" data-seite="wissen">Wissen</button><button type="button" data-seite="community">Meine Community</button><button type="button" data-seite="bestenliste">Bestenliste</button><button type="button" data-seite="wiki">Wiki</button><button type="button" data-seite="einstellungen">Einstellungen</button><button type="button" data-tun="import">Gespräche importieren …</button>
-    <hr><button type="button" data-tun="autostart">Beim Anmelden automatisch starten: ein/aus</button>
-    <hr><button type="button" data-tun="schliessen">Fenster ausblenden (läuft unten weiter)</button><button type="button" data-tun="beenden">KIplatz beenden</button></div></div>
-  <div class="menu"><button type="button">Ansicht</button><div class="items"><button type="button" data-tun="dunkel">Dunkles Fenster: ein/aus</button><button type="button" data-tun="leiste">Seitenleiste ein/aus (Strg+B)</button></div></div>
-  <div class="menu"><button type="button">Hilfe</button><div class="items"><button type="button" data-tun="hausordnung">Platzordnung</button><button type="button" data-tun="update">Nach Update suchen</button><button type="button" data-tun="fehler">Fehler melden</button><button type="button" data-seite="ueber">Über KIplatz</button></div></div>
+  
+  <div class="menu"><button type="button">Datei</button><div class="items">
+    <button type="button" data-tun="neu"><span>Neues Gespräch</span><kbd>Strg+N</kbd></button>
+    <button type="button" data-tun="export"><span>Gespräch als Textdatei sichern</span></button>
+    <button type="button" data-tun="import"><span>Gespräche importieren …</span></button>
+    <hr><button type="button" data-tun="autostart" data-schalter="autostart"><span>Mit Windows starten</span></button>
+    <hr><button type="button" data-tun="schliessen"><span>Fenster ausblenden, läuft unten weiter</span></button>
+    <button type="button" data-tun="beenden"><span>KIplatz beenden</span><kbd>Strg+Q</kbd></button></div></div>
+  <div class="menu"><button type="button">Bearbeiten</button><div class="items">
+    <button type="button" data-tun="undo"><span>Rückgängig</span><kbd>Strg+Z</kbd></button>
+    <button type="button" data-tun="redo"><span>Wiederholen</span><kbd>Strg+Y</kbd></button>
+    <hr><button type="button" data-tun="cut"><span>Ausschneiden</span><kbd>Strg+X</kbd></button>
+    <button type="button" data-tun="copy"><span>Kopieren</span><kbd>Strg+C</kbd></button>
+    <button type="button" data-tun="paste"><span>Einfügen</span><kbd>Strg+V</kbd></button>
+    <button type="button" data-tun="selectAll"><span>Alles auswählen</span><kbd>Strg+A</kbd></button>
+    <hr><button type="button" data-tun="suchen"><span>Gespräche durchsuchen</span><kbd>Strg+K</kbd></button></div></div>
+  <div class="menu"><button type="button">Ansicht</button><div class="items">
+    <button type="button" data-tun="leiste" data-schalter="leiste"><span>Seitenleiste</span><kbd>Strg+B</kbd></button>
+    <button type="button" data-tun="dunkel" data-schalter="dunkel"><span>Dunkles Fenster</span></button>
+    <hr><button type="button" data-tun="zoom-normal"><span>Originalgröße</span><kbd>Strg+0</kbd></button>
+    <button type="button" data-tun="zoom-groesser"><span>Vergrößern</span><kbd>Strg++</kbd></button>
+    <button type="button" data-tun="zoom-kleiner"><span>Verkleinern</span><kbd>Strg+-</kbd></button>
+    <hr><button type="button" data-tun="vollbild"><span>Vollbild</span><kbd>F11</kbd></button>
+    <hr><button type="button" data-tun="neu-laden"><span>Neu laden</span><kbd>F5</kbd></button></div></div>
+  <div class="menu"><button type="button">Gehe zu</button><div class="items">
+    <button type="button" data-seite="gespraeche"><span>Gespräche</span></button><button type="button" data-seite="mitrechnen"><span>Rechenkraft teilen</span></button>
+    <button type="button" data-seite="wissen"><span>Wissen</span></button><button type="button" data-seite="community"><span>Meine Community</span></button>
+    <button type="button" data-seite="bestenliste"><span>Bestenliste</span></button><button type="button" data-seite="wiki"><span>Wiki</span></button>
+    <hr><button type="button" data-seite="einstellungen"><span>Einstellungen</span><kbd>Strg+,</kbd></button></div></div>
+  <div class="menu"><button type="button">Hilfe</button><div class="items">
+    <button type="button" data-tun="hausordnung"><span>Platzordnung</span></button><button type="button" data-tun="update"><span>Nach Update suchen</span></button>
+    <button type="button" data-tun="fehler"><span>Fehler melden</span></button><hr><button type="button" data-seite="ueber"><span>Über KIplatz</span></button></div></div>
 </div>
 <ul id="kontext-farbe" class="kontext" hidden></ul>
 
@@ -1174,11 +1218,45 @@ window.addEventListener("unhandledrejection", (e) => __fehlerZeigen(String(e.rea
   });
   document.addEventListener("click", menuZu);
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") menuZu(); });
+
+
+  const schalterAn = { leiste: () => (matchMedia("(max-width: 560px)").matches ? $("#app").classList.contains("leiste-schmal") : !$("#app").classList.contains("seite-zu")), dunkel: () => $("#dunkel").checked, autostart: () => $("#autostart").checked };
+  function menuEinpassen(m) {
+    if (!m.classList.contains("open")) return;
+    m.querySelectorAll("[data-schalter]").forEach((b) => b.classList.toggle("an", !!schalterAn[b.dataset.schalter]?.()));
+
+    const items = m.querySelector(".items"); items.style.left = "";
+    const r = items.getBoundingClientRect(), zuviel = r.right - (document.documentElement.clientWidth - 4);
+    if (zuviel > 0) items.style.left = `${-Math.min(zuviel, r.left - 4)}px`;
+  }
+  menus.forEach((m) => {
+    m.querySelector(":scope > button").addEventListener("click", () => menuEinpassen(m));
+    m.addEventListener("mouseenter", () => menuEinpassen(m));
+  });
+  document.querySelectorAll("#menubar .items button").forEach((b) => b.addEventListener("mousedown", (e) => e.preventDefault()));
+  function bearbeiten(art) {
+    if (art !== "paste") { document.execCommand(art); return; }
+
+    const feld = document.activeElement;
+    (navigator.clipboard?.readText ? navigator.clipboard.readText() : Promise.reject())
+      .then((t) => { if (feld && /^(TEXTAREA|INPUT)$/.test(feld.tagName)) { feld.focus(); document.execCommand("insertText", false, t); } })
+      .catch(() => sag("Einfügen geht hier mit Strg+V."));
+  }
+  function zoomen(richtung) { api().ansicht_zoom(richtung).then((r) => nach(r)); }
   document.querySelectorAll("#menubar .items button").forEach((b) => b.addEventListener("click", () => {
     menuZu();
     if (b.dataset.seite) { zeige(b.dataset.seite); return; }
     const tun = b.dataset.tun;
-    if (tun === "dunkel") window.app.dunkelUmschalten();
+    if (["undo", "redo", "cut", "copy", "paste", "selectAll"].includes(tun)) bearbeiten(tun);
+    else if (tun === "neu") $("#btn-neu").click();
+    else if (tun === "export") { if (aktuell) api().gespraech_exportieren(aktuell.kennung).then((r) => nach(r)); else sag("Öffne zuerst ein Gespräch."); }
+    else if (tun === "suchen") $("#btn-suche").click();
+    else if (tun === "zoom-normal") zoomen("normal");
+    else if (tun === "zoom-groesser") zoomen("groesser");
+    else if (tun === "zoom-kleiner") zoomen("kleiner");
+    else if (tun === "vollbild") api().ansicht_vollbild();
+    else if (tun === "neu-laden") location.reload();
+    else if (tun === "dunkel") window.app.dunkelUmschalten();
     else if (tun === "leiste") leisteUmschalten();
     else if (tun === "import") $("#btn-import").click();
     else if (tun === "autostart") window.app.autostartUmschalten();
@@ -1189,7 +1267,11 @@ window.addEventListener("unhandledrejection", (e) => __fehlerZeigen(String(e.rea
     else if (tun === "fehler") { if (confirm("Die letzten Protokollzeilen gehen an uns, ohne Fragen, Namen und Schlüssel. Schicken?")) { sag("Wird geschickt …"); api().fehlerbericht_senden(window.__fehler.slice(-5).join(" | ")).then((r) => nach(r)); } }
   }));
 
+
+  const schmal = () => matchMedia("(max-width: 560px)").matches;
+  $("aside").addEventListener("click", (e) => { if (schmal() && e.target.closest("li, button[data-seite], #btn-neu")) $("#app").classList.remove("leiste-schmal"); });
   function leisteUmschalten() {
+    if (schmal()) { $("#app").classList.toggle("leiste-schmal"); return; }
     const zu = $("#app").classList.toggle("seite-zu");
     try { localStorage.setItem("seitenleiste", zu ? "zu" : "auf"); } catch (e) { }
   }
@@ -1197,9 +1279,27 @@ window.addEventListener("unhandledrejection", (e) => __fehlerZeigen(String(e.rea
   $("#btn-leiste").addEventListener("click", leisteUmschalten);
   document.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "b") { e.preventDefault(); leisteUmschalten(); } });
 
+  document.addEventListener("keydown", (e) => {
+    const strg = (e.ctrlKey || e.metaKey) && !e.altKey;
+    if (e.key === "F11") { e.preventDefault(); api().ansicht_vollbild(); return; }
+    if (e.key === "F5" && !strg) { e.preventDefault(); location.reload(); return; }
+    if (!strg) return;
+    const k = e.key.toLowerCase();
+    if (k === "+" || k === "=" || e.code === "NumpadAdd") { e.preventDefault(); zoomen("groesser"); }
+    else if (k === "-" || e.code === "NumpadSubtract") { e.preventDefault(); zoomen("kleiner"); }
+    else if (k === "0" || e.code === "Numpad0") { e.preventDefault(); zoomen("normal"); }
+    else if (k === "n" && !e.shiftKey) { e.preventDefault(); $("#btn-neu").click(); }
+    else if (k === "k" && !e.shiftKey) { e.preventDefault(); $("#btn-suche").click(); }
+    else if (k === "," && !e.shiftKey) { e.preventDefault(); zeige("einstellungen"); }
+    else if (k === "q" && !e.shiftKey) { e.preventDefault(); api().beenden(); }
+  });
 
+
+  let zoomGesetzt = false;
   function uebernehme(z) {
     Z = z;
+
+    if (!zoomGesetzt) { zoomGesetzt = true; if (z.zoom && z.zoom !== 1) api().ansicht_zoom("jetzt"); }
 
     if (z.erststart && !$("#erststart-dialog").open) { $("#es-name").value = z.app.geraet_name || ""; $("#erststart-dialog").showModal(); }
     $("#neu-card").style.display = (z.neu && z.neu.length && !z.erststart) ? "" : "none";

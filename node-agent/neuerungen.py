@@ -11,6 +11,10 @@ def dank(satz: str, wer: str, art: str = "Meldung") -> str:
 
 
 NEUERUNGEN: dict[str, list[str]] = {
+    "2026-10-25e": [
+        "Neu im Programm: Unter „Ansicht“ machst du alles größer oder kleiner, mit Strg und Plus, Strg und Minus oder Strg und 0. Das Fenster ordnet sich dabei neu, nichts steht über und nichts wird abgeschnitten. KIplatz merkt sich die Größe.",
+        "Die Menüleiste im Programm ist neu geordnet, in Datei, Bearbeiten, Ansicht, Gehe zu und Hilfe, mit den Tastenkürzeln daneben und einem Häkchen bei allem, was eingeschaltet ist. Dazu kommen Vollbild mit F11 und ein neues Gespräch mit Strg und N.",
+    ],
     "2026-10-25d": [
         "Neu: Lass dir von KIplatz einen Lebenslauf, ein Anschreiben oder einen Brief schreiben und sichere die Antwort gleich als PDF, in der App über „Mehr zu dieser Antwort“, im Programm über „…“ und „Drucken oder als PDF“. Ohne Wasserzeichen, und nichts geht hinaus.",
     ],

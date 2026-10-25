@@ -3019,6 +3019,7 @@ class Api:
             "fragen_immer": self.fragen_immer(),
             "kann_antworten": self._kann_fuer_andere_antworten(),
             "dunkel": self.dunkel(),
+            "zoom": self.zoom(),
             "schnittstelle": self._schnittstelle_dict(),
             "admin": self._community.ist_admin(),
             "neu": self.neu_liste(),
@@ -5010,6 +5011,46 @@ class Api:
         except Exception as exc:
             _log(self._core, f"INFO tray beschriften: {type(exc).__name__}")
         return {"ok": True, "sprache": community.SPRACHE}
+
+    ZOOM_STUFEN = (0.67, 0.75, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0)
+
+    def zoom(self) -> float:
+        z = self._ki.einstellung().get("zoom", 1.0)
+        return z if z in self.ZOOM_STUFEN else 1.0
+
+    def ansicht_zoom(self, richtung: str) -> dict:
+        def go():
+            stufen, alt = self.ZOOM_STUFEN, self.zoom()
+            i = stufen.index(alt)
+            neu = {"groesser": stufen[min(i + 1, len(stufen) - 1)], "kleiner": stufen[max(i - 1, 0)], "normal": 1.0}.get(str(richtung), alt)
+            if neu != alt:
+                self._ki.einstellung_setzen(zoom=neu)
+            self._zoom_anwenden(neu)
+            return {"zoom": neu, "prozent": round(neu * 100)}
+        r = self._guarded("ansicht_zoom", go)
+        if r["ok"] and richtung != "jetzt":
+            r["text"] = f"Ansicht {r['daten']['prozent']} %"
+        return r
+
+    def _zoom_anwenden(self, stufe: float) -> None:
+        form = getattr(self._window, "native", None) if self._window is not None else None
+        wv = getattr(form, "webview", None)
+        if wv is None:
+            return
+        def setzen():
+            wv.ZoomFactor = float(stufe)
+        if form.InvokeRequired:
+            from System import Func, Type
+            form.Invoke(Func[Type](setzen))
+        else:
+            setzen()
+
+    def ansicht_vollbild(self) -> dict:
+        def go():
+            if self._window is not None:
+                self._window.toggle_fullscreen()
+            return {}
+        return self._guarded("ansicht_vollbild", go)
 
     def dunkel_setzen(self, an: bool) -> dict:
         def go():
