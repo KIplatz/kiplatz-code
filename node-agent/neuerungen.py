@@ -11,6 +11,8 @@ def dank(satz: str, wer: str, art: str = "Meldung") -> str:
 
 
 NEUERUNGEN: dict[str, list[str]] = {
+    "2026-10-25l": [],
+    "2026-10-25k": [],
     "2026-10-25j": [
         "Die Seitenleiste mit deinen Gesprächen ziehst du jetzt mit der Maus breiter oder schmaler, im Programm und in der App am großen Bildschirm, damit lange Titel ganz zu sehen sind. Ein Doppelklick auf den Rand stellt die normale Breite wieder her, KIplatz merkt sich deine Breite.",
     ],

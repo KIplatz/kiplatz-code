@@ -123,6 +123,7 @@ ABHOLEN_FEHLVERSUCHE = 2
 KNAPP_TREFFER = 2
 KNAPP_ZEICHEN = 500
 WIKI_KANDIDATEN = 8
+WIKI_ALS_QUELLE = False
 LIVE_STELLEN = 6
 LIVE_STELLEN_LISTE = 8
 LIVE_STELLEN_VERGLEICH = 10
@@ -1049,7 +1050,7 @@ class Api:
             hinweis = "Eine Rechenaufgabe mit den Zahlen der Frage: nicht in der Wikipedia nachgeschlagen und nicht im Internet gesucht. " + hinweis
         elif listen and vorab is not None:
             hinweis = "Eine Frage nach mehreren Dingen mit Zahlen: die Suche im Internet lief gleich mit. " + hinweis
-        if (not live and not selbst and not rechen and not (ohne_wiki and vorab is not None) and self._wiki.bereit()
+        if (WIKI_ALS_QUELLE and not live and not selbst and not rechen and not (ohne_wiki and vorab is not None) and self._wiki.bereit()
                 and not (art is not None and art.art in ("wetter", "schlagzeilen"))):
             self._schritt("schlägt in der Wikipedia nach …")
             t_wiki = time.time()
@@ -1644,6 +1645,7 @@ class Api:
 
     def _mess_suche_budget(self, vorrang) -> None:
         if self._mess_suchen >= MESS_SUCHEN_NACHT_MAX:
+            self._mess_geschont = True
             if not self._mess_suche_gemeldet:
                 self._mess_suche_gemeldet = True
                 _log(self._core, f"INFO pruefstand: {MESS_SUCHEN_NACHT_MAX} Internet-Suchen in dieser Runde erreicht, weitere Prüffragen laufen ohne Suche")
@@ -1654,6 +1656,7 @@ class Api:
         try:
             while jetzt < ziel:
                 if isinstance(vorrang, threading.Event) and vorrang.is_set():
+                    self._mess_geschont = True
                     raise app_core.AppError("SUCHE_GESCHONT", "Jemand fragt gerade selbst; diese Prüffrage läuft ohne Suche.")
                 self._mess_schlafen(min(0.5, ziel - jetzt))
                 jetzt = self._mess_uhr()
@@ -1799,6 +1802,7 @@ class Api:
         self._ki_starten_blockierend()
         antworten: list[dict] = []
         ruht = ""
+        geschont = 0
         for f in fragen:
             if self._core.run_state() is not node_local_state.RunState.ACTIVE:
                 ruht = "Pause oder Programmende"
@@ -1822,6 +1826,7 @@ class Api:
                     time.sleep(0.5)
                 t0 = time.time()
                 self._mess_gewartet = 0.0
+                self._mess_geschont = False
                 _SCHATTEN.zeit = 0.0
                 schein: dict = {}
                 vorrang = getattr(self._rechen, "vorrang", None)
@@ -1860,6 +1865,9 @@ class Api:
             if ki_aus:
                 ruht = "die KI ist ausgefallen"
                 break
+            if getattr(self, "_mess_geschont", False):
+                geschont += 1
+                continue
             pr = schein.get("pruefung") if isinstance(schein.get("pruefung"), dict) else {}
             gewartet = getattr(self, "_mess_gewartet", 0.0)
             richter_s = float(getattr(_SCHATTEN, "zeit", 0.0) or 0.0)
@@ -1878,6 +1886,11 @@ class Api:
         if ruht:
             self._runde_ruht_grund = ruht
             _log(self._core, f"INFO pruefstand: Runde ruht nach {len(antworten)} von {len(fragen)} Prüffragen ({ruht}); beim nächsten Mal geht es dort weiter")
+            return None
+        if geschont:
+            _log(self._core, f"INFO pruefstand: {geschont} Prüffragen nicht bewertet, die Suchbremse der Runde ließ ihre Suche aus")
+        if not antworten:
+            self._pruefrunde_fehlschlag("keine Prüffrage bewertbar")
             return None
         wege = {}
         for name in self.PRUEFSTAND_WEGE:
@@ -6876,7 +6889,8 @@ def _ohne_vermittler(zusatz: str, quellen: list[dict], adressen: set[str]) -> st
 
 def _streng(t: str, belegtext: str, zusatz: str, rechnen: bool, pruefer, auszuege: list[tuple[int, str]], *, regel: bool = False,
             beispiele: bool = False, bekannt=None, regelfrage: str = "", richter=None, ableitung: bool = False, einspruch: bool = False,
-            einspruch_zaehler: list[int] | None = None, schatten: bool = True, namen_info: dict | None = None) -> tuple[str, list[str], int]:
+            einspruch_zaehler: list[int] | None = None, schatten: bool = True, namen_info: dict | None = None,
+            woerter_frei: bool = False) -> tuple[str, list[str], int]:
     aus_quellen = any(s.farbe == "gruen" for s in pruefung.pruefen(t, auszuege).saetze)
     quelltexte = [x for _n, x in auszuege]
     befunde = belege.streng_pruefen(t, belegtext, zahlen_pruefen=not rechnen, namen_pruefen=None if (aus_quellen or regel) else (lambda s: False),
@@ -6895,6 +6909,14 @@ def _streng(t: str, belegtext: str, zusatz: str, rechnen: bool, pruefer, auszueg
         if echt:
             befunde = [dataclasses.replace(b, namen=tuple(n for n in b.namen if n not in echt), verdacht=tuple(v for v in b.verdacht if v not in echt))
                        if belege.beispiel(b.satz) else b for b in befunde]
+        befunde = [b for b in befunde if b.zahlen or b.namen or b.verdacht or b.regel]
+    einzeln = sorted({w for b in befunde for w in b.verdacht if " " not in w}) if woerter_frei else []
+    try:
+        gewoehnlich = set(bekannt(einzeln)) if bekannt is not None and einzeln else set()
+    except Exception:
+        gewoehnlich = set()
+    if gewoehnlich:
+        befunde = [dataclasses.replace(b, verdacht=tuple(v for v in b.verdacht if v not in gewoehnlich)) for b in befunde]
         befunde = [b for b in befunde if b.zahlen or b.namen or b.verdacht or b.regel]
     weg = {b.satz for b in befunde if b.sicher_falsch}
     fraglich_b = [b for b in befunde if not b.sicher_falsch and b.verdacht]
@@ -7040,11 +7062,12 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
     rechnen = belege.rechnet(frage)
     ableitung = belege.ableitungsfrage(frage)
     regel = not schreiben and belege.regelfrage(frage) and not belege.preisfrage(frage)
+    woerter_frei = not regel and not nachschauen.richtung(frage)
     regelfrage = frage if (not schreiben and belege.regelfrage(frage)) else ""
     auszuege = [(int(q.get("nummer") or 0), str(q.get("text") or "")) for q in beleg_quellen if q.get("text")]
     beispiele = not (rechnen or regel or belege.zahlenfrage(frage) or belege.preisfrage(frage))
     namen1: dict = {}
-    geprueft, raus, vom_pruefer = _streng(t, belegtext, zusatz, rechnen, pruefer, auszuege, regel=regel, beispiele=beispiele, bekannt=bekannt, ableitung=ableitung,
+    geprueft, raus, vom_pruefer = _streng(t, belegtext, zusatz, rechnen, pruefer, auszuege, regel=regel, beispiele=beispiele, bekannt=bekannt, ableitung=ableitung, woerter_frei=woerter_frei,
                                           regelfrage=regelfrage, richter=richter, einspruch=einspruch, einspruch_zaehler=einspruch_zaehler,
                                           namen_info=namen1)
     alltag = not (belege.preisfrage(frage) or belege.regelfrage(frage) or belege.zahlenfrage(frage) or rechnen
@@ -7079,7 +7102,7 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
             neu, _ = belege.wochentage_berichtigen(neu, heute)
             neu = ohne_auszuege(ohne_markdown(neu))
             namen2: dict = {}
-            geprueft2, raus2, vom2 = _streng(neu, belegtext, zusatz, rechnen, pruefer, auszuege, regel=regel, beispiele=beispiele, bekannt=bekannt, ableitung=ableitung,
+            geprueft2, raus2, vom2 = _streng(neu, belegtext, zusatz, rechnen, pruefer, auszuege, regel=regel, beispiele=beispiele, bekannt=bekannt, ableitung=ableitung, woerter_frei=woerter_frei,
                                              regelfrage=regelfrage, richter=richter if einspruch else None, einspruch=einspruch,
                                              einspruch_zaehler=einspruch_zaehler, schatten=False,
                                              namen_info=namen2)

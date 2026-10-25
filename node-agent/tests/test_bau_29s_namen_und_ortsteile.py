@@ -56,9 +56,15 @@ def test_ortsteil_stellen_fallen_bei_einer_zahlenfrage_zum_ort_weg():
     assert not app_web._ortsteil_stelle(_t("Wien", "Wien hat 23 Gemeindebezirke."), ["Salzburg", "Wien"])
 
 
-def test_die_einleitung_kommt_auch_neben_einer_suche_im_netz_mit(tmp_path):
+def app_web_modul():
+    import app_web
+    return app_web
+
+
+def test_die_einleitung_kommt_auch_neben_einer_suche_im_netz_mit(tmp_path, monkeypatch):
     from test_app_web import _api
     api, _fake, _ = _api(tmp_path)
+    monkeypatch.setattr(app_web_modul(), "WIKI_ALS_QUELLE", True)
     salzburg, wien = _t("Salzburg", "Salzburg hat 155.416 Einwohner."), _t("Wien", "Wien hat 2.005.760 Einwohner.")
 
     class _Wiki:
