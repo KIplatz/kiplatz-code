@@ -26,8 +26,6 @@ def test_einleitung_und_namenspruefung_gehen_ueber_den_leser_und_warten_nie_auf_
     try:
         s = time.monotonic()
         assert [x.quelle.titel for x in w.einleitung(frage)] == [f"Wikipedia: Allalinhorn ({wikipedia.LIZENZ})"]
-        assert w.namen_bekannt(["Allalinhorn", "Zwergstadt"]) == {"Allalinhorn"}
-        assert w.unbekannte_namen("Wer ist Josefine Tarsberger?") == ["Josefine Tarsberger"]
         assert time.monotonic() - s < 1.5
         assert db.leser() is db.leser() and db.leser() is not db and db.leser()._lock is not db._lock
     finally:

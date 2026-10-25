@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import app_core
+import namenpruefung
 import scheiben
 import sicher_schreiben
 import umzug
@@ -391,7 +392,7 @@ def _kosinus(a: list[float], b: list[float]) -> float:
         return sum(x * y for x, y in zip(a, b))
 
 
-class Datenbank:
+class Datenbank(namenpruefung.Namenspruefung):
 
     def __init__(self, pfad: Path, *, schreiben: bool = False, sprache: Sprache | None = None) -> None:
         self.pfad = Path(pfad)
@@ -686,58 +687,6 @@ class Datenbank:
             self._df_merk[wort] = d
         return d
 
-    def namen_bekannt(self, namen: list[str]) -> set[str]:
-        if not namen or not self.hat_wortzahl():
-            return set()
-        out: set[str] = set()
-        for n in namen:
-            worte = [w for w in re.split(r"[\s\-]+", str(n)) if w]
-            stamm = self._woerter(str(n))
-            if worte and stamm and all(self._df(s) > 0 for s in stamm) and not any(self._erfundene_zusammensetzung(w) for w in worte):
-                out.add(n)
-        return out
-
-    def unbekannte_namen(self, text: str, hoechstens: int = 2) -> list[str]:
-        if not text or not self.hat_wortzahl():
-            return []
-        treffer = list(_NAME_TEIL.finditer(text))
-        worte = [m.group(0) for m in treffer]
-        namen: list[str] = []
-        for i, w in enumerate(worte):
-            if not _name_kandidat(w):
-                continue
-            vorne = text[:treffer[i].start()].rstrip()
-            if (not vorne or vorne[-1] in ".!?:;\n") and not any(c.isupper() or c.isdigit() for c in w[1:]):
-                continue
-            stamm = self._woerter(w)
-            if not stamm or (any(self._df(s) > 0 for s in stamm) and not self._erfundene_zusammensetzung(w)):
-                continue
-            von = i
-            while von > 0 and i - von < 2 and _name_kandidat(worte[von - 1], nachbar=True):
-                vor = text[:treffer[von - 1].start()].rstrip()
-                if not vor or vor[-1] in ".!?:;\n":
-                    break
-                von -= 1
-            if von == i and not any(c.isupper() or c.isdigit() for c in w[1:]):
-                continue
-            name = " ".join(worte[von:i + 1])
-            if name not in namen and not any(name in n or n in name for n in namen):
-                namen.append(name)
-            if len(namen) >= hoechstens:
-                break
-        return namen
-
-    def _erfundene_zusammensetzung(self, wort: str) -> bool:
-        teile = [t for t in str(wort or "").split("-") if t]
-        if len(teile) < 2 or not teile[0][:1].isupper():
-            return False
-        for t in teile:
-            if len(t) >= 4 and t[:1].isupper():
-                stamm = self._woerter(t)
-                if stamm and all(self._df(s) == 0 for s in stamm):
-                    return True
-        return teile[-1].lower() in _FACHBEGRIFF_ENDE and self.artikel_zu(wort) is None
-
     def einleitung(self, aid: int) -> tuple[str, str] | None:
         with self._lock:
             r = self._c.execute("SELECT a.titel, s.text FROM abschnitt s JOIN artikel a ON a.id = s.artikel WHERE s.artikel = ? AND s.nr = 0", (int(aid),)).fetchone()
@@ -1015,18 +964,8 @@ _ORT_KLAMMER = re.compile(r"(?i)\((?:stadt|gemeinde|marktgemeinde|stadtgemeinde|
 _BEGRIFFSKLAERUNG = re.compile(r"(?i)\b(?:steht für|bezeichnet|ist der name)\b[^.]{0,40}:|begriffsklärung")
 
 
-_NAME_TEIL = re.compile(r"[\wäöüÄÖÜß]+(?:[-'][\wäöüÄÖÜß]+)*")
-_FACHBEGRIFF_ENDE = frozenset("""theorem satz lemma gesetz prinzip effekt paradoxon skala index modell methode verfahren syndrom krankheit formel
-gleichung konstante regel algorithmus hypothese kriterium kurve zahl test diagramm schema zyklus reaktion verordnung theorie""".split())
-_EIGENE_NAMEN = {"kiplatz", "platzl"}
-
-
-def _name_kandidat(wort: str, *, nachbar: bool = False) -> bool:
-    if len(wort) < (2 if nachbar else 4) or wort.lower() in wissen._STOPP or wort.lower() in _EIGENE_NAMEN:
-        return False
-    if not wort[:1].isupper() and not any(c.isupper() for c in wort[1:]) and not (not nachbar and any(c.isdigit() for c in wort) and any(c.isalpha() for c in wort)):
-        return False
-    return not wort.isdigit()
+_NAME_TEIL, _name_kandidat = namenpruefung._NAME_TEIL, namenpruefung._name_kandidat
+_FACHBEGRIFF_ENDE = namenpruefung.FACHBEGRIFF_ENDE
 
 
 class WikiKopie:
@@ -1035,8 +974,9 @@ class WikiKopie:
 
     def __init__(self, ordner, *, freigabe_mb, darf, karte_frei=lambda: True, vektoren=None, vektoren_bereit=lambda: False,
                  oeffner=None, log=None, schlafen=None, jetzt=time.time, platte_frei_mb=None, gemeinschaft=None, modell=None, ablage=None,
-                 sprache: Sprache | None = None) -> None:
+                 sprache: Sprache | None = None, vorgesehen=lambda: True) -> None:
         self._ordner_fn = ordner
+        self._vorgesehen = vorgesehen
         self.sprache = sprache or DE
         if self.sprache is not DE:
             gemeinschaft = ablage = None
@@ -1095,7 +1035,11 @@ class WikiKopie:
         return f"wikipedia-{aid}" if self.sprache is DE else f"wikipedia-{self.sprache.code}-{aid}"
 
     def darf_halten(self) -> bool:
-        return int(self._freigabe_mb() or 0) >= self.sprache.min_freigabe_mb
+        try:
+            vorgesehen = bool(self._vorgesehen())
+        except Exception:
+            vorgesehen = False
+        return vorgesehen and int(self._freigabe_mb() or 0) >= self.sprache.min_freigabe_mb
 
     def bereit(self) -> bool:
         return self._db is not None
@@ -1262,10 +1206,15 @@ class WikiKopie:
             return w
         self._umzug_wartet = False
         if not self.darf_halten():
+            try:
+                vorgesehen = bool(self._vorgesehen())
+            except Exception:
+                vorgesehen = False
             if self.ordner.exists() and (self.ordner / STAND).exists():
-                self._log(f"OK wikipedia: Freigabe unter {self.sprache.min_freigabe_mb // 1000} GB, Kopie gelöscht")
+                self._log(f"OK wikipedia: Freigabe unter {self.sprache.min_freigabe_mb // 1000} GB, Kopie gelöscht" if vorgesehen
+                          else "OK wikipedia: dieses Gerät hält keine Kopie (nur das Admin-Gerät), Kopie gelöscht")
                 self.loeschen()
-            self.phase = "zu_wenig_platz"
+            self.phase = "zu_wenig_platz" if vorgesehen else "nicht_vorgesehen"
             return 300
         if self._db is None:
             self._oeffnen()
@@ -1675,35 +1624,6 @@ class WikiKopie:
             out.append(wissen.Treffer(q, text, punkte))
         return out
 
-    def unbekannte_namen(self, text: str) -> list[str]:
-        db = self._leser_der_kopie()
-        if db is None or not self.bereit():
-            return []
-        if not db._lock.acquire(timeout=NAMEN_WARTEN_S):
-            self._log("HINWEIS wikipedia unbekannte namen ausgelassen: eine Suche in der Kopie läuft noch")
-            return []
-        try:
-            return db.unbekannte_namen(text)
-        except (sqlite3.Error, sqlite3.ProgrammingError) as exc:
-            self._log(f"ABGELEHNT wikipedia unbekannte namen: {type(exc).__name__}")
-            return []
-        finally:
-            db._lock.release()
-
-    def namen_bekannt(self, namen: list[str]) -> set[str]:
-        db = self._leser_der_kopie()
-        if db is None or not self.bereit() or not namen:
-            return set()
-        if not db._lock.acquire(timeout=NAMEN_WARTEN_S):
-            return set()
-        try:
-            return db.namen_bekannt(list(namen))
-        except (sqlite3.Error, sqlite3.ProgrammingError) as exc:
-            self._log(f"ABGELEHNT wikipedia namen bekannt: {type(exc).__name__}")
-            return set()
-        finally:
-            db._lock.release()
-
     def einleitung(self, frage: str, hoechstens: int = 3) -> list[wissen.Treffer]:
         db = self._leser_der_kopie()
         if db is None:
@@ -1791,6 +1711,8 @@ class WikiKopie:
             return f"Wikipedia: liest Teil {self.meldung} ein."
         if self.phase == "ordnet":
             return "Wikipedia: ordnet die Abschnitte für die Suche nach Bedeutung."
+        if self.phase == "nicht_vorgesehen":
+            return ""
         if self.phase == "zu_wenig_platz":
             return f"Wikipedia: {self.meldung}." if self.meldung else ("Wikipedia: erst ab 100 GB Speicher-Freigabe." if not z["artikel"] else "")
         if self.phase == "pause" and not z["artikel"]:

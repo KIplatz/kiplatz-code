@@ -5,8 +5,8 @@ import time
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-QUELLEN = ("wikipedia", "orte", "woerterbuch", "kalender", "modell", "bedeutung", "suche")
-NAMEN_DE = {"wikipedia": "Wikipedia-Kopie", "orte": "Orte (OpenStreetMap)", "woerterbuch": "Österreichisches Wörterbuch", "kalender": "Kalender",
+QUELLEN = ("wikipedia", "wortliste", "orte", "woerterbuch", "kalender", "modell", "bedeutung", "suche")
+NAMEN_DE = {"wikipedia": "Wikipedia-Kopie", "wortliste": "Wortliste", "orte": "Orte (OpenStreetMap)", "woerterbuch": "Österreichisches Wörterbuch", "kalender": "Kalender",
             "modell": "Chat-Modell", "bedeutung": "Bedeutungs-Modell", "suche": "Suchmaschinen"}
 MELDEN_ABSTAND_S = 300
 STILL_AB_S = 3600
@@ -46,7 +46,7 @@ def _wikipedia(wiki) -> dict:
         return _eintrag(False, "Wikipedia: nicht eingerichtet.", gilt=False)
     try:
         if not wiki.darf_halten():
-            return _eintrag(False, "Wikipedia: dieses Gerät hält keine Kopie (unter 100 GB Freigabe).", gilt=False)
+            return _eintrag(False, "Wikipedia: dieses Gerät hält keine Kopie (nur das Admin-Gerät ab 100 GB Freigabe).", gilt=False)
         z = wiki.zustand()
         ausgabe, artikel, phase = str(z.get("ausgabe") or ""), int(z.get("artikel") or 0), str(z.get("phase") or "")
         if not wiki.bereit():
@@ -59,6 +59,21 @@ def _wikipedia(wiki) -> dict:
         return _eintrag(True, f"Wikipedia: {zahl} Artikel, Stand {_datum(ausgabe)}.", stand=ausgabe, zahl=artikel)
     except Exception as exc:
         return _eintrag(False, f"Wikipedia: Zustand nicht lesbar ({type(exc).__name__}).")
+
+
+def _wortliste(wl) -> dict:
+    if wl is None:
+        return _eintrag(False, "Wortliste: nicht eingerichtet.", gilt=False)
+    try:
+        z = wl.zustand()
+        sprachen, ausgabe = list(z.get("sprachen") or []), str(z.get("ausgabe") or "")
+        if z.get("phase") == "bereit" and sprachen:
+            return _eintrag(True, f"Wortliste: {len(sprachen)} Sprachen bereit, Stand {_datum(ausgabe)}.", stand=ausgabe, zahl=len(sprachen))
+        if z.get("phase") == "fehler":
+            return _eintrag(False, f"Wortliste: gerade geht es nicht ({z.get('meldung') or ''}).", stand=ausgabe, zahl=len(sprachen))
+        return _eintrag(False, "Wortliste: wird gerade geholt.", stand=ausgabe, zahl=len(sprachen))
+    except Exception as exc:
+        return _eintrag(False, f"Wortliste: Zustand nicht lesbar ({type(exc).__name__}).")
 
 
 def _orte(osm) -> dict:
@@ -177,8 +192,8 @@ def _suche(suche: dict | None) -> dict:
     return _eintrag(frei >= 1, f"Suchmaschinen: {frei} von {gesamt} frei laut Server.", zahl=frei)
 
 
-def sammeln(*, wiki=None, osm=None, ki=None, bedeutung=None, suche: dict | None = None, heute: date | None = None) -> dict:
-    return {"wikipedia": _wikipedia(wiki), "orte": _orte(osm), "woerterbuch": _woerterbuch(), "kalender": _kalender(heute),
+def sammeln(*, wiki=None, osm=None, ki=None, bedeutung=None, suche: dict | None = None, heute: date | None = None, wortliste=None) -> dict:
+    return {"wikipedia": _wikipedia(wiki), "wortliste": _wortliste(wortliste), "orte": _orte(osm), "woerterbuch": _woerterbuch(), "kalender": _kalender(heute),
             "modell": _modell(ki), "bedeutung": _modell(bedeutung, "bedeutung"), "suche": _suche(suche)}
 
 

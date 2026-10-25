@@ -185,8 +185,16 @@ HOEREN = Modell(
                  sha256="41a342b5e4c514e968cb756de6cd1b7be39eff43c44c57a2ef5fc6522e36603d", groesse=214392480),
 )
 
+WORTLISTE_DE = Paket(kennung="wortliste-de-20261018", name="Wortliste Deutsch", datei="wortliste-de-20261018.sqlite.gz",
+                     url=_unser("wortliste-de-20261018.sqlite.gz"),
+                     sha256="0f5906e1f14f6bb718245f928bb6c5e7b263554c7be1c5cfb424076cc31fb9c0", groesse=57279696)
+WORTLISTE_EN = Paket(kennung="wortliste-en-20261018", name="Wortliste Englisch", datei="wortliste-en-20261018.sqlite.gz",
+                     url=_unser("wortliste-en-20261018.sqlite.gz"),
+                     sha256="6e08dfb006f42cf9fecc6fd72443b90f9f9343be36f66e6f6a0932a82db990d0", groesse=5478322)
+WORTLISTEN: dict[str, Paket] = {"de": WORTLISTE_DE, "en": WORTLISTE_EN}
+
 ALLE: tuple[Paket, ...] = (LAUFZEIT, LAUFZEIT_ALT, *LAUFZEITEN_HELFER.values(), *MODELLE.values(), *(m.bilder for m in MODELLE.values() if m.bilder), EMBEDDING, BEWERTUNG, SPRACHE_LAUFZEIT,
-                           SPRACHE_MODELL, HOEREN, HOEREN.bilder)
+                           SPRACHE_MODELL, HOEREN, HOEREN.bilder, *WORTLISTEN.values())
 NACH_DATEI: dict[str, Paket] = {p.datei: p for p in ALLE}
 
 STUECKLISTEN: dict[str, str] = {
@@ -217,4 +225,4 @@ def fassung(datei: str) -> str:
 
 
 __all__ = ["SERVER", "MODELLE_WEG", "ORDNER", "Paket", "Modell", "LAUFZEIT", "LAUFZEIT_ALT", "MODELLE", "MODELL_REIHENFOLGE", "EMBEDDING", "EMBEDDING_DIMENSION",
-           "BEWERTUNG", "SPRACHE_LAUFZEIT", "SPRACHE_MODELL", "HOEREN", "ALLE", "NACH_DATEI", "fassung"]
+           "BEWERTUNG", "SPRACHE_LAUFZEIT", "SPRACHE_MODELL", "HOEREN", "WORTLISTEN", "ALLE", "NACH_DATEI", "fassung"]

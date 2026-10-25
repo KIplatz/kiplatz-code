@@ -91,6 +91,7 @@ import antwortsprache
 import community
 import gemeinschaft
 import wortindex
+import wortliste
 KONTO_ISSUER = "https://werkstatt.kiplatz.at"
 PC_ART = "Windows-PC" if sys.platform == "win32" else "Mac" if sys.platform == "darwin" else "Linux-PC"
 BEITRITT_BLICK_S = 3.0
@@ -718,18 +719,21 @@ class Api:
         self._bedeutung = bedeutung_ or bedeutung.Bedeutung(core, protokoll=lambda line: _log(core, line))
         self._bewertung = bewertung_ or bewertung.Bewertung(core, protokoll=lambda line: _log(core, line))
         self._wiki = wikipedia.WikiKopie(lambda: wiki_pfad(self._core.load_freigabe().speicher_ort, self._core.base_dir),
+                                         vorgesehen=lambda: self._community.ist_admin(),
                                          freigabe_mb=lambda: self._core.load_freigabe().speicher_mb, darf=self._wiki_darf, karte_frei=self._wiki_karte_frei,
                                          vektoren=lambda texte: self._bedeutung.server.vektoren(texte, timeout_s=300),
                                          vektoren_bereit=lambda: self._bedeutung.bereit(), log=lambda line: _log(core, line),
                                          gemeinschaft=lambda: self._community if self._community.geraet() is not None else None,
                                          modell=lambda: ki_laufzeit.EMBEDDING.sha256[:16], ablage=lambda: self._halter.dir)
         self._wiki_en = wikipedia.WikiKopie(lambda: wiki_pfad(self._core.load_freigabe().speicher_ort, self._core.base_dir, wikipedia.SIMPLE.dirname),
+                                            vorgesehen=lambda: self._community.ist_admin(),
                                             freigabe_mb=lambda: self._core.load_freigabe().speicher_mb,
                                             darf=lambda: self._wiki_darf() and self._wiki.phase not in WIKI_ARBEITET,
                                             karte_frei=self._wiki_karte_frei,
                                             vektoren=lambda texte: self._bedeutung.server.vektoren(texte, timeout_s=300),
                                             vektoren_bereit=lambda: self._bedeutung.bereit(), log=lambda line: _log(core, line),
                                             sprache=wikipedia.SIMPLE)
+        self._wortliste = wortliste.Wortlisten(lambda: self._core.base_dir / "wortliste", log=lambda line: _log(core, line))
         self._osm = osm_orte.OrteKopie(lambda: osm_pfad(self._core.load_freigabe().speicher_ort, self._core.base_dir),
                                        freigabe_mb=lambda: self._core.load_freigabe().speicher_mb, darf=self._wiki_darf,
                                        vorgesehen=lambda: self._community.ist_admin(), log=lambda line: _log(core, line))
@@ -1031,7 +1035,7 @@ class Api:
         namen = [] if (selbst or live or ergaenzend or orte or frisch or ohne_wiki or rechen) else self._unbekannte_namen(frage)
         if (frisch or ohne_wiki or namen or listen) and not live and not selbst and self.nachschauen_an() and frage.strip():
             if namen:
-                _log(self._core, f"OK unbekannter name: {len(namen)} Name(n) stehen in keinem Wikipedia-Abschnitt, die Suche läuft gleich mit")
+                _log(self._core, f"OK unbekannter name: {len(namen)} Name(n) kennt keine Wortliste, die Suche läuft gleich mit")
             elif listen:
                 _log(self._core, "OK listenfrage: eine Frage nach mehreren Dingen mit Zahlen, die Suche läuft gleich mit")
             vorab = self._nachschauen_vorab(frage, server + lokal, nachrichten, frisch=frisch, modell=bool(listen))
@@ -2571,7 +2575,7 @@ class Api:
         def pruefer_mit_schritt(z, saetze):
             self._schritt("lässt das Modell zweifelhafte Sätze noch einmal prüfen …")
             return pruefer(z, saetze)
-        bekannt = getattr(self._wiki, "namen_bekannt", None)
+        bekannt = getattr(getattr(self, "_wortliste", None), "namen_bekannt", None)
 
         def richter(satz: str, texte: list[str], *, einspruch: bool = False) -> float | None:
             vorrang = getattr(getattr(self, "_rechen", None), "vorrang", None)
@@ -2608,7 +2612,7 @@ class Api:
             return []
         t = time.time()
         try:
-            return list(getattr(self._wiki, "unbekannte_namen", lambda t: [])(frage) or [])
+            return list(self._wortliste.unbekannte_namen(frage) or [])
         except Exception as exc:
             _log(self._core, f"FEHLER unbekannte namen: {type(exc).__name__}")
             return []
@@ -2962,6 +2966,7 @@ class Api:
         if not self.spielwiese:
             self._wiki.start()
             self._wiki_en.start()
+            self._wortliste.start()
             self._osm.start()
         self._quellen_melden_im_hintergrund()
         if not selbst_einrichten:
@@ -3323,7 +3328,7 @@ class Api:
                 suche = self._community.suche_stand()
             except Exception:
                 suche = None
-        return quellen_stand.sammeln(wiki=self._wiki, osm=self._osm, ki=self._ki, bedeutung=self._bedeutung, suche=suche)
+        return quellen_stand.sammeln(wiki=self._wiki, osm=self._osm, ki=self._ki, bedeutung=self._bedeutung, suche=suche, wortliste=self._wortliste)
 
     def quellen_stand(self) -> dict:
         def go():
