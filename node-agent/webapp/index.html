@@ -2545,7 +2545,7 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
 
 
   let liveRoh = "", liveZug = 0, liveNeu = false;
-  const QUELLE_MARKE = /\s*[([]\s*(?:Quellen?|Auszu(?:g|ege))\s*(?:\d+\s*(?:,|und|bis|&|\+)?\s*)+[)\]]/gi;
+  const QUELLE_MARKE = /\s*[([]\s*(?:Quellen?|Sources?|Auszu(?:g|ege))\s*(?:\d+\s*(?:,|und|and|bis|&|\+)?\s*)+[)\]]/gi;
   function wieFertig(t) {
     let x = String(t || "").replace(/\s*[([]\s*(?:Quel|Ausz)[^)\]\n]*$/i, "");
     x = x.replace(QUELLE_MARKE, "").replace(/\s+([.,;:!?])/g, "$1").trim();

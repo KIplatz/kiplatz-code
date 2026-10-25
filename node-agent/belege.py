@@ -141,7 +141,7 @@ def unbelegte_streichen(antwort: str, belege: str, *, betraege_pruefen: bool = T
             absaetze.append(" ".join(bleiben))
     rest = re.sub(r"\n{3,}", "\n\n", "\n".join(absaetze)).strip()
     if raus and not rest:
-        rest = "Das weiß ich noch nicht."
+        rest = weiss_nicht_satz()
     return rest, raus
 
 
@@ -452,6 +452,12 @@ UMSCHREIBEN_EN = ("Rewrite each numbered sentence in your own words: same statem
                   "and names exactly. Change the wording and sentence structure so that never more than 6 words in a row match the original. Answer "
                   "only with one line per sentence: the number, then the new sentence.")
 WEISS_NICHT_EN = "I don't know that yet."
+WEISS_NICHT_DE = "Das weiß ich noch nicht."
+
+
+def weiss_nicht_satz() -> str:
+    import pruefung
+    return WEISS_NICHT_EN if pruefung.englisch() else WEISS_NICHT_DE
 
 
 def pruefer_auftrag(woerter: list[str]) -> str:
@@ -519,15 +525,18 @@ def geruest_bereinigen(text: str) -> str:
 _ZEILE_ANFANG = re.compile(r"^\s*(?:[-–•*]\s+|\d|[A-ZÄÖÜ„“\"'«»(]|\d+\.\s)")
 _ZEILE_FALSCH = re.compile(r"^\s*(?:[),;:.!?]|und\b|oder\b|aber\b|sowie\b|sondern\b|denn\b|weil\b|dass\b|[a-zäöüß])")
 _KLAMMERN = (("(", ")"), ("[", "]"), ("„", "“"))
+_KLAMMERN_EN = (("(", ")"), ("[", "]"), ("“", "”"))
 _MD_ANFANG = re.compile(r"^(?:#{1,6}\s+|>\s*)?(?:\*\*|__)?")
 _TRENNZEILE = re.compile(r"[-–—_*=:|\s]{3,}")
 _KLEIN_NACH_SATZ = re.compile(r"[A-Za-zÄÖÜäöüß]{4,}[.!?]\s+[a-zäöüß]")
 
 
 def brauchbar(text: str) -> bool:
+    import pruefung
     zeilen = [z for z in (text or "").split("\n") if z.strip()]
     if not zeilen:
         return False
+    paare = _KLAMMERN_EN if pruefung.englisch() else _KLAMMERN
     worte = []
     for z in zeilen:
         s = z.strip()
@@ -539,7 +548,7 @@ def brauchbar(text: str) -> bool:
             continue
         if _ZEILE_FALSCH.match(s) or not (_ZEILE_ANFANG.match(s) or not re.match(r"[\wÄÖÜäöüß]", s)):
             return False
-        for auf, zu in _KLAMMERN:
+        for auf, zu in paare:
             if s.count(auf) != s.count(zu):
                 return False
         if _KLEIN_NACH_SATZ.search(s):
@@ -643,7 +652,7 @@ def saetze_streichen(antwort: str, weg, *, mitnehmen: bool = False) -> tuple[str
     if raus:
         rest = geruest_bereinigen(rest)
     if raus and not rest:
-        rest = "Das weiß ich noch nicht."
+        rest = weiss_nicht_satz()
     return rest, raus
 
 
@@ -702,7 +711,9 @@ _NUR_GRUSSWORT = re.compile(r"^\s*(?:dein|deine|ihr|ihre|euer|eure|von)\s*[,!.]?
 
 _SELBSTBEZUG = re.compile(r"falsche[nr]? Angabe von mir|ich korrigiere|korrigiere ich|berichtige ich|meine[nr]? (vorige|vorherige|erste|frühere)[nr]? "
                           r"(Antwort|Angabe|Fassung)|(vorige|vorherige)[nr]? Antwort|erste[nr]? Fassung|Entschuldigung|entschuldige|mein Fehler|"
-                          r"ich habe mich (geirrt|vertan)|Korrektur:", re.I)
+                          r"ich habe mich (geirrt|vertan)|Korrektur:"
+                          r"|\bmy (?:previous|earlier|first) (?:answer|reply|statement|version)\b|\b(?:previous|earlier) answer\b|\bfirst version\b"
+                          r"|\bI apologi[sz]e\b|\bapologies\b|\bmy mistake\b|\bI was wrong\b|\bI(?:'| a)m correcting\b|\bCorrection:", re.I)
 _KLAMMER_SELBST = re.compile(r"\(\s*[^()]{0,200}?\)")
 
 
@@ -720,7 +731,7 @@ def ohne_selbstbezug(text: str) -> tuple[str, int]:
     n += len(raus)
     if not n:
         return text or "", 0
-    return re.sub(r"[ \t]{2,}", " ", t).strip() or "Das weiß ich noch nicht.", n
+    return re.sub(r"[ \t]{2,}", " ", t).strip() or weiss_nicht_satz(), n
 
 
 def ohne_platzhalter(text: str) -> tuple[str, int]:

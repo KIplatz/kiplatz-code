@@ -51,7 +51,8 @@ _GLEICH = {"einwohnerzahl": "einwohner", "bewohner": "einwohner", "einwohnern": 
           "hoehe": "hoch", "laenge": "lang", "tiefe": "tief", "breite": "breit", "alter": "alt", "gewicht": "schwer"}
 
 
-_WEISS_NICHT = re.compile(r"wei(ß|ss) ich (noch )?nicht|keine (gesicherten |verlässlichen )?(informationen|angaben)|nicht (sicher )?sagen|kann ich nicht beantworten", re.I)
+_WEISS_NICHT = re.compile(r"wei(ß|ss) ich (noch )?nicht|keine (gesicherten |verlässlichen )?(informationen|angaben)|nicht (sicher )?sagen|kann ich nicht beantworten"
+                          r"|\bI (?:do not|don't|don’t) (?:yet )?know\b|\bI (?:can't|can’t|cannot) (?:say|tell|answer)\b|\bnothing reliable\b", re.I)
 
 
 def _woerter(text: str) -> list[str]:
@@ -174,7 +175,7 @@ def fremde_fassung(lieferschein) -> bool:
     return jetzt is not None and str(ls.get("fassung") or "") != jetzt
 
 
-AUSLIEFERN_STAND = (f"2026-10-20 schlussangebot, {MINDEST_BAU}, fassung "
+AUSLIEFERN_STAND = (f"2026-10-20 schlussangebot, 2026-10-26 weiss-nicht-en, {MINDEST_BAU}, fassung "
                     + ",".join(f"{n}={f or 'grund'}" for n, f in sorted(_fassungen().items())))
 
 
@@ -184,7 +185,7 @@ def schlussangebot(text) -> bool:
 
 def ausliefern_ok(lieferschein, text=None) -> bool:
     return (not nachgebessert(lieferschein) and not vor_mindest_bau(lieferschein) and not fremde_fassung(lieferschein)
-            and not schlussangebot(text))
+            and not schlussangebot(text) and not (isinstance(text, str) and _WEISS_NICHT.search(text)))
 
 
 def antwort_taugt(text: str, lieferschein) -> bool:

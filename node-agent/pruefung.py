@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 import sys
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -12,6 +13,16 @@ if str(_HERE) not in sys.path:
 
 import wissen
 
+_SPRACHE = threading.local()
+
+
+def sprache_setzen(englisch: bool) -> None:
+    _SPRACHE.englisch = bool(englisch)
+
+
+def englisch() -> bool:
+    return getattr(_SPRACHE, "englisch", False)
+
 GRUEN_AB = 0.6
 GELB_AB = 0.3
 MIN_WOERTER = 3
@@ -19,8 +30,8 @@ _ABKUERZUNG = (r"(?<![\s(.][A-Za-zÄÖÜäöü]\.)(?<!^[A-Za-zÄÖÜäöü]\.)"
                r"(?<!\bca\.)(?<!\bbzw\.)(?<!\bggf\.)(?<!\bvgl\.)(?<!\binkl\.)(?<!\bexkl\.)(?<!\bevtl\.)"
                r"(?<!\bNr\.)(?<!\bDr\.)(?<!\bSt\.)(?<!\bStr\.)(?<!\bAbs\.)(?<!\bzB\.)")
 _SATZ_ENDE = re.compile(r"(?<=[.!?])(?<![\s*(]\d\.)(?<![\s*(]\d\d\.)(?<!^\d\.)(?<!^\d\d\.)" + _ABKUERZUNG + r"\s+(?=[A-ZÄÖÜ„\"(\-–0-9])")
-_QUELLE = re.compile(r"\(?\s*Quellen?\s*((?:\d+\s*(?:,|und|bis|&|\+)?\s*)+)\)?", re.I)
-_QUELLE_MARKE = re.compile(r"\s*[\(\[]\s*(?:Quellen?|Auszu(?:g|ege))\s*(?:\d+\s*(?:,|und|bis|&|\+)?\s*)+[\)\]]", re.I)
+_QUELLE = re.compile(r"\(?\s*(?:Quellen?|Sources?)\s*((?:\d+\s*(?:,|und|and|bis|&|\+)?\s*)+)\)?", re.I)
+_QUELLE_MARKE = re.compile(r"\s*[\(\[]\s*(?:Quellen?|Sources?|Auszu(?:g|ege))\s*(?:\d+\s*(?:,|und|and|bis|&|\+)?\s*)+[\)\]]", re.I)
 
 
 def ohne_quellenmarke(text: str) -> str:
@@ -107,15 +118,27 @@ _RAHMEN = {"liegt", "lieg", "erreicht", "erreich", "betraegt", "betrag", "gibt",
 INFIX_AB = 6
 
 
+_EINHEITEN_EN = ((re.compile(r"\s*°\s*f\b|\bdegrees?(?:\s+(?:celsius|fahrenheit))?\b", re.I), " "),
+                 (re.compile(r"\bmph\b|\bmiles?\s+per\s+hour\b|\bkilomet(?:er|re)s?\s+per\s+hour\b", re.I), " "),
+                 (re.compile(r"\bmillimet(?:er|re)s?\b|\binch(?:es)?\b", re.I), " "),
+                 (re.compile(r"\bper\s?cent\b", re.I), " "))
+_RAHMEN_EN = set(wissen.woerter(
+    "the and with that this these those from have has had been were are for not but you your our their there here which what when where who how "
+    "than then into onto over under about after before also just only very more most some any such each other they them its can could would should "
+    "shall may might must does did doing because while around stands reaches amounts"))
+_RAHMEN_BEIDE = _RAHMEN | _RAHMEN_EN
+
+
 def _einheitlich(text: str) -> str:
     t = text or ""
-    for muster, ersatz in _EINHEITEN:
+    for muster, ersatz in _EINHEITEN + (_EINHEITEN_EN if englisch() else ()):
         t = muster.sub(ersatz, t)
     return t
 
 
 def _woerter(text: str) -> list[str]:
-    return [_GLEICH.get(w, w) for w in wissen.woerter(_einheitlich(text)) if w not in _RAHMEN]
+    rahmen = _RAHMEN_BEIDE if englisch() else _RAHMEN
+    return [_GLEICH.get(w, w) for w in wissen.woerter(_einheitlich(text)) if w not in rahmen]
 
 
 def _gedeckt(w: str, pw: set[str]) -> bool:

@@ -87,7 +87,8 @@ def aus_kennung(kennung: str) -> dict | None:
     return next((f for f in ziehen(tag) if f["kennung"] == kennung), None)
 
 
-_WEISS_NICHT = re.compile(r"weiß ich (?:\w+ )*nicht|kenne ich (?:\w+ )*nicht|nichts Verlässliches gefunden|keine (?:Informationen|Angaben)", re.I)
+_WEISS_NICHT = re.compile(r"weiß ich (?:\w+ )*nicht|kenne ich (?:\w+ )*nicht|nichts Verlässliches gefunden|keine (?:Informationen|Angaben)"
+                          r"|\bI (?:do not|don't|don’t) (?:\w+ )?know\b|\bnothing reliable\b|\bno (?:information|details)\b", re.I)
 
 
 def bewerten(f: dict, antwort: str, *, heute: date, pruefung: dict | None = None, belege_notizen=None, quellen: str = "") -> dict:

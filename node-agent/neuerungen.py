@@ -14,6 +14,12 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-10-26b": [
+        "Unter einer englischen Antwort heißen die Suchtreffer jetzt auch auf Englisch „Search results“, auf der Website, in der App und im Programm.",
+    ],
+    "2026-10-26a": [
+        "Fragst du auf Englisch zu einem Thema außerhalb des deutschen Sprachraums, etwa „Who was Mozart?“ oder „Do I need a visa for Japan?“, schreibt KIplatz die Antwort jetzt gleich auf Englisch, statt sie erst auf Deutsch zu erarbeiten und dann zu übersetzen. Das geht schneller, und in Programm und App siehst du die Antwort schon beim Schreiben.",
+    ],
     "2026-10-25q": [
         "Stellst du auf kiplatz.at eine Frage, ist sie jetzt als erste dran, vor allen anderen. Und während der PC die Antwort erarbeitet, siehst du auf der deutschen Seite gleich, was er gerade tut, etwa dass er im Internet nachschaut.",
     ],
@@ -1234,7 +1240,8 @@ ZURUECKGEHALTEN: dict[str, list[str]] = {
 
 KURZ_JE_TAG: dict[str, list[str]] = {
     "2026-10-26": [
-        "Fragen auf kiplatz.at kommen jetzt als erste dran, und du siehst, woran der PC gerade arbeitet",
+        "Fragst du auf Englisch, antwortet KIplatz jetzt gleich auf Englisch und damit schneller",
+        "Fragen auf unserer Website kommen jetzt als erste dran, und du siehst, woran der PC gerade arbeitet",
     ],
     "2026-10-25": [
         "Ist dein Flug verspätet oder gestrichen, rechnet KIplatz dir aus, wie viel Entschädigung dir zusteht",
@@ -1348,6 +1355,10 @@ KURZ_JE_TAG: dict[str, list[str]] = {
 
 
 GESCHICHTE_JE_TAG: dict[str, dict[str, str]] = {
+    "2026-10-26": {
+        "haken": "Frag KIplatz ab heute „Who was Mozart?“, und die Antwort kommt gleich auf Englisch, ohne Umweg über eine Übersetzung.",
+        "text": "Das spart bei englischen Fragen ein paar Sekunden. Und auf kiplatz.at kommen Fragen jetzt als erste dran, und du siehst, woran der PC gerade arbeitet.",
+    },
     "2026-10-25": {
         "haken": "Frag KIplatz ab heute „Flug Linz nach Antalya 5 Stunden verspätet, was steht mir zu?“, und du bekommst den Betrag nach der EU-Verordnung.",
         "text": "KIplatz misst dafür die Luftlinie zwischen den Flughäfen, so wie es die Verordnung verlangt. Es sagt dir auch, wann die Fluglinie nicht zahlen muss und wo du Hilfe bekommst, wenn sie sich querlegt. Und wer wissen will, ob die KI-Verordnung den eigenen Betrieb betrifft, bekommt nach vier kurzen Angaben eine klare Antwort: was jetzt gilt, was später kommt und was man nicht braucht.",

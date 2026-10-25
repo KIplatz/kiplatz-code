@@ -2090,7 +2090,10 @@ class Api:
                     self._schritt("schreibt die Antwort auf Englisch …")
                     return antwortsprache.antwort_uebersetzen(self._ki.server.frage, text_v, schein, teil_melden, log=lambda z: _log(self._core, z))
                 return text_v, schein
-            if en_frage and not ab0.antwort and self._ki.server.laeuft():
+            direkt = en_frage and not ab0.antwort and laeuft and englisch_direkt(antwortsprache.letzte_frage(nachrichten))
+            if direkt:
+                ki_laufzeit.original_setzen(antwortsprache.letzte_frage(nachrichten))
+            elif en_frage and not ab0.antwort and self._ki.server.laeuft():
                 self._schritt("liest die Frage …")
                 try:
                     englisch = antwortsprache.frage_auf_deutsch(self._ki.server.frage, nachrichten)
@@ -2100,15 +2103,20 @@ class Api:
                     ki_laufzeit.original_setzen(antwortsprache.letzte_frage(nachrichten))
             text, schein = self._antwort_fuer_mitglied_ohne_schritt(englisch or nachrichten, auszuege, fuer, frisch=frisch,
                                                                     teil_melden=None if englisch else teil_melden, skill=skill, privat=privat,
-                                                                    messen=messen)
+                                                                    messen=messen, englisch=direkt)
             en_fertig = str(schein.pop("_en", "") or "")
             if en_frage and en_fertig:
                 text = en_fertig
+            elif direkt and noch_deutsch(text):
+                text, schein = antwortsprache.antwort_uebersetzen(self._ki.server.frage, text, schein, teil_melden, log=lambda z: _log(self._core, z),
+                                                                  frage=antwortsprache.letzte_frage(nachrichten))
             elif englisch:
                 self._schritt("schreibt die Antwort auf Englisch …")
                 text, schein = antwortsprache.antwort_uebersetzen(self._ki.server.frage, text, schein, teil_melden, log=lambda z: _log(self._core, z),
                                                                   frage=antwortsprache.letzte_frage(nachrichten))
                 text, schein = self.eigene_worte_englisch(text, schein)
+            if en_frage:
+                schein = quellen_titel_englisch(schein)
             if daheim:
                 schein = {**schein, "zuhause": daheim}
                 if daheim == "mit_unterlagen":
@@ -2122,6 +2130,7 @@ class Api:
             _NETZ.an = False
             _FENSTERFRAGE.an = False
             _ABSICHT.wert = None
+            pruefung.sprache_setzen(False)
             _FACH.wert = None
 
     def _fertig_aus_kopie(self, nachrichten: list[dict], *, fuer_andere: bool = False) -> tuple[str, dict] | None:
@@ -2149,7 +2158,8 @@ class Api:
         return e["text"], ls
 
     def _antwort_fuer_mitglied_ohne_schritt(self, nachrichten: list[dict], auszuege: list[dict], fuer: str, *, frisch: bool = False, teil_melden=None,
-                                            skill: dict | None = None, privat: bool | str = False, messen: bool = False) -> tuple[str, dict]:
+                                            skill: dict | None = None, privat: bool | str = False, messen: bool = False,
+                                            englisch: bool = False) -> tuple[str, dict]:
         if not (self._ki.quelle() == "lokal" and self._ki.server.laeuft()):
             raise app_core.AppError("KI_AUS", "KIplatz ist auf diesem Gerät gerade ausgeschaltet")
         _EIGEN.an = bool(privat)
@@ -2173,7 +2183,8 @@ class Api:
             kopie=None if (skill or privat) else "andere",
             vorspann=skills.vorspann(mit_skill) if mit_skill is not None else "",
             vorspann_hinweis=f"Skill „{mit_skill.name}“ angewendet." if mit_skill is not None else "",
-            strom=_Teilgeber(teil_melden) if teil_melden is not None else None, skill_name=mit_skill.name if mit_skill is not None else None)
+            strom=_Teilgeber(teil_melden) if teil_melden is not None else None, skill_name=mit_skill.name if mit_skill is not None else None,
+            englisch=englisch)
         return text, lieferschein
 
 
@@ -2219,7 +2230,8 @@ class Api:
                       messen: bool = False, kopie: str | None = None, vorspann: str = "", vorspann_hinweis: str = "",
                       modell_nachrichten: list[dict] | None = None, strom=None, melden=None, knapp: bool = False, max_tokens: int | None = None,
                       kurz: bool = False, prozessor_rueckfall: bool = False, knopf: bool = False, nachsuche_erlaubt: bool = True,
-                      skill_name: str | None = None, geraet: str | None = None) -> tuple[str, dict, "ki_laufzeit.Antwort | None"]:
+                      skill_name: str | None = None, geraet: str | None = None, englisch: bool = False) -> tuple[str, dict, "ki_laufzeit.Antwort | None"]:
+        pruefung.sprache_setzen(englisch)
         melden = melden or self._schritt
         strom = strom if strom is not None else _Still()
         modell_nachrichten = modell_nachrichten if modell_nachrichten is not None else nachrichten
@@ -2285,7 +2297,7 @@ class Api:
             hinweis = (hinweis + " " if hinweis else "") + vorspann_hinweis
 
         def modell(zusatz_: str, on_token, *, max_tokens_: int | None = None):
-            return self._ki.frage(modell_nachrichten, on_token=on_token, zusatz=zusatz_, max_tokens=max_tokens_ or max_tokens, kurz=kurz)
+            return self._ki.frage(modell_nachrichten, on_token=on_token, zusatz=auftrag_sprache(zusatz_), max_tokens=max_tokens_ or max_tokens, kurz=kurz)
 
         self._schritt("schreibt die Antwort …")
         zusatz = mit_auftrag(mit_fokus(zusatz, suchfrage(modell_nachrichten)), modell_nachrichten)
@@ -2342,7 +2354,7 @@ class Api:
         self._schritt("prüft die Antwort gegen die Quellen …")
         pr = pruefung.pruefen(a.text or "", [(int(q["nummer"]), str(q.get("text", ""))) for q in quellen if q.get("text")])
         if klein and not getattr(a, "abgebrochen", False) and pr.gruen == 0 and not _WEISS_NICHT.search(ohne_markdown(a.text or "")):
-            a = dataclasses.replace(a, text=_GESUCHT_NICHTS_SATZ)
+            a = dataclasses.replace(a, text=_satz(_GESUCHT_NICHTS_SATZ, _GESUCHT_NICHTS_SATZ_EN))
             pr = pruefung.pruefen(a.text, [])
             strom.neu()
         verworfen = False
@@ -2394,7 +2406,7 @@ class Api:
                     antwort_text = ohne_kann_nicht_zeigen(antwort_text)
             if not fern and belege.vergleichsfrage(suchfrage(nachrichten)) and not (lauf and lauf.get("einkauf") is not None):
                 letzte = next((str(n.get("content", "")) for n in reversed(nachrichten) if n.get("role") == "user"), "")
-                antwort_text, weg = vergleich_zeilen_pruefen(antwort_text, quellen, englisch=such_sprache(suchfrage(nachrichten)) == "en",
+                antwort_text, weg = vergleich_zeilen_pruefen(antwort_text, quellen, englisch=pruefung.englisch() or such_sprache(suchfrage(nachrichten)) == "en",
                                                              anhang=letzte[len(schriftstueck.eigene_worte(letzte)[0]):])
                 if weg:
                     lieferschein["quellen"] = (lieferschein.get("quellen", "") + f" Vergleich: {weg} Zeilen ohne Preis auf der Seite des Anbieters gestrichen.").strip()
@@ -2409,7 +2421,7 @@ class Api:
             sf = suchfrage(nachrichten)
             if (not fern and belege.vergleichsfrage(sf) and nachschauen.vergleich_art(sf) == "energie"
                     and nachschauen.vergleich_markt(" ".join(str(n.get("content", "")) for n in nachrichten if n.get("role") == "user")) == "AT"):
-                antwort_text = antwort_text.rstrip() + "\n\n" + (TARIFKALKULATOR_EN if such_sprache(sf) == "en" else TARIFKALKULATOR)
+                antwort_text = antwort_text.rstrip() + "\n\n" + (TARIFKALKULATOR_EN if pruefung.englisch() or such_sprache(sf) == "en" else TARIFKALKULATOR)
             if antwort_text != vorher_text:
                 strom.neu()
             return antwort_text, vorher_text, lieferschein
@@ -2430,7 +2442,7 @@ class Api:
             antwort_text = _weiss_nicht_anwenden(antwort_text, lieferschein, gesucht=im_netz_gesucht(nachgeholt, quellen, lauf), vorher=vorher_text)
         ek = (lauf or {}).get("einkauf")
         if not fern and ek is not None and schrift is None:
-            englisch_e = such_sprache(suchfrage(nachrichten)) == "en"
+            englisch_e = pruefung.englisch() or such_sprache(suchfrage(nachrichten)) == "en"
             antwort_text = einkauf.einsetzen(antwort_text, ek["angebote"], ek.get("portale", []), englisch=englisch_e,
                                              stand=datetime.now().strftime("%d.%m.%Y" if not englisch_e else "%d %B %Y"))
             seiten_n = sum(1 for g in ek["angebote"] if g.herkunft == "seite")
@@ -4237,6 +4249,7 @@ class Api:
                 _SCHRITT.fn = vorher
                 _NETZ.an = False
                 _ABSICHT.wert = None
+                pruefung.sprache_setzen(False)
                 _FACH.wert = None
                 ki_laufzeit.original_setzen("")
                 _SUCHLAUF.stand = None
@@ -4337,6 +4350,7 @@ class Api:
             max_tokens = 320 if am_prozessor else None
             englisch_gefragt = not fern and antwortsprache.frage_sprache(str(text)) == "en"
             nachrichten_de = None
+            direkt = False
 
             def ohne_modell(antwort: str, gemacht: str, woher: str, fertig_en: str = "") -> dict:
                 if not admin:
@@ -4347,7 +4361,7 @@ class Api:
                                 "guthaben_vorher": stand_vorher.guthaben}
                 if englisch_gefragt and fertig_en:
                     antwort = fertig_en
-                elif englisch_gefragt:
+                elif englisch_gefragt and (not direkt or noch_deutsch(antwort)):
                     antwort, lieferschein = antwortsprache.antwort_uebersetzen(self._ki.server.frage, antwort, lieferschein, log=lambda z: _log(self._core, z))
                 self._ablage.anhaengen(g, "assistant", antwort, lieferschein=lieferschein)
                 return {"text": antwort, "lieferschein": lieferschein, "gespraech": g.to_json_dict(), "credits": self._credits_dict()}
@@ -4362,7 +4376,10 @@ class Api:
                                         bezug_an=not fern and not g.anhaenge and not getattr(g, "ordner", None), uebersetzen=not fern)
             if vorab is not None:
                 return ohne_modell(*vorab[:3], fertig_en=vorab[3])
-            if englisch_gefragt and not ab.antwort:
+            direkt = englisch_gefragt and not ab.antwort and englisch_direkt(str(text))
+            if direkt:
+                ki_laufzeit.original_setzen(str(text))
+            elif englisch_gefragt and not ab.antwort:
                 hinweis_seite("Die Frage ist auf Englisch, die Antwort kommt auf Englisch …")
                 try:
                     nachrichten_de = antwortsprache.frage_auf_deutsch(self._ki.server.frage, g.fuer_modell())
@@ -4435,7 +4452,7 @@ class Api:
                     kopie=None if (fern or g.anhaenge or self._kiste.fuer_gespraech(g.skill)) else "eigen",
                     vorspann=vorspann_bauen, strom=_FensterStrom(self._js, on_token) if self._window is not None else None,
                     melden=melden, knapp=am_prozessor, max_tokens=max_tokens, kurz=am_prozessor, prozessor_rueckfall=not fern,
-                    knopf=knopf, nachsuche_erlaubt=not g.anhaenge and not getattr(g, "ordner", None), geraet=self._ki.geraet_de())
+                    knopf=knopf, nachsuche_erlaubt=not g.anhaenge and not getattr(g, "ordner", None), geraet=self._ki.geraet_de(), englisch=direkt)
             except app_core.AppError:
                 if not admin:
                     self._kontobuch.antwort(geraet=self._geraet_name)
@@ -4446,7 +4463,7 @@ class Api:
                 ls_f = lieferschein
                 ls_f.update({"guthaben_vorher": stand_vorher.guthaben,
                              "credits": "Admin, unbegrenzt" if admin else f"nichts verrechnet: die Antwort kam fertig aus dem Antwort-Speicher, Stand {stand_vorher.guthaben}"})
-                if englisch_gefragt:
+                if englisch_gefragt and (not direkt or noch_deutsch(antwort_text)):
                     antwort_text, ls_f = antwortsprache.antwort_uebersetzen(self._ki.server.frage, antwort_text, ls_f, log=lambda z: _log(self._core, z))
                 self._ablage.anhaengen(g, "assistant", antwort_text, lieferschein=ls_f)
                 return {"text": antwort_text, "lieferschein": ls_f, "gespraech": g.to_json_dict(), "credits": self._credits_dict()}
@@ -4456,12 +4473,14 @@ class Api:
             lieferschein["credits"] = (("Admin, unbegrenzt" if admin else f"1 Credit für diese Frage, Stand {stand.guthaben}")
                                        + (f"; {self._ki.fern_name()} hat 1 verdient" if fern else ""))
             lieferschein["guthaben_vorher"] = stand_vorher.guthaben
-            if englisch_gefragt:
+            if englisch_gefragt and (not direkt or noch_deutsch(antwort_text)):
                 hinweis_seite("Die Antwort wird ins Englische übertragen …")
                 antwort_text, lieferschein = antwortsprache.antwort_uebersetzen(self._ki.server.frage, antwort_text, lieferschein,
                                                                                log=lambda z: _log(self._core, z), frage=str(text))
                 antwort_text, lieferschein = self.eigene_worte_englisch(antwort_text, lieferschein)
                 hinweis_seite("")
+            if englisch_gefragt:
+                lieferschein = quellen_titel_englisch(lieferschein)
             self._ablage.anhaengen(g, "assistant", antwort_text, lieferschein=lieferschein)
             if not stueckweise:
                 hinweis_seite("")
@@ -6504,6 +6523,32 @@ def such_sprache(frage: str) -> str:
     return ""
 
 
+def englisch_direkt(frage: str) -> bool:
+    vorher = ki_laufzeit.original()
+    ki_laufzeit.original_setzen(frage)
+    try:
+        return such_sprache(frage) == "en"
+    finally:
+        ki_laufzeit.original_setzen(vorher)
+
+
+SUCHERGEBNISSE_TITEL_EN = "Search results"
+
+
+def quellen_titel_englisch(lieferschein: dict) -> dict:
+    liste = lieferschein.get("quellen_liste") if isinstance(lieferschein, dict) else None
+    if not isinstance(liste, list):
+        return lieferschein
+    de = nachschauen.SUCHERGEBNISSE_TITEL
+    neu = [{**q, "titel": SUCHERGEBNISSE_TITEL_EN + str(q["titel"])[len(de):]} if isinstance(q, dict) and str(q.get("titel") or "").startswith(de) else q
+           for q in liste]
+    return {**lieferschein, "quellen_liste": neu}
+
+
+def noch_deutsch(text: str) -> bool:
+    return antwortsprache.frage_sprache(text or "") == "de"
+
+
 SUCHWORT_ENGLISCH = ("Die Person hat auf Englisch gefragt, und die Frage betrifft keinen Ort im deutschen Sprachraum; die Suche läuft auf Englisch: schreib beide Zeilen "
                      "auf Englisch, mit den Wörtern, die man dort dafür verwendet.")
 
@@ -6621,6 +6666,17 @@ ERFUNDEN_ZUSATZ = ("Prüfung: Deine vorige Antwort enthielt Einzelheiten, die in
                    "Antworte jetzt in höchstens drei kurzen Sätzen: Sag, was die Auszüge dazu wirklich hergeben, und wenn sie nichts hergeben, "
                    "sag nur „Das weiß ich noch nicht.“ Schreib nie „Auszüge“. Keine Aufzählung, keine Beispiele.")
 
+AUFTRAG_ENGLISCH = ("Die Person hat auf Englisch gefragt: schreib die ganze Antwort auf Englisch, auch jede Neufassung. Gibt dir ein Auftrag oben einen "
+                    "Satz auf Deutsch vor, schreibst du ihn sinngemäß auf Englisch; weißt du etwas nicht, schreibst du genau: "
+                    "“I don't know that yet.”")
+
+
+def auftrag_sprache(zusatz: str) -> str:
+    if not pruefung.englisch():
+        return zusatz
+    t = (zusatz or "").replace("„Das weiß ich noch nicht.“", "“I don't know that yet.”")
+    return (t + "\n\n" if t else "") + AUFTRAG_ENGLISCH
+
 
 class _Teilgeber:
 
@@ -6733,16 +6789,29 @@ _WEISS_NICHT = re.compile(r"kenne ich (?:das |es |leider |gerade |noch )*nicht|s
                           r"|\bkeine (?:der |dieser )?(?:Quellen?|Auszüge) (?:nennt|nennen|enthält|enthalten|gibt|geben|sagt|sagen)\b"
                           r"|\bin (?:keiner|den) (?:der )?(?:Quellen?|Auszügen?) (?:steht|stehen|findet sich|finden sich) (?:keine|nichts|nicht)\b"
                           r"|\bdie Quellen (?:nennen|enthalten|geben) (?:keine|nichts)\b"
-                          r"|ist mir (?:leider )?nicht bekannt|habe ich keine (?:Informationen|Angaben|Daten)|liegen mir keine (?:Informationen|Angaben|Daten)|kann ich (?:dir |Ihnen )?(?:leider )?nicht (?:sagen|beantworten)", re.I)
+                          r"|ist mir (?:leider )?nicht bekannt|habe ich keine (?:Informationen|Angaben|Daten)|liegen mir keine (?:Informationen|Angaben|Daten)|kann ich (?:dir |Ihnen )?(?:leider )?nicht (?:sagen|beantworten)"
+                          r"|\bI (?:do not|don't|don’t) (?:yet )?know\b|\bI (?:can't|can’t|cannot) (?:say|tell|answer)\b|\bI have no (?:information|details|data)\b"
+                          r"|\bnone of the (?:sources|passages) (?:mention|mentions|say|says|give|gives|contain|contains|name|names)\b"
+                          r"|\bthe (?:sources|passages) (?:do not|don't|don’t) (?:mention|say|give|contain|name)\b", re.I)
 _WEISS_NICHT_SATZ = "Das weiß ich gerade nicht sicher. Soll ich live nachprüfen?"
 _NACHPRUEFEN_ANGEBOT = "Soll ich live nachprüfen?"
 _GESUCHT_NICHTS_SATZ = "Das weiß ich noch nicht, und im Internet habe ich dazu gerade nichts Verlässliches gefunden."
 _NICHT_ERREICHT_SATZ = "Das weiß ich noch nicht, und die Suche im Internet ist gerade nicht durchgekommen. Soll ich es gleich noch einmal versuchen?"
+_WEISS_NICHT_SATZ_EN = "I don't know that for sure yet. Shall I check live?"
+_NACHPRUEFEN_ANGEBOT_EN = "Shall I check live?"
+_GESUCHT_NICHTS_SATZ_EN = "I don't know that yet, and I couldn't find anything reliable on the internet just now."
+_NICHT_ERREICHT_SATZ_EN = "I don't know that yet, and the internet search isn't getting through right now. Shall I try again in a moment?"
+
+
+def _satz(de: str, en: str) -> str:
+    return en if pruefung.englisch() else de
 _AUSZUG = re.compile(r"Auszüg|Auszug\b|Wissensspeicher|\b(?:die|den|in den|laut|nur|keine|alle|beide|meine|deine)\s+Quellen\b|"
                      r"\bQuellen\s+(?:nennen|zeigen|sagen|enthalten|erwähnen|geben|liegen|belegen|bestätigen)|"
                      r"\bsteht (?:hier|dazu|darüber)(?: (?:auch|leider))? nichts\b|\bdazu steht (?:hier )?nichts\b|\bhier steht nichts\b", re.I)
 _QUELLEN_ZEILE = re.compile(r"^[ \t]*(?:\*\*|__)?(?:Quellen?|Quellenangaben?|Sources?)(?:\*\*|__)?[ \t]*:(?:\*\*|__)?[^\n]*$", re.I | re.M)
 _AUSZUG_KLAMMER = re.compile(r"\s*\([^()]*(?:Auszüg|Auszug\b|Wissensspeicher|\bQuellen?\b)[^()]*\)\s*", re.I)
+_AUSZUG_EN = re.compile(r"\bpassages?\b|\bknowledge store\b|\b(?:the|in the|according to the|my|no|all|both) sources\b"
+                        r"|\bsources (?:mention|show|say|contain|give|confirm)\b|\b(?:there is|I find) nothing (?:here|about this|on this)\b", re.I)
 
 
 def ohne_auszuege(text: str | None) -> str:
@@ -6750,15 +6819,19 @@ def ohne_auszuege(text: str | None) -> str:
     t = antwortspeicher_basis.ohne_schlussangebot(t)
     t = _AUSZUG_KLAMMER.sub(" ", t)
     t = re.sub(r"([.!?])\s*\.", r"\1", re.sub(r"\s+([.,;:!?])", r"\1", re.sub(r"[ \t]{2,}", " ", t))).strip()
-    if not _AUSZUG.search(t):
+    englisch = pruefung.englisch()
+
+    def ueber_auszuege(s: str) -> bool:
+        return bool(_AUSZUG.search(s) or (englisch and _AUSZUG_EN.search(s)))
+    if not ueber_auszuege(t):
         return t
     absaetze = []
     for absatz in t.split("\n"):
-        saetze = [s for s in re.split(r"(?<=[.!?])\s+", absatz) if s and not _AUSZUG.search(s)]
+        saetze = [s for s in re.split(r"(?<=[.!?])\s+", absatz) if s and not ueber_auszuege(s)]
         if saetze or not absatz.strip():
             absaetze.append(" ".join(saetze))
     rest = re.sub(r"\n{3,}", "\n\n", "\n".join(absaetze)).strip()
-    return rest or "Das weiß ich noch nicht."
+    return rest or _satz("Das weiß ich noch nicht.", belege.WEISS_NICHT_EN)
 
 
 BELEGE_ZUSATZ = ("Prüfung: Eine erste Fassung dieser Antwort nannte eine Zahl, ein Datum oder einen Namen, der in keiner Quelle steht: „{saetze}“. "
@@ -6934,7 +7007,7 @@ def _streng(t: str, belegtext: str, zusatz: str, rechnen: bool, pruefer, auszueg
         gut = [x for x in teile if not any(b.sicher_falsch for b in belege.streng_pruefen(
             x + ".", belegtext, zahlen_pruefen=not rechnen, namen_pruefen=lambda _s: False, regel_frage=regelfrage, regel_quellen=quelltexte))]
         if gut and len(gut) < len(teile) and any(re.search(r"\d", x) for x in gut):
-            teilweise[s] = " und ".join(gut) + "."
+            teilweise[s] = (" and " if pruefung.englisch() else " und ").join(gut) + "."
     for s, neu in teilweise.items():
         t = t.replace(s, neu, 1)
         weg.discard(s)
@@ -6948,6 +7021,7 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
                     umschreiben=None,
                     schreiben: bool = False, bekannt=None, richter=None, einspruch: bool = False) -> tuple[str, list[str]]:
     heute = heute or ki_laufzeit.heute()
+    wn = _satz("Das weiß ich noch nicht.", belege.WEISS_NICHT_EN)
     notizen: list[str] = []
     einspruch_zaehler = [0, 0]
     t, n = belege.ohne_platzhalter(text)
@@ -6957,7 +7031,7 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
     if n:
         notizen.append("1 falschen Wochentag neben einem Datum vom Programm berichtigt." if n == 1
                        else f"{n} falsche Wochentage neben einem Datum vom Programm berichtigt.")
-    t, n_zeit, raus_zeit = belege.zeitform_berichtigen(t, heute, umschreiben, englisch=such_sprache(frage) == "en")
+    t, n_zeit, raus_zeit = belege.zeitform_berichtigen(t, heute, umschreiben, englisch=pruefung.englisch() or such_sprache(frage) == "en")
     if n_zeit:
         notizen.append(f"Zeitform gegen heute: {n_zeit} Satz/Sätze mit vergangenem Datum in der Vergangenheit neu geschrieben.")
     if raus_zeit:
@@ -6975,21 +7049,21 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
         if raus_alt:
             notizen.append("1 Satz über eine frühere Saison oder ein früheres Jahr vom Programm gestrichen." if len(raus_alt) == 1
                            else f"{len(raus_alt)} Sätze über eine frühere Saison oder ein früheres Jahr vom Programm gestrichen.")
-            if t != "Das weiß ich noch nicht." and nur_rest(vor_alt, t, raus_alt):
+            if t != wn and nur_rest(vor_alt, t, raus_alt):
                 notizen.append("Nach dem Streichen fehlte der Anfang der Antwort; ein Rest wird nicht ausgegeben.")
-                t = "Das weiß ich noch nicht."
+                t = wn
     if schreiben or not any(str(q.get("text") or "").strip() for q in (quellen or [])):
         if not schreiben and belege.preisfrage(frage) and any(belege.betraege(t)):
             notizen.append("Ein Preis ohne Quelle wurde nicht ausgegeben: Preise ändern sich, ohne aktuelle Quelle nennt KIplatz keinen.")
-            return "Das weiß ich noch nicht.", notizen
+            return wn, notizen
         if not schreiben and belege.regelfrage(frage) and not belege.preisfrage(frage) and not _WEISS_NICHT.search(t):
             notizen.append(REGEL_OHNE_QUELLE)
-            return "Das weiß ich noch nicht.", notizen
-        t, n_eigen, _ersetzt = eigene_worte(t, belege.fremde_texte(quellen), umschreiben)
+            return wn, notizen
+        t, n_eigen, _ersetzt = eigene_worte(t, belege.fremde_texte(quellen), umschreiben, englisch=pruefung.englisch())
         return t, notizen + n_eigen
     if not _WEISS_NICHT.search(t) and belege.gefragter_name_fehlt(frage, t, [str(q.get("text") or "") for q in quellen]):
         notizen.append(ANDERE_PERSON)
-        return "Das weiß ich noch nicht.", notizen
+        return wn, notizen
     vermittler = nachschauen.vermittler_adressen(quellen)
     einspruch = einspruch and not vermittler
     beleg_quellen = [q for q in quellen if str(q.get("adresse") or "") not in vermittler]
@@ -7022,9 +7096,9 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
         namen_fall = namen_fall and not raus_misch
         notizen.append("1 Satz, der einer Quelle etwas aus einer anderen Quelle zuschreibt, vom Programm gestrichen." if len(raus_misch) == 1
                        else f"{len(raus_misch)} Sätze, die einer Quelle etwas aus einer anderen Quelle zuschreiben, vom Programm gestrichen.")
-    if raus and geprueft != "Das weiß ich noch nicht." and not belege.brauchbar(geprueft):
+    if raus and geprueft != wn and not belege.brauchbar(geprueft):
         notizen.append("Nach dem Streichen blieb kein ganzer Satz; der Rest wurde nicht ausgegeben.")
-        geprueft = "Das weiß ich noch nicht."
+        geprueft = wn
     if raus and nochmal is not None:
         try:
             regel_vorher = bool(regel_saetze & set(raus))
@@ -7044,7 +7118,7 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
                                              namen_info=namen2)
             namen_rest2 = namen_fall and namen_ausnahme(frage, namen2, raus2, geprueft2)
             quell_z = belege.zahlenwerte(belegtext + "\n" + "\n".join(x for _n, x in auszuege))
-            erste_rest = geprueft == "Das weiß ich noch nicht." or nur_rest(basis, geprueft, raus)
+            erste_rest = geprueft == wn or nur_rest(basis, geprueft, raus)
             if (geprueft2.strip() and belege.brauchbar(geprueft2) and not _WEISS_NICHT.search(geprueft2)
                     and (not nur_rest(neu, geprueft2, raus2) or namen_rest2)
                     and (erste_rest or len(belege.zahlenwerte(geprueft2) & quell_z) >= len(belege.zahlenwerte(geprueft) & quell_z))):
@@ -7055,10 +7129,10 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
                                else "Die erste Fassung nannte Zahlen, Daten oder Namen, die in keiner Quelle stehen; KIplatz hat neu geantwortet.")
         except app_core.AppError:
             pass
-    if (raus and geprueft != "Das weiß ich noch nicht." and nur_rest(basis, geprueft, raus)
+    if (raus and geprueft != wn and nur_rest(basis, geprueft, raus)
             and not (namen_fall and namen_ausnahme(frage, namen_jetzt, raus, geprueft))):
         notizen.append("Nach dem Streichen fehlte der Anfang der Antwort; ein Rest wird nicht ausgegeben.")
-        geprueft = "Das weiß ich noch nicht."
+        geprueft = wn
     n_regel = sum(1 for s in raus if s in regel_saetze)
     if n_regel:
         notizen.append("1 Satz mit einer Regel, die keine Quelle so sagt, vom Programm gestrichen." if n_regel == 1
@@ -7072,11 +7146,11 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
             notizen.append(f"{n_rest} Sätze mit einer Zahl, einem Datum oder einem Namen, die in keiner Quelle stehen, vom Programm gestrichen ({vom_pruefer} davon nach einem zweiten Blick des Modells).")
         else:
             notizen.append(f"{n_rest} Sätze mit einer Zahl, einem Datum oder einem Namen, die in keiner Quelle stehen, vom Programm gestrichen.")
-    if (regel and geprueft != "Das weiß ich noch nicht." and not any(s.farbe == "gruen" for s in pruefung.pruefen(geprueft, auszuege).saetze)
+    if (regel and geprueft != wn and not any(s.farbe == "gruen" for s in pruefung.pruefen(geprueft, auszuege).saetze)
             and not belege.regel_gestuetzt(geprueft, frage, [x for _n, x in auszuege])):
         notizen.append(REGEL_OHNE_QUELLE)
-        geprueft = "Das weiß ich noch nicht."
-    if not schreiben and geprueft != "Das weiß ich noch nicht." and belege.zahlenfrage(frage):
+        geprueft = wn
+    if not schreiben and geprueft != wn and belege.zahlenfrage(frage):
         fehlend = namen_fehlen(frage, geprueft)
         if fehlend and nochmal is not None:
             try:
@@ -7086,7 +7160,7 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
                 neu, _ = belege.wochentage_berichtigen(neu, heute)
                 geprueft3, raus3, vom3 = _streng(neu, belegtext, zusatz, rechnen, pruefer, auszuege, regelfrage=regelfrage, ableitung=ableitung)
                 quell_z = belege.zahlenwerte(belegtext + "\n" + "\n".join(x for _n, x in auszuege))
-                if geprueft3.strip() and geprueft3 != "Das weiß ich noch nicht." and belege.brauchbar(geprueft3) \
+                if geprueft3.strip() and geprueft3 != wn and belege.brauchbar(geprueft3) \
                         and len(namen_fehlen(frage, geprueft3)) < len(fehlend) \
                         and len(belege.zahlenwerte(geprueft3) & quell_z) >= len(belege.zahlenwerte(geprueft) & quell_z):
                     geprueft, raus, vom_pruefer = geprueft3, raus3, vom3
@@ -7095,10 +7169,11 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
             except app_core.AppError:
                 pass
         if fehlend:
-            geprueft = geprueft.rstrip() + "\n\nZu " + " und ".join(fehlend) + " habe ich in meinen Quellen keine sichere Zahl gefunden."
+            geprueft = geprueft.rstrip() + "\n\n" + (("For " + " and ".join(fehlend) + " I couldn't find a reliable figure in my sources.") if pruefung.englisch()
+                                                     else ("Zu " + " und ".join(fehlend) + " habe ich in meinen Quellen keine sichere Zahl gefunden."))
             notizen.append("Zu " + ", ".join(fehlend) + " stand nichts Belegtes in der Antwort; das Programm sagt es dazu.")
-    if geprueft != "Das weiß ich noch nicht.":
-        geprueft, n_eigen, _ersetzt = eigene_worte(geprueft, belege.fremde_texte(quellen), umschreiben)
+    if geprueft != wn:
+        geprueft, n_eigen, _ersetzt = eigene_worte(geprueft, belege.fremde_texte(quellen), umschreiben, englisch=pruefung.englisch())
         notizen += n_eigen
     if einspruch_zaehler[1]:
         n = einspruch_zaehler[1]
@@ -7121,7 +7196,7 @@ def umschreibung_lesen(text: str, anzahl: int) -> dict[int, str]:
 
 
 def eigene_worte(text: str, fremd: list[str], umschreiben=None, *, englisch: bool = False) -> tuple[str, list[str], dict[str, str]]:
-    weiss_nicht = belege.WEISS_NICHT_EN if englisch else "Das weiß ich noch nicht."
+    weiss_nicht = belege.WEISS_NICHT_EN if englisch else belege.WEISS_NICHT_DE
     woertlich = belege.woertliche_saetze(text, fremd) if fremd and text else []
     if not woertlich:
         return text, [], {}
@@ -7147,7 +7222,7 @@ def eigene_worte(text: str, fremd: list[str], umschreiben=None, *, englisch: boo
         return neu_text, ["1 Satz stand fast wörtlich so in einer Quelle; KIplatz hat ihn in eigenen Worten geschrieben." if n == 1
                           else f"{n} Sätze standen fast wörtlich so in einer Quelle; KIplatz hat sie in eigenen Worten geschrieben."], ersetzt
     rest, raus = belege.saetze_streichen(neu_text, set(woertlich).__contains__)
-    if rest.strip() and rest != "Das weiß ich noch nicht." and belege.brauchbar(rest) and not nur_rest(neu_text, rest, raus):
+    if rest.strip() and rest != weiss_nicht and belege.brauchbar(rest) and not nur_rest(neu_text, rest, raus):
         return rest, ["1 Satz, der fast wörtlich so in einer Quelle stand, vom Programm gestrichen." if len(raus) == 1
                       else f"{len(raus)} Sätze, die fast wörtlich so in einer Quelle standen, vom Programm gestrichen."], ersetzt
     return weiss_nicht, ["Die Antwort stand fast wörtlich so in einer Quelle und ließ sich nicht in eigenen Worten schreiben; sie wurde nicht ausgegeben."], {}
@@ -7206,15 +7281,16 @@ def _weiss_nicht_anwenden(antwort_text: str, lieferschein: dict, *, gesucht: boo
             lieferschein["quellen"] = "keine Antwort: das Modell hat es nicht gewusst, und die Suche im Internet ist nicht durchgekommen."
             lieferschein["pruefung"] = pruefung.pruefen("", []).kurz()
             lieferschein["erfunden"] = ""
-            return _NICHT_ERREICHT_SATZ
+            return _satz(_NICHT_ERREICHT_SATZ, _NICHT_ERREICHT_SATZ_EN)
         lieferschein["quellen"] = ("keine Antwort: das Modell hat es nicht gewusst, und die Suche im Internet hat nichts Verlässliches gebracht."
                                    if gesucht else "keine Antwort: das Modell hat es nicht gewusst; „Live nachprüfen“ schaut im Internet nach.")
         lieferschein["pruefung"] = pruefung.pruefen("", []).kurz()
         lieferschein["erfunden"] = ""
-        return _GESUCHT_NICHTS_SATZ if gesucht else _WEISS_NICHT_SATZ
-    if gesucht or _NACHPRUEFEN_ANGEBOT.lower() in antwort_text.lower():
+        return _satz(_GESUCHT_NICHTS_SATZ, _GESUCHT_NICHTS_SATZ_EN) if gesucht else _satz(_WEISS_NICHT_SATZ, _WEISS_NICHT_SATZ_EN)
+    angebot = _satz(_NACHPRUEFEN_ANGEBOT, _NACHPRUEFEN_ANGEBOT_EN)
+    if gesucht or angebot.lower() in antwort_text.lower():
         return antwort_text
-    return antwort_text.rstrip() + "\n\n" + _NACHPRUEFEN_ANGEBOT
+    return antwort_text.rstrip() + "\n\n" + angebot
 
 
 def ohne_markdown(text: str | None) -> str:
