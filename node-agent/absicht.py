@@ -127,6 +127,8 @@ def erkennen(text: str, *, hat_vorige_antwort: bool = True) -> Absicht:
         return Absicht("dank", antwort=DANK_SATZ)
     if (_BILD.search(t) or _ZEICHNE.search(t)) and not _FRAGEWORT_ANFANG.match(t):
         return Absicht("bild", antwort=BILD_SATZ)
+    if anhang_aufgabe(str(text or "")):
+        return Absicht("anhang_aufgabe")
     rechnung = rechnen.loesen(t)
     if rechnung is not None:
         return Absicht("rechnen", antwort=rechnung.de, en=rechnung.en)
@@ -186,4 +188,24 @@ def zusatz(a: Absicht) -> str:
 
 
 def ohne_suche(a: Absicht) -> bool:
-    return a.art in ("weiter", "sprache") or (a.art == "umformen" and a.wie != "ausführlicher")
+    return a.art in ("weiter", "sprache", "anhang_aufgabe") or (a.art == "umformen" and a.wie != "ausführlicher")
+
+
+AUFTRAG_WORTE = ("schreib", "lös", "loes", "beantworte", "übersetz", "uebersetz", "fass", "zusammenfass", "erklär", "erklaer", "ergänz", "ergaenz",
+                 "korrigier", "verbesser", "mach", "rechne", "bearbeite", "füll", "fuell", "write", "solve", "answer", "translate", "summari",
+                 "explain", "complete", "fill", "correct", "do ", "scrivi", "risolvi", "rispondi", "traduci", "riassumi", "spiega", "completa",
+                 "écris", "ecris", "résous", "resous", "réponds", "traduis", "résume", "explique", "complète", "escribe", "resuelve", "responde",
+                 "traduce", "resume", "explica", "completa", "schrijf", "los op", "beantwoord", "vertaal", "vat samen", "leg uit", "vul in",
+                 "napisz", "rozwiąż", "przetłumacz", "書いて", "解いて", "訳して", "要約", "was steht", "lies", "what does it say", "read")
+AUFGABE_WORTE = ("punkt", "aufgabe", "nummer", "nr", "übung", "uebung", "frage", "beispiel", "exercise", "task", "question", "number", "point",
+                 "esercizio", "domanda", "exercice", "question", "ejercicio", "pregunta", "opgave", "vraag", "zadanie", "問題", "問")
+_AUFTRAG = re.compile(r"(?i)(?<![^\W\d_])(?:" + "|".join(re.escape(w) for w in AUFTRAG_WORTE) + ")")
+_AUFGABE_NUMMER = re.compile(r"(?i)(?<![^\W\d_])(?:" + "|".join(re.escape(w) for w in AUFGABE_WORTE) + r")\.?\s*\d{1,3}[a-z]?(?!\d)|\d{1,3}\s*(?:番|問)")
+_KAUF_ODER_TEST = re.compile(r"(?i)preis|kost|günstig|guenstig|billig|kauf|angebot|händler|shop|test|bewert|price|cheap|buy|review|prezz|prix|precio")
+
+
+def anhang_aufgabe(text: str) -> bool:
+    eigen, mit_anhang = schriftstueck.eigene_worte(text or "")
+    if not mit_anhang or not eigen.strip() or len(eigen.split()) > 25 or _KAUF_ODER_TEST.search(eigen):
+        return False
+    return bool(_AUFTRAG.search(eigen) or _AUFGABE_NUMMER.search(eigen))

@@ -1272,6 +1272,8 @@ class Api:
         lauf = getattr(_SUCHLAUF, "stand", None)
         if lauf is None or lauf["runde"] or lauf["gesucht"] or "nebenher" in lauf or not hasattr(self._nachschauer, "suche_runde"):
             return
+        if nachrichten and absicht.ohne_suche(absicht.letzte(nachrichten)):
+            return
         anfragen = je_anhang(nachschauen.anfragen_aufteilen(self._suchwoerter(nachrichten, frage, ohne_modell=True) or [frage], frage), nachrichten or [])
         anfragen = einkauf_anfragen(frage, nachrichten or [], anfragen)
         anfragen, mehr = vergleich_runde(frage, anfragen)
@@ -2300,6 +2302,8 @@ class Api:
             hinweis = (hinweis + " " if hinweis else "") + ("Vorhaben: die KI prüft zuerst, ob dir etwas Wichtiges fehlt." if runde == "fragen" else "Vorhaben, zweite Runde nach den Rückfragen.")
         elif ohne_suche:
             zusatz, quellen, im_speicher, hinweis, quellen_stand = wissen.datum_zeile(), [], 0, KEINE_NEUE_SUCHE, None
+            if ab.art == "anhang_aufgabe":
+                zusatz, hinweis = wissen.datum_zeile() + "\n\n" + ANHANG_AUFGABE_ANWEISUNG, ANHANG_AUFGABE_HINWEIS
             _suchrunden_aufbrauchen()
         else:
             klein = not frisch and not fern and self.nachschauen_an() and klein_wissensfrage(wahl.modell.name if wahl else "", suchfrage(nachrichten))
@@ -2514,10 +2518,11 @@ class Api:
         if self._ki.quelle() != "lokal" or not self._ki.bereit():
             return None
 
-        def umschreiben(saetze: list[str], englisch: bool) -> dict[int, str]:
-            self._schritt("schreibt übernommene Sätze in eigenen Worten …")
+        def umschreiben(saetze: list[str], englisch: bool, anweisung: str | None = None) -> dict[int, str]:
+            self._schritt("schreibt übernommene Sätze in eigenen Worten …" if anweisung is None else "prüft Daten gegen heute …")
             auftrag = "\n".join(f"{i + 1}. {' '.join(s.split())}" for i, s in enumerate(saetze))
-            a = self._ki.server.frage([{"role": "user", "content": (belege.UMSCHREIBEN_EN if englisch else belege.UMSCHREIBEN_DE) + "\n\n" + auftrag}],
+            vorne = anweisung or (belege.UMSCHREIBEN_EN if englisch else belege.UMSCHREIBEN_DE)
+            a = self._ki.server.frage([{"role": "user", "content": vorne + "\n\n" + auftrag}],
                                       max_tokens=80 * len(saetze) + 32, temperature=0.3, art="eigen")
             return umschreibung_lesen(a.text, len(saetze))
         return umschreiben
@@ -6088,7 +6093,34 @@ def vergleich_runde(frage: str, anfragen: list[str]) -> tuple[list[str], dict]:
         mehr["preis"] = True
     if sprache:
         mehr["sprache"] = sprache
+    if neuheitsfrage(frage) and anfragen and not vergleich:
+        jahr = ki_laufzeit.heute().year
+        anfragen = list(dict.fromkeys(anfragen + [f"{anfragen[0]} {jahr}", f"{anfragen[0]} {jahr + 1}"]))[:3]
     return anfragen, mehr
+
+
+NEU_WORTE = ("neue", "neuer", "neues", "neuen", "neueste", "neuester", "neuestes", "neuesten", "aktuelle", "aktuellste", "nächste", "naechste",
+             "kommende", "new", "newest", "latest", "next", "upcoming", "nuovo", "nuova", "ultimo", "ultima", "prossimo", "prossima", "nouveau",
+             "nouvelle", "dernier", "dernière", "prochain", "prochaine", "nuevo", "nueva", "último", "última", "próximo", "próxima", "novo", "nova",
+             "nieuwe", "nieuwste", "laatste", "volgende", "nowy", "nowa", "najnowszy", "najnowsza", "następny", "nya", "nyeste", "seneste", "最新", "新作")
+WERK_WORTE = ("buch", "bücher", "roman", "thriller", "krimi", "staffel", "serie", "folge", "film", "kinofilm", "teil", "album", "song", "single",
+              "spiel", "game", "kollektion", "collection", "book", "novel", "season", "series", "episode", "movie", "sequel", "record", "libro",
+              "romanzo", "stagione", "serie", "collezione", "livre", "saison", "série", "collection", "temporada", "película", "colección",
+              "boek", "seizoen", "książka", "sezon", "kolekcja", "bok", "säsong", "本", "小説", "シーズン", "映画", "アルバム")
+_NEU = re.compile(r"(?i)(?<![^\W\d_])(?:" + "|".join(re.escape(w) for w in NEU_WORTE) + r")(?![^\W\d_])|最新|新作")
+_WERK = re.compile(r"(?i)(?<![^\W\d_])(?:" + "|".join(re.escape(w) for w in sorted(set(WERK_WORTE), key=len, reverse=True)) + r")"
+                   + r"|本|小説|シーズン|映画|アルバム")
+
+
+def neuheitsfrage(frage: str) -> bool:
+    f = str(frage or "")
+    return bool(_NEU.search(f) and _WERK.search(f))
+
+
+NEUHEIT_FOKUS = ("Gefragt ist nach dem Neuesten einer Reihe. Heute ist der {heute}. Nenne zuerst, was zuletzt erschienen ist, mit Titel und Datum, in der "
+                 "Vergangenheit; dann, was als Nächstes angekündigt ist, mit Titel und Datum, in der Zukunft. Was vor heute liegt, ist erschienen, "
+                 "nicht angekündigt. Erscheint etwas je nach Sprache oder Land zu verschiedenen Zeiten (Original, deutsche Ausgabe), sag das. Nenne "
+                 "nur, was in den Quellen steht.")
 SUCHRUNDEN = 3
 FRAGE_FOKUS = ("Gefragt ist genau: „{frage}“. Beantworte genau das. Steht die gefragte Angabe (zum Beispiel eine Dauer, eine Anzahl, ein Ort) "
                "in keiner Quelle, sag das in einem Satz, statt eine andere Zahl oder Angabe zu nennen. Schreib in eigenen Worten, nie mehr als 6 "
@@ -6306,6 +6338,8 @@ def frage_fokus(frage: str) -> str:
         teile.append(PREIS_FOKUS)
     elif belege.regelfrage(f):
         teile.append(REGEL_FOKUS)
+    elif neuheitsfrage(f):
+        teile.append(NEUHEIT_FOKUS.format(heute=ki_laufzeit.heute().strftime("%d.%m.%Y")))
     return " ".join(teile)
 
 
@@ -6365,6 +6399,11 @@ AUFTRAG_ZUSATZ = ("Die Person hat dich gebeten, im Internet nachzuschauen. Das i
 PRUEF_ZUSATZ = ("Die Person fragt, ob deine vorige Antwort stimmt. Prüfe sie mit den Quellen oben: sag zuerst in einem Satz, ob sie stimmt, und "
                 "berichtige, was nicht stimmt. Gemeint ist: „{frage}“.")
 KEINE_NEUE_SUCHE = "Keine neue Suche: die vorige Antwort wurde nur umgeformt."
+ANHANG_AUFGABE_HINWEIS = "Aufgabe zum Anhang: aus dem Anhang gelöst, nicht im Internet gesucht."
+ANHANG_AUFGABE_ANWEISUNG = ("Die Person hat einen Anhang mitgeschickt (Text aus einem Foto oder einer Datei) und gibt dazu einen Auftrag, etwa eine Aufgabe "
+                            "lösen, einen Punkt schreiben, übersetzen oder zusammenfassen. Erledige genau diesen Auftrag aus dem Anhang. Ist er eine "
+                            "Schulaufgabe, gib die Lösung so, wie sie ins Heft gehört, übersichtlich und kurz, bei Namenwörtern mit Artikel. Der Text aus "
+                            "einem Foto kann Lesefehler haben; was eindeutig gemeint ist, nimm so. Antworte in der Sprache, in der die Person schreibt.")
 
 
 def _suchrunden_aufbrauchen() -> None:
@@ -6935,6 +6974,11 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
     if n:
         notizen.append("1 falschen Wochentag neben einem Datum vom Programm berichtigt." if n == 1
                        else f"{n} falsche Wochentage neben einem Datum vom Programm berichtigt.")
+    t, n_zeit, raus_zeit = belege.zeitform_berichtigen(t, heute, umschreiben, englisch=such_sprache(frage) == "en")
+    if n_zeit:
+        notizen.append(f"Zeitform gegen heute: {n_zeit} Satz/Sätze mit vergangenem Datum in der Vergangenheit neu geschrieben.")
+    if raus_zeit:
+        notizen.append(f"Zeitform gegen heute: {len(raus_zeit)} Satz/Sätze mit vergangenem Datum in der Zukunftsform gestrichen.")
     if nachschauen.richtung(frage) == "naechst":
         t, raus_vorbei = belege.vergangene_streichen(t, heute)
         if raus_vorbei:

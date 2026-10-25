@@ -13,19 +13,19 @@ import ki_laufzeit
 import wissen
 
 HEUTE = date(2026, 10, 8)
-SEITE = ("Rockstar Games hat bestätigt, dass Grand Theft Auto VI am 26. Mai 2026 für PlayStation 5 und Xbox Series X erscheint. "
+SEITE = ("Rockstar Games hat bestätigt, dass Grand Theft Auto VI am 26. Mai 2027 für PlayStation 5 und Xbox Series X erscheint. "
          "Eine Fassung für den PC wurde bisher nicht angekündigt.")
 FREMD = [{"nummer": 1, "art": "nachgeschaut", "titel": "Spieleseite", "text": SEITE}]
 FRAGE = "Wann erscheint GTA VI?"
-KOPIE = "Rockstar Games hat bestätigt, dass Grand Theft Auto VI am 26. Mai 2026 für PlayStation 5 und Xbox Series X erscheint (Quelle 1)."
-EIGEN = "GTA VI kommt am 26. Mai 2026 heraus, zuerst nur für PlayStation 5 und Xbox Series X (Quelle 1)."
+KOPIE = "Rockstar Games hat bestätigt, dass Grand Theft Auto VI am 26. Mai 2027 für PlayStation 5 und Xbox Series X erscheint (Quelle 1)."
+EIGEN = "GTA VI kommt am 26. Mai 2027 heraus, zuerst nur für PlayStation 5 und Xbox Series X (Quelle 1)."
 
 
 def test_ten_words_in_a_row_are_found_also_across_a_sentence_end():
     assert belege.woertliche_saetze(KOPIE, [SEITE]) == [KOPIE]
     assert belege.woertliche_saetze(EIGEN, [SEITE]) == []
-    quer = "Das Spiel ist am 26. Mai 2026 für PlayStation 5 da. Und Xbox Series X erscheint auch."
-    assert belege.woertliche_saetze(quer, ["am 26 mai 2026 für playstation 5 und xbox series x erscheint"]) == []
+    quer = "Das Spiel ist am 26. Mai 2027 für PlayStation 5 da. Und Xbox Series X erscheint auch."
+    assert belege.woertliche_saetze(quer, ["am 26 mai 2027 für playstation 5 und xbox series x erscheint"]) == []
     zwei = "Eine Fassung für den PC wurde. Bisher nicht angekündigt, sagt die Seite."
     assert len(belege.woertliche_saetze(zwei, ["eine fassung für den pc wurde bisher nicht angekündigt sagt die seite"])) == 2
 
@@ -81,7 +81,7 @@ def test_a_rewrite_that_still_copies_or_loses_the_date_is_not_taken():
 
 def test_a_cut_off_or_much_shorter_rewrite_is_not_taken():
     erklaerung = KOPIE + " Für den PC gibt es noch keine Fassung, und einen genauen Termin dafür hat Rockstar Games bisher nicht genannt (Quelle 1)."
-    for schlecht in ("GTA VI kommt am 26. Mai 2026 heraus, zuerst nur für PlayStation 5 und", "GTA VI kommt am 26. Mai 2026 (Quelle 1)."):
+    for schlecht in ("GTA VI kommt am 26. Mai 2027 heraus, zuerst nur für PlayStation 5 und", "GTA VI kommt am 26. Mai 2027 (Quelle 1)."):
         t, _ = app_web.belege_anwenden(erklaerung, FRAGE, "Quelle 1: " + SEITE, FREMD, heute=HEUTE, nochmal=lambda _e, s=schlecht: s)
         assert t != schlecht and KOPIE not in t
 

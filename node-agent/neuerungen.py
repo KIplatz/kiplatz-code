@@ -11,6 +11,11 @@ def dank(satz: str, wer: str, art: str = "Meldung") -> str:
 
 
 NEUERUNGEN: dict[str, list[str]] = {
+    "2026-10-25i": [
+        "Schickst du ein Foto oder eine Datei mit einem Auftrag, etwa „Schreibe mir Punkt 1“ zur Seite aus dem Schulbuch, „Übersetze das“ oder „Fasse den Brief zusammen“, erledigt KIplatz genau das aus deinem Anhang, statt im Internet zu suchen. Und es antwortet immer in der Sprache, in der du schreibst, egal welche Sprache auf dem Foto steht.",
+        "Fragst du nach dem neuen Buch einer Autorin, der neuen Staffel einer Serie, dem neuesten Album oder einer neuen Kollektion, sagt dir KIplatz jetzt beides: was zuletzt erschienen ist und was als Nächstes kommt, jeweils mit Datum, und ob die deutsche Ausgabe später erscheint.",
+        "KIplatz prüft jetzt jedes Datum in einer Antwort gegen den heutigen Tag. Was schon erschienen ist, steht nie mehr so da, als käme es erst, in jeder Sprache.",
+    ],
     "2026-10-25h": [
         "Der Preisvergleich funktioniert jetzt in jedem Land und jeder Sprache: Fragst du auf Italienisch, Französisch, Spanisch oder Japanisch nach dem günstigsten Preis, sucht KIplatz bei den Händlern dort und zeigt die Preise in der Währung des Landes, ob Euro, Dollar, Pfund, Franken oder Yen.",
         "Fragst du nach günstigeren Alternativen, etwa zu deinem Reifen auf dem Foto, zeigt die Tabelle andere Produkte in derselben Größe, jedes mit seinem Namen. Und als Händler zählt nur, wer wirklich verkauft, keine Nachrichtenseite und kein Preisverlauf. Neu, wir verbessern es laufend.",

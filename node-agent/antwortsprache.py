@@ -74,6 +74,10 @@ _ANFUEHRUNG_DE = re.compile(r"„([^„“”]*)[“”]")
 
 
 def frage_sprache(text: str) -> str:
+    import schriftstueck
+    eigen, mit_anhang = schriftstueck.eigene_worte(text or "")
+    if mit_anhang and eigen.strip():
+        text = eigen
     gewuenscht = absicht.erkennen(text or "")
     if gewuenscht.art == "sprache":
         return gewuenscht.sprache

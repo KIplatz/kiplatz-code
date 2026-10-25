@@ -1223,3 +1223,98 @@ def beispiel(satz: str) -> bool:
 
 __all__ = ["daten", "betraege", "unbelegte_streichen", "wochentage_berichtigen", "ohne_platzhalter", "pruefen_noetig", "rechnet", "zahlenfrage", "geruest_bereinigen", "brauchbar",
            "streng_pruefen", "Befund", "namen", "name_belegt", "unbelegte_zahlen", "KLEINE_ZAHL", "PRUEFER_SYSTEM", "pruefer_auftrag", "urteil_lesen"]
+
+
+ZUKUNFT_WORTE = (
+    "kommt", "kommen", "erscheint", "erscheinen", "wird", "werden", "startet", "starten", "folgt", "folgen", "soll", "sollen", "geplant",
+    "angekündigt", "bevorsteh", "demnächst", "künftig", "ab dem",
+    "will", "is coming", "are coming", "comes out", "come out", "coming", "releases", "is releasing", "launches", "is set to", "are set to",
+    "upcoming", "scheduled", "due out", "is expected", "are expected", "is due",
+    "uscirà", "usciranno", "arriverà", "arriveranno", "sarà", "saranno", "in uscita", "previsto", "prevista", "sortira", "sortiront",
+    "arrivera", "arriveront", "sera", "seront", "à paraître", "prévu", "prévue", "saldrá", "saldrán", "llegará", "llegarán", "será", "serán",
+    "próximamente", "sairá", "chegará", "estreia em",
+    "verschijnt", "komt uit", "zal", "zullen", "gepland", "ukaże się", "pojawi się", "będzie", "kommer", "udkommer", "släpps",
+    "発売予定", "予定", "公開予定",
+)
+_ZUKUNFT = re.compile(r"(?i)(?<![^\W\d_])(?:" + "|".join(re.escape(w) for w in sorted(ZUKUNFT_WORTE, key=len, reverse=True)) + r")(?![^\W\d_])"
+                      + r"|発売予定|公開予定|予定")
+_MONAT_JAHR: re.Pattern | None = None
+_JAPANISCH = re.compile(r"((?:19|20)\d\d)\s*年\s*(\d{1,2})\s*月(?:\s*(\d{1,2})\s*日)?")
+_JAHR_ALLEIN = re.compile(r"(?<![\d.,/-])((?:19|20)\d\d)(?![\d,/-]|\.\d)")
+
+
+def _monat_jahr() -> re.Pattern:
+    global _MONAT_JAHR
+    if _MONAT_JAHR is None:
+        namen = set(laender.MONATE) | set(MONATE) | set(MONATE_EN)
+        teile = "|".join(re.escape(n) for n in sorted(namen, key=len, reverse=True) if len(n) >= 3)
+        _MONAT_JAHR = re.compile(rf"(?i)(?<![^\W\d_])({teile})\.?\s*(?:de\s+|del\s+|of\s+|,\s*)?((?:19|20)\d\d)(?!\d)")
+    return _MONAT_JAHR
+
+
+def _monat_von(name: str) -> int:
+    n = name.lower()
+    return laender.MONATE.get(n) or MONATE.get(n) or MONATE_EN.get(n) or 0
+
+
+def zeitpunkte(satz: str, heute: date) -> list[date]:
+    import calendar
+    out: list[date] = []
+    belegt: list[tuple[int, int]] = []
+    for t, m, j in daten(satz):
+        try:
+            out.append(date(j or _jahr_fuer(t, m, heute), m, t))
+        except ValueError:
+            continue
+    for m in _JAPANISCH.finditer(satz):
+        j, mo = int(m.group(1)), int(m.group(2))
+        if 1 <= mo <= 12:
+            out.append(date(j, mo, int(m.group(3)) if m.group(3) else calendar.monthrange(j, mo)[1]))
+            belegt.append(m.span())
+    for m in _monat_jahr().finditer(satz):
+        mo, j = _monat_von(m.group(1)), int(m.group(2))
+        if mo:
+            out.append(date(j, mo, calendar.monthrange(j, mo)[1]))
+            belegt.append(m.span())
+    for m in _JAHR_ALLEIN.finditer(satz):
+        if not any(a <= m.start() < e for a, e in belegt) and not out:
+            out.append(date(int(m.group(1)), 12, 31))
+    return out
+
+
+_SEIT = re.compile(r"(?i)(?<![^\W\d_])(?:seit|since|depuis|desde|dal|dalla|sinds|od|siden|sedan|alkaen)(?![^\W\d_])|以来")
+
+
+def zukunft_vorbei(satz: str, heute: date) -> bool:
+    zp = zeitpunkte(satz, heute)
+    return bool(zp) and max(zp) < heute and bool(_ZUKUNFT.search(satz)) and not _SEIT.search(satz)
+
+
+ZEITFORM_DE = ("Heute ist der {heute}. Jeder nummerierte Satz nennt ein Datum, das schon vorbei ist, spricht aber so, als käme es noch. Schreib "
+               "jeden Satz so, wie es heute stimmt: was an diesem Datum erschienen, gestartet oder passiert ist, steht in der Vergangenheit. Daten, "
+               "Zahlen und Namen bleiben genau gleich, nichts dazu, nichts weg. Antworte nur mit einer Zeile je Satz: die Nummer, dann der neue Satz.")
+ZEITFORM_EN = ("Today is {heute}. Each numbered sentence names a date that has already passed but speaks as if it were still to come. Rewrite each "
+               "sentence so it is true today: what came out, started or happened on that date is in the past tense. Keep dates, numbers and names "
+               "exactly, add nothing, leave nothing out. Answer only with one line per sentence: the number, then the new sentence.")
+
+
+def zeitform_berichtigen(antwort: str, heute: date, umschreiben=None, *, englisch: bool = False) -> tuple[str, int, list[str]]:
+    falsch = [s for absatz in (antwort or "").split("\n") for s in _saetze(absatz) if zukunft_vorbei(s, heute)]
+    if not falsch:
+        return antwort, 0, []
+    neu: dict[str, str] = {}
+    if umschreiben is not None:
+        anweisung = (ZEITFORM_EN if englisch else ZEITFORM_DE).format(heute=heute.strftime("%d %B %Y" if englisch else "%d.%m.%Y"))
+        try:
+            vorschlaege = umschreiben(falsch, englisch, anweisung) or {}
+        except Exception:
+            vorschlaege = {}
+        for i, s in enumerate(falsch):
+            v = " ".join(str(vorschlaege.get(i) or "").split())
+            if v and sorted(zeitpunkte(v, heute)) == sorted(zeitpunkte(s, heute)) and not zukunft_vorbei(v, heute):
+                neu[s] = v
+    text = antwort
+    for alt, ersatz in neu.items():
+        text = text.replace(alt, ersatz, 1)
+    text, raus = saetze_streichen(text, lambda s: s in falsch and s not in neu)
+    return text, len(neu), raus

@@ -654,6 +654,7 @@
  "Projekt „{0}“ samt 1 Gespräch löschen? Das lässt sich nicht rückgängig machen.": "Delete project “{0}” along with 1 chat? This can't be undone.",
  "Projekt „{0}“ samt {1} Gesprächen löschen? Das lässt sich nicht rückgängig machen.": "Delete project “{0}” along with {1} chats? This can't be undone.",
  "Projekte": "Projects",
+ "prüft Daten gegen heute …": "checking dates against today …",
  "prüft die Antwort gegen die Quellen …": "checking the answer against the sources …",
  "prüft live im Netz nach …": "checking live online …",
  "prüft Zahlen, Daten und Namen gegen die Quellen …": "checking numbers, dates and names against the sources …",
