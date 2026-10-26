@@ -1564,6 +1564,8 @@ class KiServer:
                             text = bis_zum_letzten_satz(text)
                         u = data.get("usage") or {}
                         _messen(art or ("eigen" if system is not None else "antwort"), time.time() - t0, data.get("timings"), max=max_tokens)
+                        if system is None:
+                            _mitschneiden(body, text.strip(), False)
                         return Antwort(text.strip(), int(u.get("prompt_tokens", 0)), int(u.get("completion_tokens", 0)), round(time.time() - t0, 1), gekuerzt=gekuerzt)
                     parts: list[str] = []
                     usage: dict = {}
@@ -1615,6 +1617,8 @@ class KiServer:
                     if zu_lang and not abgebrochen:
                         text = bis_zum_letzten_satz(text)
                     _messen(art or ("eigen" if system is not None else "antwort"), time.time() - t0, timings, max=max_tokens, **({"abgebrochen": 1} if abgebrochen else {}))
+                    if system is None:
+                        _mitschneiden(body, text.strip(), abgebrochen)
                     return Antwort(text.strip(), int(usage.get("prompt_tokens", 0)), int(usage.get("completion_tokens", len(parts))), round(time.time() - t0, 1), abgebrochen, gekuerzt)
             except urllib.error.HTTPError as exc:
                 try:
@@ -1734,6 +1738,29 @@ class KiServer:
             return app_core._mask(data.decode("utf-8", "replace"))
         except OSError:
             return ""
+
+
+_MITSCHNITT = threading.local()
+MITSCHNITT_MAX = 8
+
+
+def mitschnitt_beginnen() -> None:
+    _MITSCHNITT.liste = []
+
+
+def mitschnitt_ende() -> list[dict]:
+    liste = getattr(_MITSCHNITT, "liste", None) or []
+    _MITSCHNITT.liste = None
+    return liste
+
+
+def _mitschneiden(body: dict, text: str, abgebrochen: bool) -> None:
+    liste = getattr(_MITSCHNITT, "liste", None)
+    if liste is None or len(liste) >= MITSCHNITT_MAX:
+        return
+    liste.append({"nachrichten": [{"role": str(m.get("role", "")), "content": m.get("content", "")} for m in body.get("messages") or []],
+                  "max_tokens": body.get("max_tokens"), "temperature": body.get("temperature"), "modell": text,
+                  **({"abgebrochen": True} if abgebrochen else {})})
 
 
 _MESSUNG = threading.local()

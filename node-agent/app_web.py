@@ -133,6 +133,8 @@ TRAINING_TAKT_S = 10.0
 KURZTEST_SKRIPT = "kurztest.py"
 KURZTEST_ART = ("--ohne-systemtext", "--batch", "8")
 KURZTEST_HOECHSTENS_S = 9 * 60
+PRUEFANFRAGEN_ORDNER = "pruefanfragen"
+PRUEFANFRAGEN_MAX_BYTES = 500 * 1024 * 1024
 PRUEFSTAND_VERSUCHE = 3
 PRUEFSTAND_HOCHLADEN_VERSUCHE = 3
 PRUEFSTAND_HOCHLADEN_WARTE_S = 60.0
@@ -334,6 +336,27 @@ def tagesbilanz_satz(heute: dict, tag=None) -> str:
     if (datetime.now().date() - tag).days == 1:
         return f"Dein Rechner hat gestern {liste} und {verdient}."
     return _SATZ_AM_TAG[tag.weekday()].format(tag.strftime("%d.%m."), liste, verdient)
+
+
+def pruefanfragen_ordner(training: dict | None) -> Path | None:
+    if not training:
+        return None
+    ziel = Path(training["ordner"]) / PRUEFANFRAGEN_ORDNER
+    try:
+        belegt = sum(d.stat().st_size for d in ziel.glob("*.ndjson")) if ziel.is_dir() else 0
+    except OSError:
+        return None
+    return ziel if belegt < PRUEFANFRAGEN_MAX_BYTES else None
+
+
+def pruefanfrage_ablegen(ziel: Path, zeile: dict) -> bool:
+    try:
+        ziel.mkdir(parents=True, exist_ok=True)
+        with open(ziel / f"{datetime.now():%Y-%m-%d}.ndjson", "a", encoding="utf-8", newline="\n") as f:
+            f.write(json.dumps(zeile, ensure_ascii=False) + "\n")
+        return True
+    except (OSError, TypeError, ValueError):
+        return False
 
 
 class _Zwischenstand:
@@ -1792,6 +1815,8 @@ class Api:
         antworten: list[dict] = []
         ruht = ""
         geschont = 0
+        ablage = pruefanfragen_ordner(getattr(self, "_training_einstellung", lambda: None)())
+        abgelegt = 0
         for f in fragen:
             if self._core.run_state() is not node_local_state.RunState.ACTIVE:
                 ruht = "Pause oder Programmende"
@@ -1825,6 +1850,8 @@ class Api:
                 _MESSWEG.d = {}
                 ablauf: list[tuple[float, str]] = []
                 ki_aus = False
+                if ablage is not None:
+                    ki_laufzeit.mitschnitt_beginnen()
                 try:
                     with ki_laufzeit.abbruch_bei(vorrang) if isinstance(vorrang, threading.Event) else contextlib.nullcontext():
                         text, schein = self._antwort_fuer_mitglied([{"role": "user", "content": str(f.get("frage", ""))}], [], "Prüfstand",
@@ -1838,6 +1865,7 @@ class Api:
                     gestrichen_liste, _GESTRICHEN.liste = list(getattr(_GESTRICHEN, "liste", None) or []), None
                     schatten_liste, _SCHATTEN.liste = list(getattr(_SCHATTEN, "liste", None) or []), None
                     weg, _MESSWEG.d = getattr(_MESSWEG, "d", None), None
+                    anfragen = ki_laufzeit.mitschnitt_ende()
                 if ki_aus:
                     _log(self._core, f"INFO pruefstand: die KI war bei Prüffrage {len(antworten) + 1} aus{self._ki_ende_grund()}; sie wird neu gestartet")
                     if versuch == PRUEFSTAND_VERSUCHE - 1:
@@ -1870,12 +1898,19 @@ class Api:
                                                pruefstand.notiz_aus(schein.get("quellen", ""))),
                        "weg": mess_weg(schein, weg)}
             zs.anhaengen(kennung, str(f.get("frage", "")), eintrag)
+            if ablage is not None and anfragen:
+                abgelegt += pruefanfrage_ablegen(ablage, {
+                    "zeit": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "bau": app_core.APP_BUILD,
+                    "fassung": getattr(self._ki, "fassung", "") or "", "runde": rid, "kennung": kennung, "frage": str(f.get("frage", "")),
+                    **({"art": str(f["art"])} if f.get("art") else {}), "anfragen": anfragen, "antwort": text})
             antworten.append(eintrag)
             self._pruefrunde_zaehlen(len(antworten))
         if ruht:
             self._runde_ruht_grund = ruht
             _log(self._core, f"INFO pruefstand: Runde ruht nach {len(antworten)} von {len(fragen)} Prüffragen ({ruht}); beim nächsten Mal geht es dort weiter")
             return None
+        if abgelegt:
+            _log(self._core, f"OK pruefstand: {abgelegt} Anfragen im Trainingsordner abgelegt ({PRUEFANFRAGEN_ORDNER})")
         if geschont:
             _log(self._core, f"INFO pruefstand: {geschont} Prüffragen nicht bewertet, die Suchbremse der Runde ließ ihre Suche aus")
         if not antworten:
