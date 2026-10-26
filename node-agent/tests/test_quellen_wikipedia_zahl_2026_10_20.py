@@ -28,11 +28,11 @@ def test_the_count_is_there_as_soon_as_the_copy_is_open_even_if_the_device_may_n
     assert w.zustand()["artikel"] == len(ART) > 0
     e = qs._wikipedia(w)
     assert e["ok"] and e["zahl"] == len(ART)
-    assert e["text"] == f"Wikipedia: {len(ART)} Artikel, Stand 04.10.2026."
+    assert e["text"] == f"Wikipedia: {len(ART)} Artikel, Stand 04.10.2026; nur Quelle der Wortliste, keine Antwortquelle."
 
 
 def test_only_the_number_gets_thousand_points(tmp_path, monkeypatch):
     w = _kopie(tmp_path)
     w._oeffnen()
     monkeypatch.setattr(w, "zustand", lambda: {"ausgabe": "20261004", "artikel": 2_912_345, "phase": "fertig"})
-    assert qs._wikipedia(w)["text"] == "Wikipedia: 2.912.345 Artikel, Stand 04.10.2026."
+    assert qs._wikipedia(w)["text"] == "Wikipedia: 2.912.345 Artikel, Stand 04.10.2026; nur Quelle der Wortliste, keine Antwortquelle."

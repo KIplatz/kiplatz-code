@@ -56,7 +56,7 @@ def _wikipedia(wiki) -> dict:
         if phase == "fehler":
             return _eintrag(False, f"Wikipedia: gerade geht es nicht ({z.get('meldung') or ''}).", stand=ausgabe, zahl=artikel)
         zahl = f"{artikel:,}".replace(",", ".")
-        return _eintrag(True, f"Wikipedia: {zahl} Artikel, Stand {_datum(ausgabe)}.", stand=ausgabe, zahl=artikel)
+        return _eintrag(True, f"Wikipedia: {zahl} Artikel, Stand {_datum(ausgabe)}; nur Quelle der Wortliste, keine Antwortquelle.", stand=ausgabe, zahl=artikel)
     except Exception as exc:
         return _eintrag(False, f"Wikipedia: Zustand nicht lesbar ({type(exc).__name__}).")
 
@@ -125,7 +125,10 @@ def _kalender(heute: date | None = None) -> dict:
         at, de, ch, tage = kalender_at.feiertage(jahr), kalender_dach.feiertage_de(jahr), kalender_dach.feiertage_ch(jahr), kalender_tage.tage(jahr)
         n = len(at) + len(de) + len(ch) + len(tage)
         ok = len(at) >= FEIERTAGE_MINDESTENS and len(de) >= FEIERTAGE_MINDESTENS and len(ch) >= 1 and len(tage) >= 5
-        return _eintrag(ok, f"Kalender: {len(at)} Feiertage AT, {len(de)} DE, {len(ch)} CH und {len(tage)} Termine für {jahr} gerechnet.", stand=str(jahr), zahl=n)
+        de_alle = sum(1 for f in de if not f[2])
+        ch_alle = sum(1 for f in ch if f[2] == "in allen Kantonen")
+        return _eintrag(ok, f"Kalender: {len(at)} Feiertage AT, {de_alle} DE bundesweit und {len(de) - de_alle} in einzelnen Ländern, {ch_alle} CH in allen "
+                            f"Kantonen und {len(ch) - ch_alle} in einzelnen, dazu {len(tage)} Termine für {jahr} gerechnet.", stand=str(jahr), zahl=n)
     except Exception as exc:
         return _eintrag(False, f"Kalender: rechnet nicht ({type(exc).__name__}).")
 

@@ -3529,7 +3529,11 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
 
     const z = l && l.zufall;
     const zText = z && z.fragen && z.fragen.length ? `<details style="margin-top:6px"><summary style="cursor:pointer">Dazu ${z.fragen.length} Zufallsfragen aus Deutschland, Österreich und der Schweiz: ${z.belegt || 0} belegt, ${z.offen || 0} offen, ${z.fraglich || 0} fraglich${z.richtig || z.falsch ? `, ${z.richtig || 0} richtig, ${z.falsch || 0} falsch` : ""}</summary>${z.fragen.map((x) => `<div class="small" style="margin:4px 0"><b>${esc(x.frage)}</b> · ${esc(x.urteil)}${x.grund ? " (" + esc(x.grund) + ")" : ""}${x.erwartet ? " · richtig wäre: " + esc(x.erwartet) : ""}<br><span class="muted">${esc(x.antwort.length > 240 ? x.antwort.slice(0, 240) + "…" : x.antwort)}</span></div>`).join("")}<div class="muted small">„Belegt“ heißt: die Antwort stützt sich auf gefundene Seiten, und die Prüfung fand keinen Satz ohne Beleg. Nachgeprüft hat das niemand.</div></details>` : "";
-    $("#pruefstand-stand").innerHTML = (l ? `Zuletzt ${esc(wann(l.zeit))}: <b>${l.richtig} von ${l.gesamt}</b> Prüffragen richtig, ${l.wege_ok} von ${l.wege_gesamt} Wege in Ordnung, ${Math.round(l.dauer_s)} s (${esc(l.geraet_name || l.geraet || "")}).` : "Noch keine Prüfung gelaufen.") + (p.hinweis ? ` <b>${esc(p.hinweis)}</b>` : ` ${p.naechte || 0} von 7 Tagen für die Website.`) + zText
+
+
+    const lr = p.letzte_runde;
+    const rundeText = lr ? `Letzte Prüfrunde ${esc(wann(lr.zeit))}: <b>${lr.richtig} von ${lr.gesamt}</b> Prüffragen richtig, gemessen mit Bau ${esc(lr.bau || "")}.<br>` : "";
+    $("#pruefstand-stand").innerHTML = rundeText + (l ? `Tagesprüfung ${esc(wann(l.zeit))}: <b>${l.richtig} von ${l.gesamt}</b> Prüffragen richtig, ${l.wege_ok} von ${l.wege_gesamt} Wege in Ordnung, ${Math.round(l.dauer_s)} s (${esc(l.geraet_name || l.geraet || "")}).` : "Noch keine Prüfung gelaufen.") + (p.hinweis ? ` <b>${esc(p.hinweis)}</b>` : ` ${p.naechte || 0} von 7 Tagen für die Website.`) + zText
       + ((p.mitglieder || []).length ? `<br>PCs von Mitgliedern, die sich selbst prüfen: ${p.mitglieder.length}, davon ${p.mitglieder.filter((m) => m.hinten).length} hinten gereiht.` : "")
       + (p.training ? `<br>Lernstoff für später: ${p.training.vertiefungen} geprüfte Vertiefungen, ${p.training.daumen_hoch} Antworten mit Daumen hoch, ${p.training.berichtigungen} Berichtigungen.` : "");
 
@@ -3538,7 +3542,7 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
     const mit = (p.fragen || []).map((f) => [f, l && (l.fragen || []).find((x) => x.kennung === f.kennung)]);
     const falsch = mit.filter(([, e]) => e && !e.richtig), richtig = mit.filter(([, e]) => e && e.richtig), offen = mit.filter(([, e]) => !e);
     $("#pruefstand-liste").innerHTML = !mit.length ? '<span class="muted small">Keine Prüffragen.</span>'
-      : (falsch.length ? `<div class="pf-titel">Falsch beantwortet (${falsch.length})</div><div class="pf-gitter">${falsch.map(([f, e]) => zeile(f, e)).join("")}</div>` : `<p class="small" style="margin:14px 0 0">${l ? "Bei der letzten Prüfung wurde keine Prüffrage falsch beantwortet." : "Noch keine Prüfung gelaufen."}</p>`)
+      : (falsch.length ? `<div class="pf-titel">Falsch beantwortet (${falsch.length})</div><div class="pf-gitter">${falsch.map(([f, e]) => zeile(f, e)).join("")}</div>` : `<p class="small" style="margin:14px 0 0">${l ? "Bei der letzten Tagesprüfung wurde keine Tagesfrage falsch beantwortet." : "Noch keine Prüfung gelaufen."}</p>`)
       + (offen.length ? `<div class="pf-titel">Noch nicht gestellt (${offen.length})</div><div class="pf-gitter">${offen.map(([f]) => zeile(f, null)).join("")}</div>` : "")
       + (richtig.length ? `<details class="pf-richtig"><summary>Richtig beantwortet (${richtig.length}) anzeigen</summary><div class="pf-gitter">${richtig.map(([f, e]) => zeile(f, e)).join("")}</div></details>` : "");
     document.querySelectorAll("[data-pf-weg]").forEach((b) => b.addEventListener("click", () => { if (confirm("Diese Prüffrage entfernen?")) api().pruefstand_setzen({ entfernen: b.dataset.pfWeg }).then((r) => nach(r, zeichnePruefstand)); }));

@@ -1,5 +1,5 @@
 {
- "pruefwert": "798dfebb543b8de369b5ab76",
+ "pruefwert": "1ffd117d0a59613821f2e85d",
  "mindest_bau": "2026-10-26k",
- "grund": "26l: MINDEST_BAU bleibt 26k (Uhrzeit belegt keine Anzahl; betrifft nur Zahlen gleich der Minute der Antwort, Antworten seit 26k erst Minuten alt)"
+ "grund": "26n: Prüfrunde zählt vom Server geschonte Suchen nicht, Karte mit letzter Runde; Antworten unverändert, MINDEST_BAU bleibt"
 }

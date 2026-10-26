@@ -1017,6 +1017,15 @@ def frei_mib(g: Geraet) -> int:
     return max(0, min(g.frei_mib, g.gesamt_mib - belegt_mib(g.kennung) - fremd_mib(g) - KARTE_RESERVE_MIB))
 
 
+def moegliches_modell(geraete: Iterable[Geraet]) -> Modell | None:
+    karten = [g for g in geraete if g.eigenstaendig and g.gesamt_mib > 0]
+    if not karten:
+        return None
+    g = max(karten, key=lambda x: x.gesamt_mib)
+    platz = g.gesamt_mib - belegt_mib(g.kennung) - KARTE_RESERVE_MIB
+    return next((MODELLE[k] for k in MODELL_REIHENFOLGE if MODELLE[k].braucht_mib <= platz), None)
+
+
 def waehlen(geraete: Iterable[Geraet], memory_gib: float) -> Wahl:
     karten = sorted(geraete, key=lambda g: (g.eigenstaendig, g.frei_mib), reverse=True)
     for g in karten:

@@ -537,6 +537,35 @@ class KiSteuerung:
     def _melden(self, was: str, done: int, gesamt: int) -> None:
         self.fortschritt = {"was": was, "done": done, "gesamt": gesamt}
 
+    START_WARTEN_S = 90
+    START_TAKT_S = 5
+
+    def _wahl_mit_geduld(self, wahl, memory_gib: float):
+        if getattr(self, "_geduld_genutzt", False):
+            return wahl
+        self._geduld_genutzt = True
+        schlafen = getattr(self, "_schlafen", time.sleep)
+        uhr = getattr(self, "_uhr", time.monotonic)
+        anfang = uhr()
+        geraete = None
+        while True:
+            geraete = geraete if geraete is not None else self._geraete_ermitteln(self.ordner.server_exe)
+            moeglich = ki_laufzeit.moegliches_modell(geraete)
+            if moeglich is None or moeglich.braucht_mib <= wahl.modell.braucht_mib and wahl.geraet is not None:
+                return wahl
+            if uhr() - anfang >= self.START_WARTEN_S:
+                _log(self._core, f"INFO ki_wahl: nach {self.START_WARTEN_S} s ist die Grafikkarte weiter belegt, es bleibt bei {wahl.modell.kennung} ({wahl.grund})")
+                return wahl
+            self._melden("Die Grafikkarte wird gerade frei, einen Moment …", 0, 0)
+            schlafen(self.START_TAKT_S)
+            geraete = self._geraete_ermitteln(self.ordner.server_exe)
+            neu = ki_laufzeit.waehlen(geraete, memory_gib)
+            if neu.modell.braucht_mib > wahl.modell.braucht_mib or (neu.geraet is not None and wahl.geraet is None):
+                _log(self._core, f"OK ki_wahl: nach {uhr() - anfang:.0f} s war die Grafikkarte frei, {neu.modell.kennung} statt {wahl.modell.kennung}")
+                wahl = neu
+                if neu.modell.kennung == moeglich.kennung:
+                    return wahl
+
     def _einschalten_ablauf(self) -> None:
         try:
             self.ordner.anlegen()
@@ -559,6 +588,7 @@ class KiSteuerung:
                                         ki_laufzeit.PROZESSOR_KARTE_VERSAGT)
             else:
                 wahl = ki_laufzeit.waehlen(geraete, first.memory_gib if first else 0.0)
+                wahl = self._wahl_mit_geduld(wahl, first.memory_gib if first else 0.0)
             self.wahl = wahl
             plan: list[tuple[str, object, Path]] = []
             if not self.ordner.modell_da(wahl.modell):
@@ -593,7 +623,7 @@ class KiSteuerung:
             self._nachlauf = True
             self.phase, self.meldung = "bereit",f"{ki_anzeigename(wahl.modell.name)} läuft auf {wahl.geraet_name_de()} ({wahl.grund})"
             _log(self._core, f"OK ki_einschalten {wahl.modell.kennung} {wahl.geraet.kennung if wahl.geraet else 'cpu'}"
-                             + (f" Probemodell {probe[0].name}" if probe else ""))
+                             + (f" Probemodell {probe[0].name}" if probe else "") + f" ({wahl.grund})")
             if self.danach is not None:
                 self.danach()
         except app_core.AppError as exc:
@@ -1594,7 +1624,12 @@ class Api:
             if gemerkt is not None:
                 return gemerkt
             self._mess_suche_budget(vorrang)
-            return self._community.websuche(frage, 8, **{**kw, "pruef": True})
+            try:
+                return self._community.websuche(frage, 8, **{**kw, "pruef": True})
+            except app_core.AppError as exc:
+                if exc.code in ("COMMUNITY_SUCHE_GESCHONT", "COMMUNITY_SUCHE_GEBREMST"):
+                    self._mess_geschont = True
+                raise
         return self._community.websuche(frage, 8, **kw)
 
     def _mess_suche_budget(self, vorrang) -> None:
@@ -1864,11 +1899,15 @@ class Api:
                 self._mess_schlafen(PRUEFSTAND_HOCHLADEN_WARTE_S)
         zs.gemeldet()
         r = b.get("runde") if isinstance(b.get("runde"), dict) else None
-        _log(self._core, f"OK pruefstand {b.get('richtig')} von {b.get('gesamt')} richtig, Wege {b.get('wege_ok')} von {b.get('wege_gesamt')}"
+        _log(self._core, f"OK pruefstand {b.get('richtig')} von {b.get('gesamt')} richtig, Wege {sum(1 for v in wege.values() if v)} von {len(wege)}"
                          + (f"; Runde {r.get('nummer')} von {runde.get('von')}, Messreihe {r.get('richtig')} von {r.get('gesamt')}" if r else ""))
         try:
             self._ki.einstellung_setzen(pruefstand_nacht={"tag": str(b.get("tag", ""))[:10], "richtig": int(b.get("richtig", 0) or 0),
                                                           "gesamt": int(b.get("gesamt", 0) or 0), "hinten": bool(b.get("hinten"))})
+            if r:
+                self._ki.einstellung_setzen(pruefrunde_letzte={"zeit": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                                                               "richtig": int(r.get("richtig", 0) or 0), "gesamt": int(r.get("gesamt", 0) or 0),
+                                                               "bau": app_core.APP_BUILD, "geschont": geschont})
         except (TypeError, ValueError):
             pass
         return b
@@ -1886,7 +1925,8 @@ class Api:
             d = {"an": self.pruefstand_an(), "zuletzt": str(e.get("pruefstand_zuletzt", "")), "laeuft": laeuft,
                  "runden_heute": self._pruefrunden_heute(), "runden_tag": pruefstand.DURCHGANG_RUNDEN,
                  "wartet": laeuft and bool(getattr(self, "_knopf_wartet", False)), "meldung": "" if laeuft else str(getattr(self, "_knopf_meldung", "")),
-                 **({"fortschritt": dict(p)} if isinstance(p, dict) else {})}
+                 **({"fortschritt": dict(p)} if isinstance(p, dict) else {}),
+                 **({"letzte_runde": dict(e["pruefrunde_letzte"])} if isinstance(e.get("pruefrunde_letzte"), dict) else {})}
             try:
                 d.update(self._community.pruefstand_stand())
             except app_core.AppError as exc:
