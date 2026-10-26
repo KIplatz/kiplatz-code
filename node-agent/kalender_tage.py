@@ -165,4 +165,41 @@ def zeitumstellung_welt(frage: str, heute: date | None = None) -> tuple[str, str
     return f"Zeitumstellung in {name} (vom Programm berechnet)", "\n".join([kopf] + [f"– {n}: {_tag(d)}" for d, n in eintraege]), True
 
 
-__all__ = ["erster_advent", "tage", "jahre", "betrifft", "text", "zeitumstellung_welt"]
+MONATE = ["Jänner", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"]
+
+
+def feiertag_saetze(wo: str, tage_je_jahr: dict[int, list[tuple[date, str, str]]], frage: str, h: date, jahre: list[int]) -> list[str]:
+    import belege
+    zeilen = []
+
+    def je_tag(j: int) -> dict[date, tuple[list[str], str]]:
+        out: dict[date, tuple[list[str], str]] = {}
+        for d, n, w in sorted(tage_je_jahr.get(j) or [], key=lambda x: (x[0], bool(x[2]))):
+            namen, wo_nur = out.get(d, ([], w))
+            out[d] = (namen + [n] if n not in namen else namen, "" if not w or not wo_nur else wo_nur)
+        return out
+    for j in sorted(tage_je_jahr):
+        tage = je_tag(j)
+        teil = sum(1 for _namen, w in tage.values() if w)
+        zeilen.append(f"Im Jahr {j} gibt es in {wo} {len(tage) - teil} gesetzliche Feiertage" + (f" im ganzen Land, dazu {teil}, die nur in einem Teil "
+                                                                                                f"gelten" if teil else "") + ".")
+    for tag, monat, jahr in sorted(belege.daten(frage)):
+        for j in ([jahr] if jahr else (jahre or [belege._jahr_fuer(tag, monat, h)])):
+            try:
+                d = date(j, monat, tag)
+            except ValueError:
+                continue
+            if j not in tage_je_jahr:
+                continue
+            tag_text = f"{d.day}. {MONATE[d.month - 1]} {d.year} ({kalender_at.WOCHENTAGE[d.weekday()]})"
+            treffer = je_tag(j).get(d)
+            if treffer is None:
+                zeilen.append(f"Der {tag_text} ist in {wo} kein gesetzlicher Feiertag.")
+            elif treffer[1]:
+                zeilen.append(f"Der {tag_text} ist in {wo} nur teilweise ein gesetzlicher Feiertag: {' und '.join(treffer[0])} ({treffer[1]}).")
+            else:
+                zeilen.append(f"Der {tag_text} ist in {wo} ein gesetzlicher Feiertag: {' und '.join(treffer[0])}.")
+    return zeilen
+
+
+__all__ = ["erster_advent", "tage", "jahre", "betrifft", "text", "zeitumstellung_welt", "feiertag_saetze"]

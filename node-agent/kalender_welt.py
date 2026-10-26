@@ -112,6 +112,7 @@ def text(code: str, je_jahr: dict[int, list[dict]], frage: str, heute: date | No
 
     def ist_er(t: dict) -> bool:
         return any(gleich(f, " ".join(str(t.get(k) or "").lower().split())) for f in feiertage for k in ("name", "lokal"))
+    ganzes_jahr = je_jahr
     if any(ist_er(t) for ts in je_jahr.values() for t in ts):
         je_jahr = {j: [t for t in ts if ist_er(t)] for j, ts in je_jahr.items()}
     zeilen = [f"Gesetzliche Feiertage in {name} ({code}), vom Server bei Nager.Date abgefragt (heute ist {kalender_at._tag(h)})"
@@ -131,6 +132,19 @@ def text(code: str, je_jahr: dict[int, list[dict]], frage: str, heute: date | No
             zeilen.append(f"– {DEUTSCH.get(englisch, englisch)}" + (f" ({', '.join(dict.fromkeys(andere))})" if DEUTSCH.get(englisch) else
                                                                     (f" ({lokal})" if lokal and lokal != englisch else ""))
                           + f": {WOCHENTAGE[d.weekday()]}, {d.day}.{d.month}.{d.year}" + (f", nur in {', '.join(gebiete[:12])}" if gebiete else ""))
+    tage: dict[int, list[tuple[date, str, str]]] = {}
+    for j, ts in ganzes_jahr.items():
+        for t in ts:
+            try:
+                d = date.fromisoformat(str(t.get("datum", "")))
+            except ValueError:
+                continue
+            gebiete = [str(g) for g in t.get("gebiete") or []]
+            englisch = str(t.get("name") or "")
+            wo_nur = ("nur in " + ", ".join(gebiete[:12])) if gebiete else ("nur regional" if t.get("landesweit") is False else
+                                                                          ("nur ein Bankfeiertag" if t.get("nur_bank") else ""))
+            tage.setdefault(j, []).append((d, DEUTSCH.get(englisch, englisch), wo_nur))
+    zeilen += kalender_tage.feiertag_saetze(name, tage, frage, h, kalender_tage.jahre(frage, h))
     return "\n".join(zeilen)
 
 

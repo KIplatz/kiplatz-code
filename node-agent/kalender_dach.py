@@ -10,7 +10,6 @@ import kalender_welt
 import region as region_mod
 
 WOCHENTAGE = kalender_at.WOCHENTAGE
-MONATE = ["Jänner", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"]
 BETRIFFT = re.compile(kalender_at.BETRIFFT.pattern + r"|tag der deutschen einheit|reformationstag|bu(?:ß|ss)[-\s]+und[-\s]+bettag|bundesfeiertag|auffahrt|"
                       r"berchtoldstag|frauentag|weltkindertag|pfingstmontag|karfreitag|ostermontag|\bschulferien\b|\bferien\b", re.I)
 _FERIEN = re.compile(r"ferien", re.I)
@@ -149,38 +148,21 @@ def _feiertage(frage: str, h: date, jahre: list[int]) -> tuple[str, str, bool] |
     return f"Feiertage in {r.text()} (vom Programm berechnet)", _text_ch(r, h, jahre), False
 
 
-def _gelten(r: region_mod.Region, jahr: int) -> list[tuple[date, str, tuple[str, ...]]]:
+def _gelten(r: region_mod.Region, jahr: int) -> list[tuple[date, str, str]]:
     if r.land == "at":
-        return [(d, n, ()) for d, n in kalender_at.feiertage(jahr)]
+        return [(d, n, "") for d, n in kalender_at.feiertage(jahr)]
     alle = feiertage_de(jahr)
     if r.gebiet:
-        return [(d, n, ()) for d, n, x_l, (_z, z_l) in alle if not x_l or r.gebiet in x_l or r.gebiet in z_l]
-    return [(d, n, x_l) for d, n, x_l, _z in alle]
+        return [(d, n, z if r.gebiet in z_l else "") for d, n, x_l, (z, z_l) in alle if not x_l or r.gebiet in x_l or r.gebiet in z_l]
+    return [(d, n, ("nur in " + ", ".join(DE_LAENDER[k] for k in x_l) + (f"; {z}" if z else "")) if x_l else "") for d, n, x_l, (z, _z_l) in alle]
 
 
 def _zusatz(frage: str, r: region_mod.Region, h: date, jahre: list[int]) -> str:
     import belege
     wo = "Österreich" if r.land == "at" else (f"{r.name} (Deutschland)" if r.gebiet else "Deutschland")
-    zeilen = []
-    for j in (jahre or [h.year]):
-        zeilen.append(f"Im Jahr {j} gibt es in {wo} {len(_gelten(r, j))} gesetzliche Feiertage" + ("" if r.land == "at" or r.gebiet else
-                      f", davon {sum(1 for _d, _n, x_l in _gelten(r, j) if not x_l)} bundesweit") + ".")
-    for tag, monat, jahr in sorted(belege.daten(frage)):
-        j = jahr or belege._jahr_fuer(tag, monat, h)
-        try:
-            d = date(j, monat, tag)
-        except ValueError:
-            continue
-        treffer = [(n, x_l) for dd, n, x_l in _gelten(r, j) if dd == d]
-        tag_text = f"{d.day}. {MONATE[d.month - 1]} {d.year} ({WOCHENTAGE[d.weekday()]})"
-        if not treffer:
-            zeilen.append(f"Der {tag_text} ist in {wo} kein gesetzlicher Feiertag.")
-        elif not treffer[0][1]:
-            zeilen.append(f"Der {tag_text} ist in {wo} ein gesetzlicher Feiertag: {treffer[0][0]}.")
-        else:
-            zeilen.append(f"Der {tag_text} ist in Deutschland nur in {', '.join(DE_LAENDER[k] for k in treffer[0][1])} ein gesetzlicher Feiertag: "
-                          f"{treffer[0][0]}; in den übrigen Ländern ist er kein gesetzlicher Feiertag.")
-    return "\n" + "\n".join(zeilen)
+    ohne = {belege._jahr_fuer(t, m, h) for t, m, j in belege.daten(frage) if j is None} | {j for _t, _m, j in belege.daten(frage) if j}
+    welche = jahre or sorted({h.year} | ohne)
+    return "\n" + "\n".join(kalender_tage.feiertag_saetze(wo, {j: _gelten(r, j) for j in welche}, frage, h, jahre))
 
 
 __all__ = ["feiertage_de", "feiertage_ch", "quelle", "betrifft"]

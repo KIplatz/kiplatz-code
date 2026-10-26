@@ -1,5 +1,5 @@
 {
  "pruefwert": "3829afb3401f49e289f28d1a",
- "mindest_bau": "2026-10-26g",
- "grund": "26g: MINDEST_BAU auf 26g (Feiertage im Kalender ausdrücklich, eine Wochentag-Regel statt zwei)"
+ "mindest_bau": "2026-10-26h",
+ "grund": "26h: MINDEST_BAU auf 26h (Feiertage weltweit mit dem gefragten Tag, teilweise geltende als teilweise)"
 }

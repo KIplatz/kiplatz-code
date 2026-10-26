@@ -14,6 +14,9 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-10-26h": [
+        "Fragst du, ob ein bestimmter Tag ein Feiertag ist, rechnet KIplatz das jetzt für Österreich, für Deutschland samt Bundesland und für viele andere Länder aus. Gilt ein Feiertag nur in einem Teil des Landes, sagt es dir das dazu.",
+    ],
     "2026-10-26g": [],
     "2026-10-26f": [],
     "2026-10-26e": [],
@@ -1247,6 +1250,7 @@ ZURUECKGEHALTEN: dict[str, list[str]] = {
 
 KURZ_JE_TAG: dict[str, list[str]] = {
     "2026-10-26": [
+        "Ob ein Tag ein Feiertag ist, sagt KIplatz jetzt für viele Länder, auch wenn er nur regional gilt",
         "Viele Fragen auf Englisch beantwortet KIplatz jetzt ohne Umweg über eine Übersetzung",
         "Fragen auf unserer Website kommen jetzt als erste dran, und du siehst, woran der PC gerade arbeitet",
     ],
