@@ -26,11 +26,19 @@ def _ohne_docstrings(baum: ast.AST) -> ast.AST:
     return baum
 
 
+def _form(k) -> str:
+    if isinstance(k, ast.AST):
+        return type(k).__name__ + "(" + ",".join(f"{n}={_form(v)}" for n, v in ast.iter_fields(k) if v is not None and v != []) + ")"
+    if isinstance(k, list):
+        return "[" + ",".join(_form(v) for v in k) + "]"
+    return repr(k)
+
+
 def pruefwert() -> str:
     h = hashlib.sha256()
     for name in ANTWORTWEG:
         baum = _ohne_docstrings(ast.parse((HIER / name).read_text(encoding="utf-8")))
-        h.update(name.encode("utf-8") + b"\0" + ast.dump(baum, include_attributes=False).encode("utf-8") + b"\0")
+        h.update(name.encode("utf-8") + b"\0" + _form(baum).encode("utf-8") + b"\0")
     return h.hexdigest()[:24]
 
 

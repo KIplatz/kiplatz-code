@@ -14,6 +14,9 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-10-26j": [
+        "Fragst du auf Englisch nach dem Wetter („weather in London tomorrow“), bekommst du jetzt die Vorhersage, und Orte wie Vienna, Bavaria oder Upper Austria erkennt KIplatz auch auf Englisch.",
+    ],
     "2026-10-26i": [
         "Während KIplatz an deiner Antwort arbeitet, siehst du jetzt nur noch drei kurze Schritte: schaut nach, schreibt die Antwort, prüft die Antwort. Auf der englischen Website stehen sie jetzt auch auf Englisch da.",
     ],

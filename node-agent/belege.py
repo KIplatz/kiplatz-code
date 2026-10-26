@@ -978,6 +978,7 @@ _NEIN_SATZ = re.compile(r"(?i)\b(?:nicht|not|nie|niemals|never|verboten\w*|unter
                         r"\b(?:required|necessary|erforderlich|nötig|notwendig|\w*pflicht)\s*[:?]?\s*(?:no|nein)\b")
 _KEIN_NEIN = re.compile(r"(?i)\b(?:nicht nur|not only|nicht zuletzt)\b")
 _TEILSATZ = re.compile(r"(?i)\s*;\s*|,?\s+(?:aber|sondern|jedoch|während|but|however|whereas|while|although|obwohl)\s+|\s+[–—]\s+")
+_UND_TEIL = re.compile(r"(?i),\s+(?:und|and)\s+")
 _OB = re.compile(r"(?i)\b(?:ob|whether)\b")
 _JA_NEIN = re.compile(r"(?i)^\s*(ja|nein|yes|no)\s*[,.!:]\s*")
 _REGEL_TOKEN = re.compile(r"[A-Za-zÄÖÜäöüß][\wÄÖÜäöüß'’-]*")
@@ -1005,10 +1006,18 @@ def _kern_gleich(a: str, b: str) -> bool:
     return a.startswith(b) or b.startswith(a)
 
 
+def _nein_an(t: str, pos: int) -> int:
+    grenzen = [0] + [m.end() for m in _UND_TEIL.finditer(t)] + [len(t) + 1]
+    teile = [t[von:bis] for von, bis in zip(grenzen, grenzen[1:])]
+    i = max(j for j, von in enumerate(grenzen[:-1]) if von <= pos)
+    eigen = [bool(_REGEL_ZEICHEN.search(s) or _NEIN_SATZ.search(s)) for s in teile]
+    traeger = next((j for j in range(i, -1, -1) if eigen[j]), next((j for j in range(i, len(teile)) if eigen[j]), i))
+    return len(_NEIN_SATZ.findall(teile[traeger]))
+
+
 def _regel_gegenstaende(teil: str, rest_kerne: set[str] | None) -> list[tuple[str, int]]:
     t = _KEIN_NEIN.sub(" ", teil)
     toks = [(m.group(0).strip("'’-"), m.start(), m.end()) for m in _REGEL_TOKEN.finditer(t)]
-    satz_nein = len(_NEIN_SATZ.findall(t))
     out: list[tuple[str, int]] = []
     belegt_bis: list[tuple[int, int]] = []
     for name, muster in _GEGENSTAND_RE:
@@ -1018,7 +1027,7 @@ def _regel_gegenstaende(teil: str, rest_kerne: set[str] | None) -> list[tuple[st
             dahinter = next((w for w, a, _e in toks if a >= m.end()), "")
             nein = sum(1 for w in davor if _NEIN_DAVOR.match(w)) + (1 if _NEIN_DAHINTER.match(dahinter) else 0)
             nein += 1 if _NEIN_IM_WORT.search(m.group(0)) else 0
-            ohne_ihn = len(_NEIN_SATZ.findall(t[:m.start()] + " " * (m.end() - m.start()) + t[m.end():]))
+            ohne_ihn = _nein_an(t[:m.start()] + " " * (m.end() - m.start()) + t[m.end():], m.start())
             out.append((name, (nein + ohne_ihn) % 2))
     if out:
         return out
@@ -1031,7 +1040,7 @@ def _regel_gegenstaende(teil: str, rest_kerne: set[str] | None) -> list[tuple[st
         if rest_kerne is None or any(_kern_gleich(k, r) for r in rest_kerne):
             davor = [x for x, _a, ende in toks if ende <= a][-3:]
             nein = sum(1 for x in davor if _NEIN_DAVOR.match(x))
-            out.append((k, (nein + satz_nein) % 2))
+            out.append((k, (nein + _nein_an(t, a)) % 2))
     return out
 
 

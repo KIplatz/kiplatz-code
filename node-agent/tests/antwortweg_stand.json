@@ -1,5 +1,5 @@
 {
- "pruefwert": "ce59a7ed4bbb91b44fe3bce8",
- "mindest_bau": "2026-10-26i",
- "grund": "26i: MINDEST_BAU auf 26i (Regelprüfung mit Stütze je Teilsatz, gesetzlich als Regelwort; Schrittzeile in drei Schritten)"
+ "pruefwert": "18ed7f00fd47c912017f6d2f",
+ "mindest_bau": "2026-10-26j",
+ "grund": "26j: MINDEST_BAU auf 26j (Verneinung je Teil nach „, und“; Wetter, Schlagzeilen und Orte auch englisch; Prüfwert unabhängig von der Python-Fassung)"
 }

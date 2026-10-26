@@ -48,14 +48,20 @@ _UA = wissen._UA
 LAENDER = {"at": "Österreich", "de": "Deutschland", "ch": "Schweiz", "gb": "Großbritannien", "us": "USA"}
 NAMENSNENNUNG = {"wetter": "Open-Meteo (CC BY 4.0)", "schlagzeilen": "", "suche": ""}
 
-_WETTER_STARK = re.compile(r"\b(wetter|wettervorhersage|wetterbericht|regnet|schneit)\b", re.I)
-_WETTER_MESS = re.compile(r"\b(wie warm|wie kalt|wie hei[ßs]|temperatur\w*|grad)\b", re.I)
-_WETTER_ZEIT = re.compile(r"\b(heute|morgen|[üu]bermorgen|drau[ßs]en|am wochenende|diese woche|n[äa]chste woche|in der nacht|nachts|tags[üu]ber|hat es|haben wir|jetzt|gerade)\b", re.I)
+_WETTER_STARK = re.compile(r"\b(wetter|wettervorhersage|wetterbericht|regnet|schneit|weather|raining|snowing)\b", re.I)
+_WETTER_MESS = re.compile(r"\b(wie warm|wie kalt|wie hei[ßs]|temperatur\w*|grad|how warm|how cold|how hot|temperatures?|degrees)\b", re.I)
+_WETTER_ZEIT = re.compile(r"\b(heute|morgen|[üu]bermorgen|drau[ßs]en|am wochenende|diese woche|n[äa]chste woche|in der nacht|nachts|tags[üu]ber|hat es|haben wir|jetzt|gerade|"
+                          r"today|tomorrow|day after tomorrow|outside|this weekend|this week|next week|tonight|right now)\b", re.I)
 _WETTER_SCHWACH = re.compile(r"\b(regen|schnee|sonnig|sonne|gewitter|wind|wolk\w*|bew[öo]lkt|nebel|hitze|frost)\b", re.I)
-_FRAGEFORM = re.compile(r"\b(wird es|ist es|gibt es|kommt|bleibt es|scheint)\b", re.I)
-_KEIN_WETTER = re.compile(r"\b(warum|wieso|weshalb|wie entsteh\w*|wie weit|entfernt|entfernung|sekunden|was ist|was sind|was bedeutet|fahrenheit|in celsius|in grad celsius)\b", re.I)
-_SCHREIBEN = re.compile(r"\b(schreib\w*|gedicht|geschichte|erkl[äa]r\w*|was ist ein|was bedeutet|übersetz\w*|uebersetz\w*)\b", re.I)
-_SCHLAGZEILEN = re.compile(r"\b(schlagzeil|nachrichten|news\b|neuigkeit|was ist (heute |gerade )?(passiert|los)|was gibt es neues|aktuelle meldung)", re.I)
+_WETTER_MIT_ZEIT = re.compile(r"\b(regnen|schneien|rain|snow|sunny|sun|thunderstorms?|storms?|windy|cloud\w*|fog|foggy|heat|frosty|forecast)\b", re.I)
+_FRAGEFORM = re.compile(r"\b(wird es|ist es|gibt es|kommt|bleibt es|scheint|will it|is it|is there|going to|does it|will there be)\b", re.I)
+_KEIN_WETTER = re.compile(r"\b(warum|wieso|weshalb|wie entsteh\w*|wie weit|entfernt|entfernung|sekunden|was ist|was sind|was bedeutet|fahrenheit|in celsius|in grad celsius|"
+                          r"why|how (?:do|does) \w+ form|how far|distance|seconds|what is an?|what does|to celsius|in celsius|boil\w*|oven)\b", re.I)
+_SCHREIBEN = re.compile(r"\b(schreib\w*|gedicht|geschichte|erkl[äa]r\w*|was ist ein|was bedeutet|übersetz\w*|uebersetz\w*|write|poem|story|explain\w*|translat\w*)\b", re.I)
+_SCHLAGZEILEN = re.compile(r"\b(schlagzeil|nachrichten|news\b|neuigkeit|was ist (heute |gerade )?(passiert|los)|was gibt es neues|aktuelle meldung|"
+                           r"headlines?|what happened today|what(?:'s| is) new today)", re.I)
+_WETTER_WORT = re.compile(r"\b(wetter|wettervorhersage|wetterbericht|weather|forecast)\b", re.I)
+_WETTER_TAG = re.compile(r"\b(heute|morgen|[üu]bermorgen|am wochenende|diese woche|n[äa]chste woche|in der nacht|today|tomorrow|this weekend|this week|next week|tonight)\b", re.I)
 _RECHNEN = re.compile(r"\b(zu je|je stück|pro stück|stückpreis|zusammen|insgesamt|gesamt|summe|mal\b|prozent|rabatt|umrechn\w*|in meilen|in kilometer|in euro|wie viele tage)\b|\d\s*x\s*\d|[×*]\s*\d|\d\s*[×*]|%", re.I)
 _SUCHE = re.compile(r"\b(wie ?viel|wie hoch|wie teuer|was kostet|kosten|preis|f[öo]rderung|zuschuss|frist|termin|[öo]ffnungszeit|gesetz|steuer|aktuell|derzeit|neu(?:e|en|es)?\b|20(?:2[4-9]|3\d)|wer ist|wann ist|wo ist|wo gibt|"
                     r"how much|how many|how high|how expensive|costs?\b|price|subsid\w+|grant|deadline|appointment|opening hours|law\b|tax\w*|"
@@ -63,9 +69,11 @@ _SUCHE = re.compile(r"\b(wie ?viel|wie hoch|wie teuer|was kostet|kosten|preis|f[
 _ANGEBOT = re.compile(r"\b(aktion(?:en)?|angebot(?:e|en)?|sonderangebot\w*|flugbl[äa]tt\w*|prospekt\w*|rabattaktion\w*|abverkauf|schn[äa]ppchen|"
                       r"g[üu]nstig\w*|billig\w*|lagernd|verf[üu]gbar\w*|wo (?:bekomm|krieg|kauf|find)\w*|gibt es (?:\w+ )?(?:irgend)?wo|"
                       r"durchsuch\w*|recherchier\w*|such(?:e|st)? (?:im|online|nach)|schau (?:im|online|nach)|im (?:internet|netz)|online)\b", re.I)
-_ORT = re.compile(r"\b(?:in|für|fuer|bei|um)\s+([A-ZÄÖÜ][\wäöüß.-]+(?:\s+(?:am|an der|im|bei)\s+[A-ZÄÖÜ][\wäöüß.-]+|\s+[A-ZÄÖÜ][\wäöüß.-]+)?)")
-_ORT_NICHT = {"Österreich", "Deutschland", "Schweiz", "Europa", "Zukunft", "Ordnung", "Moment"}
-_ORT_OHNE = re.compile(r"\b[Ww]etter(?:vorhersage|bericht)?\s+(?:(?:heute|morgen|übermorgen)\s+)?([A-ZÄÖÜ][\wäöüß.-]+)")
+_ORT = re.compile(r"\b(?:in|für|fuer|bei|um|for|near)\s+([A-ZÄÖÜ][\wäöüß.-]+(?:\s+(?:am|an der|im|bei|upon|on)\s+[A-ZÄÖÜ][\wäöüß.-]+|\s+[A-ZÄÖÜ][\wäöüß.-]+)?)")
+_ORT_NICHT = {"Österreich", "Deutschland", "Schweiz", "Europa", "Zukunft", "Ordnung", "Moment",
+              "Austria", "Germany", "Switzerland", "Europe"}
+_ORT_OHNE = re.compile(r"\b(?:[Ww]etter(?:vorhersage|bericht)?|[Ww]eather(?: forecast)?)\s+(?:(?:heute|morgen|übermorgen|today|tomorrow)\s+)?"
+                       r"([A-ZÄÖÜ][\wäöüß.-]+(?:\s+(?!Heute\b|Morgen\b|Today\b|Tomorrow\b)[A-ZÄÖÜ][\wäöüß.-]+)?)")
 
 
 _UNTERWEGS = re.compile(r"\b(zug|z[üu]ge|bahn|[öo]bb|db|westbahn|railjet|ice|bus(?:se)?|flug|fl[üu]ge|flieger|f[äa]hre|schiff|"
@@ -229,10 +237,11 @@ def erkennen(frage: str) -> Auftrag | None:
         return None
     mess_wetter =bool(_WETTER_MESS.search(f)) and bool(_FRAGEFORM.search(f) or _WETTER_ZEIT.search(f) or _ORT_OHNE.search(f)
                                                          or any(m.group(1).strip(" .,;:!?") not in _ORT_NICHT for m in _ORT.finditer(f)))
-    if (_WETTER_STARK.search(f) or mess_wetter or (_WETTER_SCHWACH.search(f) and _FRAGEFORM.search(f))) and not _SCHLAGZEILEN.search(f) \
-            and not (_KEIN_WETTER.search(f) and not re.search(r"\b(wetter|wettervorhersage|wetterbericht)\b", f, re.I)
-                     and not re.search(r"\b(heute|morgen|[üu]bermorgen|am wochenende|diese woche|n[äa]chste woche|in der nacht)\b", f, re.I)):
-        tag = 2 if "übermorgen" in unten or "uebermorgen" in unten else (1 if re.search(r"\bmorgen\b", unten) else 0)
+    ort_genannt = any(m.group(1).strip(" .,;:!?") not in _ORT_NICHT for m in _ORT.finditer(f))
+    mit_zeit = bool(_WETTER_MIT_ZEIT.search(f)) and bool(_WETTER_ZEIT.search(f) or ort_genannt)
+    if (_WETTER_STARK.search(f) or mess_wetter or mit_zeit or (_WETTER_SCHWACH.search(f) and _FRAGEFORM.search(f))) and not _SCHLAGZEILEN.search(f) \
+            and not (_KEIN_WETTER.search(f) and not _WETTER_WORT.search(f) and not _WETTER_TAG.search(f)):
+        tag = 2 if re.search(r"[üu]bermorgen|day after tomorrow", unten) else (1 if re.search(r"\b(?:morgen|tomorrow)\b", unten) else 0)
         ort = ""
         for m in _ORT.finditer(f):
             kandidat = m.group(1).strip(" .,;:!?")
@@ -241,14 +250,14 @@ def erkennen(frage: str) -> Auftrag | None:
                 break
         if not ort:
             m = _ORT_OHNE.search(f)
-            if m and m.group(1) not in _ORT_NICHT and m.group(1).lower() not in ("heute", "morgen", "übermorgen", "in", "für", "aktuell"):
+            if m and m.group(1) not in _ORT_NICHT and m.group(1).lower() not in ("heute", "morgen", "übermorgen", "in", "für", "aktuell", "today", "tomorrow", "for"):
                 ort = m.group(1)
         return Auftrag("wetter", f, ort=ort, tag=tag)
     if _SCHLAGZEILEN.search(f):
         genannt = belege.gefragtes_land(f)
         if genannt and genannt not in LAENDER:
             return Auftrag("suche", f) if len(wissen.woerter(f)) >= 2 else None
-        land = genannt or ("de" if re.search(r"deutschland|tagesschau", unten) else ("ch" if re.search(r"schweiz|\bsrf\b", unten) else "at"))
+        land = genannt or ("de" if re.search(r"deutschland|germany|tagesschau", unten) else ("ch" if re.search(r"schweiz|switzerland|\bsrf\b", unten) else "at"))
         return Auftrag("schlagzeilen", f, land=land)
     if (_SUCHE.search(f) or _ANGEBOT.search(f)) and len(wissen.woerter(f)) >= 2:
         return Auftrag("suche", f)

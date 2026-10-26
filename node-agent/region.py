@@ -28,33 +28,33 @@ class Region:
 
 GEBIETE: tuple[tuple[str, str, str, str], ...] = (
     ("de", "BW", "Baden-Württemberg", r"baden[\s-]?württemberg|baden[\s-]?wuerttemberg"),
-    ("de", "BY", "Bayern", r"bayern|bayerisch\w*|freistaat bayern"),
+    ("de", "BY", "Bayern", r"bayern|bayerisch\w*|freistaat bayern|bavaria\w*"),
     ("de", "BE", "Berlin", r"berlin\w*"),
     ("de", "BB", "Brandenburg", r"brandenburg"),
     ("de", "HB", "Bremen", r"bremen|bremerhaven"),
     ("de", "HH", "Hamburg", r"hamburg\w*"),
-    ("de", "HE", "Hessen", r"hessen|hessisch\w*"),
+    ("de", "HE", "Hessen", r"hessen|hessisch\w*|(?:in|to|near|from|around) hesse\b"),
     ("de", "MV", "Mecklenburg-Vorpommern", r"mecklenburg[\s-]?vorpommern|mecklenburg|vorpommern"),
-    ("de", "NI", "Niedersachsen", r"niedersachsen|niedersächsisch\w*"),
-    ("de", "NW", "Nordrhein-Westfalen", r"nordrhein[\s-]?westfalen|\bnrw\b"),
-    ("de", "RP", "Rheinland-Pfalz", r"rheinland[\s-]?pfalz"),
+    ("de", "NI", "Niedersachsen", r"niedersachsen|niedersächsisch\w*|lower saxony"),
+    ("de", "NW", "Nordrhein-Westfalen", r"nordrhein[\s-]?westfalen|\bnrw\b|north rhine[\s-]?westphalia"),
+    ("de", "RP", "Rheinland-Pfalz", r"rheinland[\s-]?pfalz|rhineland[\s-]?palatinate"),
     ("de", "SL", "Saarland", r"saarland"),
-    ("de", "SN", "Sachsen", r"(?<![-\w])sachsen(?![-\w])|sächsisch\w*"),
-    ("de", "ST", "Sachsen-Anhalt", r"sachsen[\s-]anhalt"),
+    ("de", "SN", "Sachsen", r"(?<![-\w])sachsen(?![-\w])|sächsisch\w*|(?<!lower )saxony(?![\s-]anhalt)"),
+    ("de", "ST", "Sachsen-Anhalt", r"sachsen[\s-]anhalt|saxony[\s-]anhalt"),
     ("de", "SH", "Schleswig-Holstein", r"schleswig[\s-]?holstein"),
-    ("de", "TH", "Thüringen", r"thüringen|thueringen|thüringisch\w*"),
-    ("at", "W", "Wien", r"wien(?![\wäöü])"),
-    ("at", "NÖ", "Niederösterreich", r"niederösterreich|niederoesterreich"),
-    ("at", "OÖ", "Oberösterreich", r"oberösterreich|oberoesterreich"),
+    ("de", "TH", "Thüringen", r"thüringen|thueringen|thüringisch\w*|thuringia"),
+    ("at", "W", "Wien", r"wien(?![\wäöü])|vienna(?![\w])"),
+    ("at", "NÖ", "Niederösterreich", r"niederösterreich|niederoesterreich|lower austria"),
+    ("at", "OÖ", "Oberösterreich", r"oberösterreich|oberoesterreich|upper austria"),
     ("at", "S", "Salzburg", r"salzburg\w*"),
-    ("at", "ST", "Steiermark", r"steiermark|steirisch\w*"),
-    ("at", "K", "Kärnten", r"kärnten|kaernten"),
-    ("at", "T", "Tirol", r"(?<!süd)(?<!sued)tirol"),
+    ("at", "ST", "Steiermark", r"steiermark|steirisch\w*|styria\w*"),
+    ("at", "K", "Kärnten", r"kärnten|kaernten|carinthia\w*"),
+    ("at", "T", "Tirol", r"(?<!süd)(?<!sued)(?<!south )tirol|(?<!south )tyrol\w*"),
     ("at", "V", "Vorarlberg", r"vorarlberg"),
     ("at", "B", "Burgenland", r"burgenland"),
-    ("ch", "ZH", "Kanton Zürich", r"zürich|zuerich"),
+    ("ch", "ZH", "Kanton Zürich", r"zürich|zuerich|zurich"),
     ("ch", "BE", "Kanton Bern", r"(?<![-\w])bern(?![-\w])"),
-    ("ch", "LU", "Kanton Luzern", r"luzern"),
+    ("ch", "LU", "Kanton Luzern", r"luzern|lucerne"),
     ("ch", "UR", "Kanton Uri", r"kanton uri"),
     ("ch", "SZ", "Kanton Schwyz", r"schwyz"),
     ("ch", "OW", "Kanton Obwalden", r"obwalden"),
@@ -69,25 +69,25 @@ GEBIETE: tuple[tuple[str, str, str, str], ...] = (
     ("ch", "AR", "Kanton Appenzell Ausserrhoden", r"appenzell ausserrhoden"),
     ("ch", "AI", "Kanton Appenzell Innerrhoden", r"appenzell innerrhoden|(?<![-\w])appenzell(?![-\w])(?! ausserrhoden)"),
     ("ch", "SG", "Kanton St. Gallen", r"st\.?\s?gallen|sankt gallen"),
-    ("ch", "GR", "Kanton Graubünden", r"graubünden|graubuenden|chur\b|davos|st\.?\s?moritz"),
+    ("ch", "GR", "Kanton Graubünden", r"graubünden|graubuenden|grisons|chur\b|davos|st\.?\s?moritz"),
     ("ch", "AG", "Kanton Aargau", r"aargau|aarau"),
     ("ch", "TG", "Kanton Thurgau", r"thurgau|frauenfeld"),
     ("ch", "TI", "Kanton Tessin", r"tessin|ticino|lugano|bellinzona|locarno"),
     ("ch", "VD", "Kanton Waadt", r"waadt|vaud|lausanne|montreux"),
     ("ch", "VS", "Kanton Wallis", r"wallis|valais|sion|zermatt|visp|brig\b"),
     ("ch", "NE", "Kanton Neuenburg", r"neuenburg|neuchâtel|neuchatel"),
-    ("ch", "GE", "Kanton Genf", r"genf|genève|geneve"),
+    ("ch", "GE", "Kanton Genf", r"genf|genève|geneve|(?:in|to|near|from|around) geneva\b"),
     ("ch", "JU", "Kanton Jura", r"kanton jura|delémont|delemont"),
 )
 
 STAEDTE: tuple[tuple[str, str, str], ...] = (
-    ("de", "BY", r"münchen|muenchen|nürnberg|nuernberg|augsburg|regensburg|würzburg|wuerzburg|ingolstadt|passau|rosenheim|erlangen|fürth|bamberg|bayreuth|landshut|kempten"),
+    ("de", "BY", r"münchen|muenchen|munich|nürnberg|nuernberg|nuremberg|augsburg|regensburg|würzburg|wuerzburg|ingolstadt|passau|rosenheim|erlangen|fürth|bamberg|bayreuth|landshut|kempten"),
     ("de", "BW", r"stuttgart|karlsruhe|mannheim|freiburg(?! im üechtland)|heidelberg|(?<![-\w])ulm(?![-\w])|konstanz|heilbronn|pforzheim|reutlingen|tübingen"),
     ("de", "BB", r"potsdam|cottbus|frankfurt \(oder\)|frankfurt an der oder"),
     ("de", "HE", r"frankfurt(?! \(oder\))(?! an der oder)|wiesbaden|kassel|darmstadt|offenbach|marburg"),
     ("de", "MV", r"rostock|schwerin|greifswald|stralsund"),
-    ("de", "NI", r"hannover|braunschweig|osnabrück|oldenburg|göttingen|wolfsburg|hildesheim|salzgitter|lüneburg"),
-    ("de", "NW", r"köln|koeln|düsseldorf|duesseldorf|dortmund|duisburg|bochum|wuppertal|bielefeld|(?<![-\w])bonn(?![-\w])|münster|aachen|gelsenkirchen|"
+    ("de", "NI", r"hannover|(?:in|to|near|from|around) hanover\b|braunschweig|osnabrück|oldenburg|göttingen|wolfsburg|hildesheim|salzgitter|lüneburg"),
+    ("de", "NW", r"köln|koeln|(?:in|to|near|from|around) cologne\b|düsseldorf|duesseldorf|dortmund|duisburg|bochum|wuppertal|bielefeld|(?<![-\w])bonn(?![-\w])|münster|aachen|gelsenkirchen|"
                  r"mönchengladbach|krefeld|oberhausen|hagen\b|hamm\b|leverkusen|paderborn|(?:in|aus) essen\b"),
     ("de", "RP", r"mainz|koblenz|trier|kaiserslautern|ludwigshafen|worms"),
     ("de", "SL", r"saarbrücken|saarbruecken"),
@@ -107,13 +107,13 @@ STAEDTE: tuple[tuple[str, str, str], ...] = (
 )
 
 MARKEN: tuple[tuple[str, str], ...] = (
-    ("de", r"deutschland|deutsche[nrs]?\b(?! sprache)|bundesrepublik|deutsche bahn|\bdb\b|\bice\b|bahncard|deutschlandticket|49[-\s]?euro[-\s]?ticket|\brewe\b|\bedeka\b|kaufland|"
+    ("de", r"deutschland|germany|deutsche[nrs]?\b(?! sprache)|bundesrepublik|deutsche bahn|\bdb\b|\bice\b|bahncard|deutschlandticket|49[-\s]?euro[-\s]?ticket|\brewe\b|\bedeka\b|kaufland|"
            r"\bdfb\b|\bdfl\b|2\. bundesliga|bundestag|bundeskanzler(?:in)? von deutschland|elterngeld|bürgergeld"),
-    ("at", r"österreich\w*|oesterreich\w*|\böbb\b|\boebb\b|klimaticket|\bbilla\b|\bhofer\b|lagerhaus|\bams\b|finanzonline|nationalrat"),
-    ("ch", r"schweiz\w*|\bsbb\b|halbtax|generalabonnement|\bmigros\b|eidgenoss\w*|bundesrat der schweiz|\bchf\b"),
+    ("at", r"österreich\w*|oesterreich\w*|austria\w*|\böbb\b|\boebb\b|klimaticket|\bbilla\b|\bhofer\b|lagerhaus|\bams\b|finanzonline|nationalrat"),
+    ("ch", r"schweiz\w*|switzerland|(?<![-\w])swiss(?![-\w])|\bsbb\b|halbtax|generalabonnement|\bmigros\b|eidgenoss\w*|bundesrat der schweiz|\bchf\b"),
 )
 
-_GEBIETE_RE = [(land, kurz, name, re.compile(rf"(?<![\wäöü]){muster}", re.I)) for land, kurz, name, muster in GEBIETE]
+_GEBIETE_RE = [(land, kurz, name, re.compile(rf"(?<![\wäöü])(?:{muster})", re.I)) for land, kurz, name, muster in GEBIETE]
 _STAEDTE_RE = [(land, kurz, re.compile(rf"(?<![\wäöü])(?:{muster})", re.I)) for land, kurz, muster in STAEDTE]
 _MARKEN_RE = [(land, re.compile(rf"(?<![\wäöü])(?:{muster})", re.I)) for land, muster in MARKEN]
 _NAME = {(land, kurz): name for land, kurz, name, _ in GEBIETE}
