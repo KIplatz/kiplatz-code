@@ -100,9 +100,19 @@ def jahre(frage: str, heute: date | None = None) -> list[int]:
     return kalender_tage.jahre(frage, h) or [h.year, h.year + 1]
 
 
-def text(code: str, je_jahr: dict[int, list[dict]], frage: str, heute: date | None = None) -> str:
+def text(code: str, je_jahr: dict[int, list[dict]], frage: str, heute: date | None = None, *, englisch: bool = False) -> str:
+    if englisch:
+        import kalender_en
+        return kalender_en.text(_text(code, je_jahr, frage, heute, englisch=True))
+    return _text(code, je_jahr, frage, heute, englisch=False)
+
+
+def _text(code: str, je_jahr: dict[int, list[dict]], frage: str, heute: date | None, *, englisch: bool) -> str:
     h = heute or _heute_frager()
-    name = laender.DEUTSCH.get(code, code)
+    name = (laender.ENGLISCH if englisch else laender.DEUTSCH).get(code, code)
+
+    def nenne(en: str) -> str:
+        return en if englisch else DEUTSCH.get(en, en)
     gefragt = bool(kalender_tage.jahre(frage, h))
     feiertage = gefragte_feiertage(frage)
 
@@ -126,11 +136,11 @@ def text(code: str, je_jahr: dict[int, list[dict]], frage: str, heute: date | No
             if not gefragt and d < h:
                 continue
             lokal = str(t.get("lokal") or "")
-            englisch = str(t.get("name") or "")
+            englisch_name = str(t.get("name") or "")
             gebiete = [str(g) for g in t.get("gebiete") or []]
-            andere = [n for n in (englisch, lokal) if n and n != DEUTSCH.get(englisch)]
-            zeilen.append(f"– {DEUTSCH.get(englisch, englisch)}" + (f" ({', '.join(dict.fromkeys(andere))})" if DEUTSCH.get(englisch) else
-                                                                    (f" ({lokal})" if lokal and lokal != englisch else ""))
+            andere = [n for n in (englisch_name, lokal) if n and n != nenne(englisch_name)]
+            zeilen.append(f"– {nenne(englisch_name)}" + (f" ({', '.join(dict.fromkeys(andere))})" if andere and nenne(englisch_name) != englisch_name else
+                                                          (f" ({lokal})" if lokal and lokal != englisch_name else ""))
                           + f": {WOCHENTAGE[d.weekday()]}, {d.day}.{d.month}.{d.year}" + (f", nur in {', '.join(gebiete[:12])}" if gebiete else ""))
     tage: dict[int, list[tuple[date, str, str]]] = {}
     for j, ts in ganzes_jahr.items():
@@ -140,10 +150,10 @@ def text(code: str, je_jahr: dict[int, list[dict]], frage: str, heute: date | No
             except ValueError:
                 continue
             gebiete = [str(g) for g in t.get("gebiete") or []]
-            englisch = str(t.get("name") or "")
+            englisch_name = str(t.get("name") or "")
             wo_nur = ("nur in " + ", ".join(gebiete[:12])) if gebiete else ("nur regional" if t.get("landesweit") is False else
                                                                           ("nur ein Bankfeiertag" if t.get("nur_bank") else ""))
-            tage.setdefault(j, []).append((d, DEUTSCH.get(englisch, englisch), wo_nur))
+            tage.setdefault(j, []).append((d, nenne(englisch_name), wo_nur))
     zeilen += kalender_tage.feiertag_saetze(name, tage, frage, h, kalender_tage.jahre(frage, h))
     return "\n".join(zeilen)
 

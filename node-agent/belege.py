@@ -90,9 +90,34 @@ def betraege(text: str) -> list[set[float]]:
     return [_werte(m.group(1) or m.group(2)) for m in _BETRAG.finditer(text or "")]
 
 
+_VOR_DATUM = re.compile(r"(?i)\b(?:am|vom|bis|seit|ab|zum|den|dem|bis zum|on|from|until|since|by|mo|di|mi|do|fr|sa|so|montag|dienstag|mittwoch|"
+                        r"donnerstag|freitag|samstag|sonntag)\.?,?\s*$|[–-]\s*$")
+
+
+_UHRZEIT = re.compile(r"(?<![\d.:])([01]?\d|2[0-3]):([0-5]\d)(?![\d:])")
+
+
+def _ohne_daten(text: str, *, jahr: bool = False) -> str:
+    def weg(m: re.Match) -> str:
+        zahlen = [int(g) for g in m.groups() if g and g.isdigit()]
+        if m.re is _DATUM_ISO:
+            tag, monat = zahlen[2], zahlen[1]
+        elif m.re is _DATUM_ZAHL:
+            tag, monat = zahlen[0], zahlen[1]
+            if len(zahlen) == 2 and not _VOR_DATUM.search(m.string[max(0, m.start() - 14):m.start()]):
+                return m.group(0)
+        else:
+            tag, monat = zahlen[0], 1
+        j = next((g for g in m.groups() if g and g.isdigit() and len(g) == 4), "") if jahr else ""
+        return f" {j} " if 1 <= tag <= 31 and 1 <= monat <= 12 else m.group(0)
+    for muster in (_DATUM_ISO, _DATUM_EN_MT, _DATUM_EN_TM, _DATUM_WORT, _DATUM_ZAHL):
+        text = muster.sub(weg, text)
+    return _UHRZEIT.sub(lambda m: f" {int(m.group(1))}.{m.group(2)} ", text)
+
+
 def zahlenwerte(text: str) -> set[float]:
     out: set[float] = set()
-    for m in _ZAHL.finditer(text or ""):
+    for m in _ZAHL.finditer(_ohne_daten(text or "", jahr=True)):
         out |= _werte(m.group(0))
     return out
 
@@ -117,7 +142,8 @@ def seit_belegt(satz: str, gelesen: str) -> bool:
     if not (gelesen or "").strip() or not _SEIT.search(satz or ""):
         return False
     werte = zahlenwerte(gelesen)
-    if not all(_werte(m.group(0)) & werte for m in _ZAHL.finditer(satz)):
+    s = _ohne_daten(satz)
+    if not all(_werte(m.group(0)) & werte for m in _ZAHL.finditer(s) if _zahl_pruefbar(m, s)):
         return False
     d = daten(gelesen)
     return all(_gedeckt_datum(x, d) for x in daten(satz))
@@ -422,7 +448,7 @@ def streng_pruefen(antwort: str, belege: str, *, zahlen_pruefen: bool = True, na
                 continue
             z = [f"{d[0]}.{d[1]}." + (str(d[2]) if d[2] else "") for d in daten(s) if not _gedeckt_datum(d, belegt_d)]
             if zahlen_pruefen:
-                ohne_daten = _DATUM_ISO.sub(" ", _DATUM_WORT.sub(" ", _DATUM_ZAHL.sub(" ", s)))
+                ohne_daten = _ohne_daten(s)
                 z += unbelegte_zahlen(ohne_daten, belegt_z, ableitung, belegt_e)
                 z += [j for j in jahre_anderswo(s, quellsaetze) if j not in z]
             pruefe_namen = namen_pruefen is None or namen_pruefen(s)
@@ -968,7 +994,8 @@ _GEGENSTAND_RE = [(name, re.compile(rf"(?i)(?<![\wÄÖÜäöüß'’-])(?:{muste
 _REGEL_ZEICHEN = re.compile(r"(?i)\b(?:brauch\w*|benötig\w*|muss|musst|müss\w*|darf|darfst|dürf\w*|kann|kannst|könn\w*|\w*pflicht\w*|vorgeschrieben\w*|"
                             r"erforderlich\w*|nötig\w*|notwendig\w*|verpflichtend\w*|erlaubt\w*|zulässig\w*|unzulässig\w*|verboten\w*|untersagt\w*|gesetzlich\w*|"
                             r"gestattet\w*|ohne|\w{3,}frei|befreit\w*|need\w*|requires?|required|must|mandatory|compulsory|obligatory|allowed|"
-                            r"permitted|prohibited|forbidden|banned|illegal|legal|legally|can|cannot|can't|(?-i:may)|exempt\w*|waiver\w*|without|"
+                            r"permitted|prohibited|forbidden|banned|illegal|legal|legally|statutory|public holidays?|bank holidays?|"
+                            r"can|cannot|can't|(?-i:may)|exempt\w*|waiver\w*|without|"
                             r"\w{3,}-free|have to|has to|eligible)\b")
 _NEIN_DAVOR = re.compile(r"(?i)^(?:kein\w*|no|ohne|without|befreit\w*|exempt\w*)$")
 _NEIN_DAHINTER = re.compile(r"(?i)^(?:frei|free|waiver\w*|befreit\w*|exempt\w*)$")
@@ -1243,7 +1270,7 @@ def alltag_ohne_widerspruch(satz: str, belege: str) -> bool:
     if any(not _gedeckt_datum(d, belegt_d) for d in daten(satz)) or namen(satz)[0]:
         return False
     belegt_z = zahlenwerte(belege)
-    ohne_daten = _DATUM_ISO.sub(" ", _DATUM_WORT.sub(" ", _DATUM_ZAHL.sub(" ", satz)))
+    ohne_daten = _ohne_daten(satz)
     in_quellen = None
     gefunden = False
     for m in _ZAHL.finditer(ohne_daten):

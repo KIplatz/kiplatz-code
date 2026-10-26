@@ -56,6 +56,7 @@ import hotkey
 import konto_basis
 
 import kalender_dach
+import kalender_en
 import kalender_welt
 import region
 import antwortspeicher_basis
@@ -967,6 +968,9 @@ class Api:
                 hinweis = f"{vorher_n - len(server) - len(lokal)} gemerkte Stellen übergangen, die nicht zu heute passen. " + hinweis
         kalender_teil: list[wissen.Treffer] = []
         kal = kalender_dach.quelle(frage)
+        kal_englisch = pruefung.englisch()
+        if kal is not None and kal_englisch:
+            kal = (kalender_en.zeile(kal[0]), kalender_en.text(kal[1]), kal[2])
         if kal is not None:
             kq = wissen.Quelle("kalender-" + (region.erkennen(frage) or region.Region("at")).land, "berechnet", kal[0], "", wissen._jetzt(), 0)
             if kal[2]:
@@ -987,7 +991,7 @@ class Api:
                         je_jahr[j] = tage
                 if je_jahr:
                     kq = wissen.Quelle("kalender-" + land.lower(), "abgefragt", f"Feiertage {land} (Nager.Date, vom Server abgefragt)", "", wissen._jetzt(), 0)
-                    abgefragt.append(wissen.Treffer(kq, kalender_welt.text(land, je_jahr, frage), 9.5))
+                    abgefragt.append(wissen.Treffer(kq, kalender_welt.text(land, je_jahr, frage, englisch=kal_englisch), 9.5))
             if abgefragt:
                 live = abgefragt + live
                 hinweis = "Feiertage vom Server bei Nager.Date abgefragt (nur Land und Jahr, ohne Gerät und Person). " + hinweis
@@ -1196,12 +1200,14 @@ class Api:
         eigen = getattr(_EIGEN, "an", True)
         original = ki_laufzeit.original()
         zone = ki_laufzeit.zone()
+        englisch = pruefung.englisch()
         erg: dict = {}
 
         def suchen() -> None:
             _SCHRITT.fn, _SUCHLAUF.stand, _EIGEN.an = fn, lauf, eigen
             ki_laufzeit.original_setzen(original)
             ki_laufzeit.zone_setzen(zone)
+            pruefung.sprache_setzen(englisch)
             ki_laufzeit.messung_teilen(mess)
             try:
                 erg["r"] = self._nachschauen(frage, treffer, frisch=True, nachrichten=nachrichten) if frisch else \
@@ -6493,19 +6499,11 @@ def saison_jetzt(heute=None) -> str:
     return f"{j}/{str(j + 1)[2:]}"
 
 
-DACH_LAENDER = ("at", "de", "ch", "li")
-
-
 def such_sprache(frage: str) -> str:
-    original = ki_laufzeit.original()
-    if original and any(land.lower() not in DACH_LAENDER for land in belege.laender_in(frage)):
+    if ki_laufzeit.original():
         return "en"
     r = region.erkennen(frage)
-    if r:
-        return r.sprache
-    if original and not (belege.laender_in(frage) | belege.laender_in(original)) & {"AT", "DE", "CH", "LI"} and region.erkennen(original) is None:
-        return "en"
-    return ""
+    return r.sprache if r else ""
 
 
 def englisch_direkt(frage: str) -> bool:

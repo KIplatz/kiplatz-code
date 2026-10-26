@@ -1,5 +1,5 @@
 {
- "pruefwert": "18ed7f00fd47c912017f6d2f",
- "mindest_bau": "2026-10-26j",
- "grund": "26j: MINDEST_BAU auf 26j (Verneinung je Teil nach „, und“; Wetter, Schlagzeilen und Orte auch englisch; Prüfwert unabhängig von der Python-Fassung)"
+ "pruefwert": "798dfebb543b8de369b5ab76",
+ "mindest_bau": "2026-10-26k",
+ "grund": "26l: MINDEST_BAU bleibt 26k (Uhrzeit belegt keine Anzahl; betrifft nur Zahlen gleich der Minute der Antwort, Antworten seit 26k erst Minuten alt)"
 }

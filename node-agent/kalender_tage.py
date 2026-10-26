@@ -5,6 +5,7 @@ import re
 from datetime import date, timedelta
 
 import kalender_at
+import kalender_en
 import laender
 
 WOCHENTAGE = kalender_at.WOCHENTAGE
@@ -94,6 +95,7 @@ _GLEICH = {"uhren": "zeitu", "umges": "zeitu", "umste": "zeitu", "somme": "zeitu
 
 def _gefragt(frage: str, name: str) -> bool:
     kern = re.split(r"[,(]", name, maxsplit=1)[0].lower()
+    kern += " " + re.split(r"[,(]", kalender_en.NAMEN.get(name, ""), maxsplit=1)[0].lower()
     stamm = {w[:5] for w in re.findall(r"[a-zäöüß]{5,}", kern)}
     worte = {w[:5] for w in re.findall(r"[a-zäöüß]{5,}", (frage or "").lower())}
     return bool(stamm & (worte | {_GLEICH[w] for w in worte if w in _GLEICH}))

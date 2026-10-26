@@ -11,8 +11,12 @@ import region as region_mod
 
 WOCHENTAGE = kalender_at.WOCHENTAGE
 BETRIFFT = re.compile(kalender_at.BETRIFFT.pattern + r"|tag der deutschen einheit|reformationstag|bu(?:ß|ss)[-\s]+und[-\s]+bettag|bundesfeiertag|auffahrt|"
-                      r"berchtoldstag|frauentag|weltkindertag|pfingstmontag|karfreitag|ostermontag|\bschulferien\b|\bferien\b", re.I)
-_FERIEN = re.compile(r"ferien", re.I)
+                      r"berchtoldstag|frauentag|weltkindertag|pfingstmontag|karfreitag|ostermontag|\bschulferien\b|\bferien\b|"
+                      r"public holidays?|bank holidays?|national holiday|all saints|epiphany|easter monday|whit (?:sunday|monday)|ascension day|"
+                      r"corpus christi|assumption day|immaculate conception|st\.? stephen'?s day|boxing day|reformation day|german unity day|"
+                      r"swiss national day|autumn holidays|school holidays|semester holidays|summer holidays|half[- ]term", re.I)
+_FERIEN = re.compile(r"ferien|school holidays|semester holidays|summer holidays|half[- ]term|autumn holidays", re.I)
+_HERBSTFERIEN = re.compile(r"herbstferien|autumn holidays", re.I)
 
 DE_LAENDER = {k: n for land, k, n, _ in region_mod.GEBIETE if land == "de"}
 
@@ -137,7 +141,7 @@ def _feiertage(frage: str, h: date, jahre: list[int]) -> tuple[str, str, bool] |
     r = region_mod.erkennen(frage)
     ferien = bool(_FERIEN.search(frage or ""))
     if r is None or r.land == "at":
-        if ferien and not re.search(r"herbstferien", frage or "", re.I):
+        if ferien and not _HERBSTFERIEN.search(frage or ""):
             return None
         return ("Feiertage und Herbstferien in Österreich (vom Programm berechnet)",
                 kalender_at.text(h, jahre) + _zusatz(frage, region_mod.Region("at"), h, jahre), True)

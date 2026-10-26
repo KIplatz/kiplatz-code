@@ -37,8 +37,8 @@ def test_englisch_gefragt_ohne_ort_im_deutschen_sprachraum_geht_direkt(frage):
     "How much is a train ticket from Munich to Berlin?",
     "What are the opening hours of shops in Wien on Sunday?",
 ])
-def test_eine_frage_zum_deutschen_sprachraum_bleibt_vorerst_ueber_deutsch(frage):
-    assert not app_web.englisch_direkt(frage)
+def test_eine_frage_zum_deutschen_sprachraum_geht_seit_3a3_auch_direkt(frage):
+    assert app_web.englisch_direkt(frage)
 
 
 @pytest.mark.parametrize("frage", ["Who was Mozart?", "What is the speed limit on motorways in Austria?", "Which pharmacies are open in Linz today?",
