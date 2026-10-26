@@ -6,7 +6,7 @@ import re
 import sys
 import time
 
-SCHWELLE_3D = 15.0
+SCHWELLE_3D = 40.0
 SCHWELLE_VIDEO = 3.0
 MESSEN_S = 1.0
 GILT_S = 20.0
