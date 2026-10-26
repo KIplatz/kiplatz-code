@@ -107,3 +107,20 @@ def test_der_feste_quelltitel_steht_unter_einer_englischen_antwort_englisch():
     assert app_web.quellen_titel_englisch({"quellen": "ohne Liste"}) == {"quellen": "ohne Liste"}
     quelle = Path(app_web.__file__).read_text(encoding="utf-8")
     assert quelle.count("quellen_titel_englisch(") == 3
+
+
+@pytest.mark.parametrize("frage", ["Translate 'I come from Austria' into German.", "How do you say 'good morning' in Austrian German?",
+                                   "What is the German word for Christmas market in Vienna?"])
+def test_fragen_nach_deutschen_woertern_gehen_direkt_auch_mit_ort_im_deutschen_sprachraum(frage):
+    assert app_web.englisch_direkt(frage)
+    assert "German words or a translation into German" in ki_laufzeit.SYSTEMTEXT_EN and "German words asked for stay German" in ki_laufzeit.SYSTEMTEXT_KURZ_EN
+
+
+def test_eine_deutsche_antwort_auf_eine_frage_nach_deutschen_woertern_bleibt_deutsch():
+    assert not app_web.noch_deutsch("Auf Deutsch heißt das: „Ich komme aus Österreich.“", "Translate 'I come from Austria' into German.")
+    assert app_web.noch_deutsch("Für welchen Ort möchtest du das Wetter wissen?", "What's the weather like?")
+
+
+def test_die_englische_suche_aus_zaehlt_im_pruefstand():
+    import pruefstand
+    assert pruefstand.suche_aus(app_web._NICHT_ERREICHT_SATZ_EN) and pruefstand.suche_aus(app_web._NICHT_ERREICHT_SATZ)

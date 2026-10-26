@@ -2107,7 +2107,7 @@ class Api:
             en_fertig = str(schein.pop("_en", "") or "")
             if en_frage and en_fertig:
                 text = en_fertig
-            elif direkt and noch_deutsch(text):
+            elif direkt and noch_deutsch(text, antwortsprache.letzte_frage(nachrichten)):
                 text, schein = antwortsprache.antwort_uebersetzen(self._ki.server.frage, text, schein, teil_melden, log=lambda z: _log(self._core, z),
                                                                   frage=antwortsprache.letzte_frage(nachrichten))
             elif englisch:
@@ -4361,7 +4361,7 @@ class Api:
                                 "guthaben_vorher": stand_vorher.guthaben}
                 if englisch_gefragt and fertig_en:
                     antwort = fertig_en
-                elif englisch_gefragt and (not direkt or noch_deutsch(antwort)):
+                elif englisch_gefragt and (not direkt or noch_deutsch(antwort, str(text))):
                     antwort, lieferschein = antwortsprache.antwort_uebersetzen(self._ki.server.frage, antwort, lieferschein, log=lambda z: _log(self._core, z))
                 self._ablage.anhaengen(g, "assistant", antwort, lieferschein=lieferschein)
                 return {"text": antwort, "lieferschein": lieferschein, "gespraech": g.to_json_dict(), "credits": self._credits_dict()}
@@ -4463,7 +4463,7 @@ class Api:
                 ls_f = lieferschein
                 ls_f.update({"guthaben_vorher": stand_vorher.guthaben,
                              "credits": "Admin, unbegrenzt" if admin else f"nichts verrechnet: die Antwort kam fertig aus dem Antwort-Speicher, Stand {stand_vorher.guthaben}"})
-                if englisch_gefragt and (not direkt or noch_deutsch(antwort_text)):
+                if englisch_gefragt and (not direkt or noch_deutsch(antwort_text, str(text))):
                     antwort_text, ls_f = antwortsprache.antwort_uebersetzen(self._ki.server.frage, antwort_text, ls_f, log=lambda z: _log(self._core, z))
                 self._ablage.anhaengen(g, "assistant", antwort_text, lieferschein=ls_f)
                 return {"text": antwort_text, "lieferschein": ls_f, "gespraech": g.to_json_dict(), "credits": self._credits_dict()}
@@ -4473,7 +4473,7 @@ class Api:
             lieferschein["credits"] = (("Admin, unbegrenzt" if admin else f"1 Credit für diese Frage, Stand {stand.guthaben}")
                                        + (f"; {self._ki.fern_name()} hat 1 verdient" if fern else ""))
             lieferschein["guthaben_vorher"] = stand_vorher.guthaben
-            if englisch_gefragt and (not direkt or noch_deutsch(antwort_text)):
+            if englisch_gefragt and (not direkt or noch_deutsch(antwort_text, str(text))):
                 hinweis_seite("Die Antwort wird ins Englische übertragen …")
                 antwort_text, lieferschein = antwortsprache.antwort_uebersetzen(self._ki.server.frage, antwort_text, lieferschein,
                                                                                log=lambda z: _log(self._core, z), frage=str(text))
@@ -6524,6 +6524,8 @@ def such_sprache(frage: str) -> str:
 
 
 def englisch_direkt(frage: str) -> bool:
+    if antwortsprache.deutsch_gefragt(frage):
+        return True
     vorher = ki_laufzeit.original()
     ki_laufzeit.original_setzen(frage)
     try:
@@ -6545,7 +6547,9 @@ def quellen_titel_englisch(lieferschein: dict) -> dict:
     return {**lieferschein, "quellen_liste": neu}
 
 
-def noch_deutsch(text: str) -> bool:
+def noch_deutsch(text: str, frage: str = "") -> bool:
+    if antwortsprache.deutsch_gefragt(frage):
+        return False
     return antwortsprache.frage_sprache(text or "") == "de"
 
 
@@ -6800,7 +6804,7 @@ _NICHT_ERREICHT_SATZ = "Das weiß ich noch nicht, und die Suche im Internet ist 
 _WEISS_NICHT_SATZ_EN = "I don't know that for sure yet. Shall I check live?"
 _NACHPRUEFEN_ANGEBOT_EN = "Shall I check live?"
 _GESUCHT_NICHTS_SATZ_EN = "I don't know that yet, and I couldn't find anything reliable on the internet just now."
-_NICHT_ERREICHT_SATZ_EN = "I don't know that yet, and the internet search isn't getting through right now. Shall I try again in a moment?"
+_NICHT_ERREICHT_SATZ_EN = "I don't know that yet, and the internet search isn't working right now. Shall I try again in a moment?"
 
 
 def _satz(de: str, en: str) -> str:
