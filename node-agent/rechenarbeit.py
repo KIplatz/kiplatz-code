@@ -1188,6 +1188,7 @@ class Melder:
         self._cond = threading.Condition()
         self._teil: str | None = None
         self._schritt: str | None = None
+        self._gesendet: str | None = None
         self._aus = False
         self._t0 = time.monotonic()
         self.ablauf: list[tuple[float, str]] = []
@@ -1201,8 +1202,12 @@ class Melder:
 
     def schritt(self, text: str) -> None:
         self.ablauf.append((time.monotonic() - self._t0, " ".join(str(text).split())[:48]))
+        import app_web
+        zeile = app_web.schritt_fuer_menschen(text)
         with self._cond:
-            self._schritt = text
+            if zeile == self._gesendet and self._schritt is None:
+                return
+            self._schritt, self._gesendet = zeile, zeile
             self._cond.notify()
 
     def _lauf(self) -> None:

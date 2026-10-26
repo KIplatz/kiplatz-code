@@ -966,7 +966,7 @@ _GEGENSTAND = (
 )
 _GEGENSTAND_RE = [(name, re.compile(rf"(?i)(?<![\wÄÖÜäöüß'’-])(?:{muster})(?![\wÄÖÜäöüß'’-])")) for name, muster in _GEGENSTAND]
 _REGEL_ZEICHEN = re.compile(r"(?i)\b(?:brauch\w*|benötig\w*|muss|musst|müss\w*|darf|darfst|dürf\w*|kann|kannst|könn\w*|\w*pflicht\w*|vorgeschrieben\w*|"
-                            r"erforderlich\w*|nötig\w*|notwendig\w*|verpflichtend\w*|erlaubt\w*|zulässig\w*|unzulässig\w*|verboten\w*|untersagt\w*|"
+                            r"erforderlich\w*|nötig\w*|notwendig\w*|verpflichtend\w*|erlaubt\w*|zulässig\w*|unzulässig\w*|verboten\w*|untersagt\w*|gesetzlich\w*|"
                             r"gestattet\w*|ohne|\w{3,}frei|befreit\w*|need\w*|requires?|required|must|mandatory|compulsory|obligatory|allowed|"
                             r"permitted|prohibited|forbidden|banned|illegal|legal|legally|can|cannot|can't|(?-i:may)|exempt\w*|waiver\w*|without|"
                             r"\w{3,}-free|have to|has to|eligible)\b")
@@ -1040,7 +1040,7 @@ def _frage_kerne(frage: str) -> set[str]:
             and not _REGEL_ZEICHEN.fullmatch(w) and not _NEIN_SATZ.fullmatch(w) and not laender_in(w)}
 
 
-def regel_aussagen(antwort: str, frage: str) -> list[tuple[str, list[tuple[str, int]]]]:
+def _regel_aussagen_teile(antwort: str, frage: str) -> list[tuple[str, list[list[tuple[str, int]]]]]:
     kerne = _frage_kerne(frage)
     out = []
     for absatz in (antwort or "").split("\n"):
@@ -1053,31 +1053,22 @@ def regel_aussagen(antwort: str, frage: str) -> list[tuple[str, list[tuple[str, 
                 umgekehrt = 1 if jn.group(1).lower() in ("nein", "no") else 0
                 frage_teile = [g for t in _TEILSATZ.split(frage or "") for g in _regel_gegenstaende(t, kerne)]
                 if frage_teile:
-                    out.append((s, [(g, (r + umgekehrt) % 2) for g, r in frage_teile]))
+                    out.append((s, [[(g, (r + umgekehrt) % 2) for g, r in frage_teile]]))
                 continue
-            gegen: list[tuple[str, int]] = []
+            gruppen: list[list[tuple[str, int]]] = []
             for teil in _TEILSATZ.split(rest):
                 if _OB.search(teil) or not (_REGEL_ZEICHEN.search(teil) or jn):
                     continue
-                gegen += _regel_gegenstaende(teil, kerne)
-            if gegen:
-                out.append((s, list(dict.fromkeys(gegen))))
+                g_teil = _regel_gegenstaende(teil, kerne)
+                if g_teil:
+                    gruppen.append(list(dict.fromkeys(g_teil)))
+            if gruppen:
+                out.append((s, gruppen))
     return out
 
 
-def regel_stuetzen(quelltexte: list[str]) -> dict[int, frozenset[str]]:
-    return _regel_stuetzen(tuple(quelltexte))
-
-
-@lru_cache(maxsize=16)
-def _regel_stuetzen(quelltexte: tuple[str, ...]) -> dict[int, frozenset[str]]:
-    out: dict[int, set[str]] = {0: set(), 1: set()}
-    for text in quelltexte:
-        for teil in _regel_teile(text):
-            if _REGEL_ZEICHEN.search(teil) and not _OB.search(teil):
-                for g, r in _regel_gegenstaende(teil, None):
-                    out[r].add(g)
-    return {r: frozenset(g) for r, g in out.items()}
+def regel_aussagen(antwort: str, frage: str) -> list[tuple[str, list[tuple[str, int]]]]:
+    return [(s, list(dict.fromkeys(g for gruppe in gruppen for g in gruppe))) for s, gruppen in _regel_aussagen_teile(antwort, frage)]
 
 
 def regel_gestuetzt(antwort: str, frage: str, quelltexte: list[str]) -> bool:
@@ -1087,23 +1078,37 @@ def regel_gestuetzt(antwort: str, frage: str, quelltexte: list[str]) -> bool:
 
 
 def regel_ungestuetzt(antwort: str, frage: str, quelltexte: list[str]) -> list[tuple[str, tuple[str, ...]]]:
-    aussagen = regel_aussagen(antwort, frage)
-    if not aussagen:
+    if not regel_aussagen(antwort, frage):
         return []
-    stuetzen = regel_stuetzen(quelltexte)
     namen = {n for n, _m in _GEGENSTAND}
+
+    def gedeckt(g: str, r: int, stuetze: dict[int, frozenset[str]]) -> bool:
+        return g in stuetze[r] if g in namen else any(_kern_gleich(g, s) for s in stuetze[r] if s not in namen)
+    je_satz = regel_stuetzen_je_satz(quelltexte)
     out = []
-    for satz, gegen in aussagen:
-        fehlt = []
-        for g, r in gegen:
-            if g in namen:
-                ok = g in stuetzen[r]
-            else:
-                ok = any(_kern_gleich(g, s) for s in stuetzen[r] if s not in namen)
-            if not ok:
-                fehlt.append(g)
+    for satz, gruppen in _regel_aussagen_teile(antwort, frage):
+        fehlt: list[str] = []
+        for gruppe in gruppen:
+            fehlt_je = [[g for g, r in gruppe if not gedeckt(g, r, st)] for st in je_satz] or [[g for g, _r in gruppe]]
+            fehlt += min(fehlt_je, key=len)
         if fehlt:
             out.append((satz, tuple(dict.fromkeys(fehlt))))
+    return out
+
+
+def regel_stuetzen_je_satz(quelltexte: list[str]) -> list[dict[int, frozenset[str]]]:
+    return _regel_stuetzen_je_satz(tuple(quelltexte))
+
+
+@lru_cache(maxsize=16)
+def _regel_stuetzen_je_satz(quelltexte: tuple[str, ...]) -> list[dict[int, frozenset[str]]]:
+    out: list[dict[int, frozenset[str]]] = []
+    for text in quelltexte:
+        for teil in _regel_teile(text):
+            if _REGEL_ZEICHEN.search(teil) and not _OB.search(teil):
+                gegen = _regel_gegenstaende(teil, None)
+                if gegen:
+                    out.append({r: frozenset(g for g, rr in gegen if rr == r) for r in (0, 1)})
     return out
 
 

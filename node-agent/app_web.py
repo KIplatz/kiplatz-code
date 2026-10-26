@@ -4237,7 +4237,7 @@ class Api:
         def go():
             vorher = getattr(_SCHRITT, "fn", None)
             if self._window is not None:
-                _SCHRITT.fn = lambda t: self._js(f"app.schritt({json.dumps(t, ensure_ascii=False)})")
+                _SCHRITT.fn = lambda t: self._js(f"app.schritt({json.dumps(schritt_fuer_menschen(t), ensure_ascii=False)})")
             _NETZ.an = modus == "netz"
             try:
                 return frage_ohne_schritt()
@@ -6042,6 +6042,21 @@ def klein_wissensfrage(modellname: str, frage: str) -> bool:
 
 
 _SCHRITT = threading.local()
+
+SCHRITT_NACHSCHAUEN = "schaut nach …"
+SCHRITT_SCHREIBEN = "schreibt die Antwort …"
+SCHRITT_PRUEFEN = "prüft die Antwort …"
+_SCHRITT_ZU = (
+    (SCHRITT_PRUEFEN, ("prüft die antwort", "prüft zahlen", "prüft daten", "lässt das modell", "schreibt übernommene")),
+    (SCHRITT_SCHREIBEN, ("schreibt die antwort",)),
+    (SCHRITT_NACHSCHAUEN, ("liest die frage", "überlegt", "sucht im", "sucht in", "prüft, welche fundstellen", "sieht bei", "liest bei", "schaut",
+                           "wartet auf die suchbremse", "einen moment, ich vergleiche")),
+)
+
+
+def schritt_fuer_menschen(text: str) -> str:
+    t = " ".join(str(text or "").split()).lower()
+    return next((zeile for zeile, anfaenge in _SCHRITT_ZU if t.startswith(anfaenge)), str(text or ""))
 
 SUCHWORT_SYSTEM = (
     "Du schreibst Suchanfragen für eine Suchmaschine. Gefragt wird von überall auf der Welt. Lies das Gespräch und schreib "
