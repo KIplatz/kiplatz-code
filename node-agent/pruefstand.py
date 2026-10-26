@@ -229,9 +229,13 @@ def mess_frage(mf: dict, a: dict) -> dict:
 def _pflicht_ok(text: str, pflicht) -> bool:
     for gruppe in pflicht or []:
         teile = [w for w in str(gruppe).split("|") if w]
-        if not any((w in text) if (w.isupper() and len(w) > 1) else (_ohne_tausender(w).lower() in _ohne_tausender(text).lower()) for w in teile):
+        fassungen = (_ohne_tausender(text).lower(), _ohne_tausender(_TAUSENDER_EN.sub("", text or "")).lower())
+        if not any((w in text) if (w.isupper() and len(w) > 1) else any(_ohne_tausender(w).lower() in t for t in fassungen) for w in teile):
             return False
     return True
+
+
+_TAUSENDER_EN = re.compile(r"(?<=\d),(?=\d{3}(?!\d))")
 
 
 OHNE_ANTWORT_ANTEIL = 0.02

@@ -700,7 +700,29 @@ def wochentage_berichtigen(text: str, heute: date) -> tuple[str, int]:
         n += 1
         return richtig + punkt + zwischen + datum_text
 
-    return _WOCHENTAG_DATUM.sub(ersetzen, text or ""), n
+    def ersetzen_satz(m: re.Match) -> str:
+        nonlocal n
+        ds = daten(m.group(1))
+        if len(ds) != 1:
+            return m.group(0)
+        t, mo, j = next(iter(ds))
+        if j is None and m.group(2).lower() == "war":
+            return m.group(0)
+        try:
+            richtig = WOCHENTAGE[date(j or _jahr_fuer(t, mo, heute), mo, t).weekday()]
+        except ValueError:
+            return m.group(0)
+        if richtig.lower() == m.group(3).lower():
+            return m.group(0)
+        n += 1
+        return m.group(0)[:m.start(3) - m.start(0)] + richtig + m.group(0)[m.end(3) - m.start(0):]
+
+    t = _WOCHENTAG_DATUM.sub(ersetzen, text or "")
+    return _DATUM_WOCHENTAG.sub(ersetzen_satz, t), n
+
+
+_DATUM_WOCHENTAG = re.compile(rf"(?i)\b(\d{{1,2}}\.\s*(?:\d{{1,2}}\.|(?:{_MONAT})\.?)(?:\s*\d{{4}})?)\s+(ist|fällt\s+auf|war)\s+(?:ein(?:em|en)?\s+)?"
+                              rf"({'|'.join(WOCHENTAGE)})\b")
 
 
 _PLATZHALTER = re.compile(r"\[(?!\d)(?!Quelle)[^\[\]\n]{1,40}\]")

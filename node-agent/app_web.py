@@ -2414,10 +2414,6 @@ class Api:
             antwort_text = self._belege_nachher(antwort_text, suchfrage(nachrichten), "" if fern else zusatz, [] if fern else quellen, lieferschein,
                                                 None if fern else (lambda extra: modell(zusatz + "\n\n" + extra, None, max_tokens_=240).text),
                                                 schreiben=schrift is not None, ampel=not fern)
-            if not fern:
-                antwort_text, wt = wochentage_berichtigen(antwort_text)
-                if wt:
-                    lieferschein["quellen"] = (lieferschein.get("quellen", "") + f" Wochentag vom Programm nachgerechnet und berichtigt ({wt}).").strip()
             sf = suchfrage(nachrichten)
             if (not fern and belege.vergleichsfrage(sf) and nachschauen.vergleich_art(sf) == "energie"
                     and nachschauen.vergleich_markt(" ".join(str(n.get("content", "")) for n in nachrichten if n.get("role") == "user")) == "AT"):
@@ -6158,32 +6154,6 @@ TARIFKALKULATOR_EN = ("The official E-Control tariff calculator works out the ex
                       "https://www.e-control.at/tarifkalkulator")
 VERGLEICH_NAEHE = 300
 _DOMAIN = re.compile(r"(?i)\b((?:[a-z0-9-]+\.)+[a-z]{2,10})\b")
-
-
-_WOCHENTAGE = ("Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag")
-_MONAT_ZAHL = {"jänner": 1, "jaenner": 1, "januar": 1, "februar": 2, "feber": 2, "märz": 3, "maerz": 3, "april": 4, "mai": 5, "juni": 6, "juli": 7,
-               "august": 8, "september": 9, "oktober": 10, "november": 11, "dezember": 12}
-_WOCHENTAG_SATZ = re.compile(r"(?i)\b(\d{1,2})\.\s*(?:(\d{1,2})\.|(" + "|".join(_MONAT_ZAHL) + r"))\s*(\d{4})?\s+(ist|fällt\s+auf|war)\s+"
-                             r"(?:ein(?:em|en)?\s+)?(" + "|".join(_WOCHENTAGE) + r")\b")
-
-
-def wochentage_berichtigen(text: str, heute=None) -> tuple[str, int]:
-    from datetime import date as _date
-    heute = heute or ki_laufzeit.heute()
-    teile, zuletzt, n = [], 0, 0
-    for m in _WOCHENTAG_SATZ.finditer(text or ""):
-        tag, monat = int(m.group(1)), int(m.group(2)) if m.group(2) else _MONAT_ZAHL[m.group(3).lower()]
-        if not m.group(4) and m.group(5).lower() == "war":
-            continue
-        try:
-            jahr = int(m.group(4)) if m.group(4) else (heute.year if _date(heute.year, monat, tag) >= heute else heute.year + 1)
-            richtig = _WOCHENTAGE[_date(jahr, monat, tag).weekday()]
-        except ValueError:
-            continue
-        if m.group(6).lower() != richtig.lower():
-            teile += [text[zuletzt:m.start(6)], richtig]
-            zuletzt, n = m.end(6), n + 1
-    return ("".join(teile) + text[zuletzt:], n) if n else (text, 0)
 
 
 _KEIN_HAENDLER = re.compile(r"^(?:mehrere\w*|diverse\w*|verschiedene\w*|dieseseite|andere\w*|several\w*|various\w*|multiple\w*|thispage|others?)$")
