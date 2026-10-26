@@ -129,7 +129,7 @@ def nachgebessert(lieferschein) -> bool:
     return any(_NACHGEBESSERT.search(str(n)) for n in notizen)
 
 
-MINDEST_BAU = "2026-10-19a"
+MINDEST_BAU = "2026-10-26c"
 
 
 def vor_mindest_bau(lieferschein) -> bool:

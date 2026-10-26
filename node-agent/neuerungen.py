@@ -14,15 +14,17 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-10-26f": [],
+    "2026-10-26e": [],
     "2026-10-26d": [],
     "2026-10-26c": [
-        "Fragst du auf Englisch nach deutschen Wörtern, etwa „Translate 'I come from Austria' into German“, bekommst du jetzt die deutschen Wörter und die Erklärung auf Englisch.",
+        "Wer wissen will, wie „I come from Austria“ auf Deutsch heißt, bekommt jetzt den deutschen Satz und die Erklärung dazu in seiner Sprache.",
     ],
     "2026-10-26b": [
-        "Unter einer englischen Antwort heißen die Suchtreffer jetzt auch auf Englisch „Search results“, auf der Website, in der App und im Programm.",
+        "Unter der Antwort auf eine englische Frage stehen die Suchtreffer jetzt als „Search results“, auf der Website, in der App und im Programm.",
     ],
     "2026-10-26a": [
-        "Fragst du auf Englisch zu einem Thema außerhalb des deutschen Sprachraums, etwa „Who was Mozart?“ oder „Do I need a visa for Japan?“, schreibt KIplatz die Antwort jetzt gleich auf Englisch, statt sie erst auf Deutsch zu erarbeiten und dann zu übersetzen. Das geht schneller, und in Programm und App siehst du die Antwort schon beim Schreiben.",
+        "Viele Fragen wie „Who was Mozart?“ oder „Do I need a visa for Japan?“ beantwortet KIplatz jetzt gleich so, wie du gefragt hast, ohne Umweg über eine Übersetzung. Das geht schneller, und in Programm und App siehst du den Text schon beim Schreiben.",
     ],
     "2026-10-25q": [
         "Stellst du auf kiplatz.at eine Frage, ist sie jetzt als erste dran, vor allen anderen. Und während der PC die Antwort erarbeitet, siehst du auf der deutschen Seite gleich, was er gerade tut, etwa dass er im Internet nachschaut.",
@@ -1244,7 +1246,7 @@ ZURUECKGEHALTEN: dict[str, list[str]] = {
 
 KURZ_JE_TAG: dict[str, list[str]] = {
     "2026-10-26": [
-        "Fragst du auf Englisch, antwortet KIplatz jetzt gleich auf Englisch und damit schneller",
+        "Viele Fragen auf Englisch beantwortet KIplatz jetzt ohne Umweg über eine Übersetzung",
         "Fragen auf unserer Website kommen jetzt als erste dran, und du siehst, woran der PC gerade arbeitet",
     ],
     "2026-10-25": [
@@ -1360,8 +1362,8 @@ KURZ_JE_TAG: dict[str, list[str]] = {
 
 GESCHICHTE_JE_TAG: dict[str, dict[str, str]] = {
     "2026-10-26": {
-        "haken": "Frag KIplatz ab heute „Who was Mozart?“, und die Antwort kommt gleich auf Englisch, ohne Umweg über eine Übersetzung.",
-        "text": "Das spart bei englischen Fragen ein paar Sekunden. Und auf kiplatz.at kommen Fragen jetzt als erste dran, und du siehst, woran der PC gerade arbeitet.",
+        "haken": "Frag KIplatz ab heute „Who was Mozart?“, und die Antwort kommt sofort auf Englisch.",
+        "text": "Das spart Zeit. Und auf unserer Website kommen Fragen jetzt als erste dran, und du siehst gleich, woran der PC gerade für dich arbeitet.",
     },
     "2026-10-25": {
         "haken": "Frag KIplatz ab heute „Flug Linz nach Antalya 5 Stunden verspätet, was steht mir zu?“, und du bekommst den Betrag nach der EU-Verordnung.",
