@@ -22,7 +22,7 @@ import sicher_schreiben
 
 APP_NAME = "KIplatz"
 APP_VERSION = "0.4.0-community"
-APP_BUILD = "2026-10-27g"
+APP_BUILD = "2026-10-27h"
 
 FIRST_START_FILENAME = "erststart.json"
 FREIGABE_FILENAME = "freigabe.json"

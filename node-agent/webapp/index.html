@@ -265,8 +265,15 @@
   #kibanner.bereit { display: none; }
   #kibanner .grow { flex: 1; min-width: min(220px, 100%); }
   #messages { flex: 1; overflow: auto; padding: 18px 28px; display: flex; flex-direction: column; gap: 14px; }
-  .empty { margin: auto; text-align: center; max-width: 520px; color: var(--text2); }
-  .empty h2 { color: var(--text); margin-bottom: 8px; }
+
+  #page-gespraeche.leer #messages { flex: 0 0 auto; margin-top: auto; overflow: visible; padding-bottom: 6px; }
+  #page-gespraeche.leer .composer { margin-bottom: auto; padding-bottom: 12vh; }
+  main:has(#page-gespraeche.active.leer) #anmelde-band { display: none !important; }
+  .start { width: 100%; max-width: 760px; margin: 0 auto; text-align: center; }
+  .start-gruss { display: inline-flex; align-items: center; gap: 14px; margin: 0; font-size: 34px; font-weight: 600; letter-spacing: -.01em; line-height: 1.2; color: var(--text); }
+  .start-gruss img { width: 40px; height: 40px; flex: none; }
+  .start-anmelden { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; max-width: 760px; margin: 14px auto 0; color: var(--text2); font-size: 14px; }
+  .start-anmelden[hidden] { display: none; }
   .msg { max-width: 780px; }
   .msg.user { align-self: flex-end; background: var(--accent-soft); border: 1px solid var(--accent-line); border-radius: 16px 16px 4px 16px; padding: 10px 14px; white-space: pre-wrap; }
   .msg.assistant { align-self: flex-start; padding: 2px 4px; white-space: pre-wrap; }
@@ -302,9 +309,41 @@
   details.ls { margin-top: 8px; font-size: 13px; color: var(--text2); }
   details.ls summary { cursor: pointer; color: var(--accent-dark); font-weight: 600; }
   details.ls .kv { margin-top: 6px; grid-template-columns: 110px 1fr; }
-  .composer { border-top: 1px solid var(--border); padding: 14px 28px 16px; background: var(--surface); }
-  .box { display: flex; gap: 8px; align-items: flex-end; border: 1px solid var(--border); border-radius: 14px; padding: 7px 8px 7px 10px; background: var(--surface); box-shadow: 0 1px 2px rgba(27,31,30,.04); }
-  .box:focus-within { border-color: var(--accent-line); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+  .composer { padding: 10px 28px 18px; background: transparent; }
+  .composer > * { max-width: 800px; margin-left: auto; margin-right: auto; }
+  .box { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--border); border-radius: 20px; padding: 14px 12px 10px 16px; background: var(--surface); box-shadow: 0 2px 10px rgba(27,31,30,.06), 0 1px 2px rgba(27,31,30,.04); }
+  :root[data-theme="dark"] .box { background: var(--zebra); box-shadow: 0 2px 12px rgba(0,0,0,.28); }
+  :root[data-theme="dark"] .box textarea { background: transparent; }
+  .box:focus-within { border-color: var(--accent-line); box-shadow: 0 0 0 3px var(--accent-soft), 0 2px 10px rgba(27,31,30,.06); }
+  .box { position: relative; }
+  .skill-menue { position: absolute; left: 0; bottom: calc(100% + 8px); width: min(440px, 100%); max-height: 320px; overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.18); padding: 6px; z-index: 30; }
+  .skill-menue[hidden] { display: none; }
+  .skill-menue button { display: block; width: 100%; padding: 8px 12px; border: 0; border-radius: 9px; background: transparent; color: var(--text); font: inherit; font-size: 14px; text-align: left; }
+  .skill-menue button[aria-selected="true"], .skill-menue button:hover { background: var(--accent-soft); color: var(--accent-dark); }
+  .skill-menue .was { display: block; font-weight: 600; }
+  .skill-menue .wie { display: block; font-size: 12px; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .skill-menue p { margin: 6px 10px; }
+  .msg .erneut { margin-top: 8px; }
+  .box-leiste { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .box-leiste .luecke { flex: 1; }
+  .box .werkzeug { width: 34px; height: 34px; border-color: transparent; background: transparent; color: var(--text2); }
+  .box .werkzeug:hover:not(:disabled) { background: var(--hover); border-color: transparent; color: var(--text); }
+  .box .werkzeug svg { width: 19px; height: 19px; }
+  .box .plus > .werkzeug { border-color: var(--border); }
+
+  .skill-feld { display: inline-flex; align-items: center; gap: 2px; min-width: 0; }
+  .box .skill-feld select { field-sizing: content; appearance: none; -webkit-appearance: none; border: 0; background: transparent; color: var(--text2); font: inherit; font-size: 13px; padding: 7px 24px 7px 10px; border-radius: 9px; max-width: 220px; text-overflow: ellipsis; cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239aa5a1' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 9px center; }
+  .box .skill-feld select:hover, .box .skill-feld select:focus-visible { background-color: var(--hover); color: var(--text); }
+  .box .skill-feld select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  #eingabe:focus-visible { outline: none; }
+  .box .skill-feld select.gewaehlt { color: var(--accent-dark); }
+  .skill-feld .werkzeug { width: 30px; height: 30px; }
+  .skill-feld .werkzeug svg { width: 16px; height: 16px; }
+  .unter-box { display: flex; flex-wrap: wrap; align-items: center; column-gap: 16px; padding: 0 6px; }
+  .unter-box > * { margin-top: 8px; }
+  #skill-immer-leiste { margin-top: 8px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
   input[type=text] { font: inherit; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); min-width: 0; }
   input[type=text]:focus { outline: 2px solid var(--accent-line); border-color: var(--accent); }
   .code { font-size: 30px; font-weight: 700; letter-spacing: 3px; color: var(--accent-dark); font-family: Consolas, "Cascadia Mono", monospace; }
@@ -318,7 +357,9 @@
   .pf-titel { margin: 14px 0 4px; font-weight: 600; }
   .pf-richtig > summary { cursor: pointer; margin-top: 14px; color: var(--text2); }
   textarea { flex: 1; border: 0; outline: 0; resize: none; font: inherit; line-height: 1.45; max-height: 180px; background: transparent; color: var(--text); }
-  .send { width: 30px; height: 30px; border-radius: 8px; border: 0; background: var(--accent); color: #fff; font-size: 18px; display: grid; place-items: center; flex: none; }
+  #eingabe { width: 100%; min-height: 52px; max-height: 260px; padding: 2px 4px 0 0; font-size: 16px; line-height: 1.5; }
+  #eingabe::placeholder { color: var(--text2); opacity: .85; }
+  .send { width: 34px; height: 34px; border-radius: 10px; border: 0; background: var(--accent); color: #fff; font-size: 18px; display: grid; place-items: center; flex: none; }
   .send:hover:not(:disabled) { background: var(--accent-dark); }
   .send.stopp { background: var(--text-muted, #5a5a5a); font-size: 11px; }
 
@@ -339,6 +380,7 @@
   .werkzeug.aufnahme { background: var(--danger-soft); border-color: var(--danger); color: var(--danger); animation: atmen 1.2s ease-in-out infinite; }
   @keyframes atmen { 50% { box-shadow: 0 0 0 4px var(--danger-soft); } }
   #sprechen-hinweis { margin-left: auto; }
+  #sprechen-hinweis:empty { display: none; }
 
   #ueber-kv { grid-template-columns: 140px 1fr; gap: 0 12px; }
   #ueber-kv > div { padding: 9px 0; border-bottom: 1px solid var(--border); }
@@ -583,24 +625,33 @@
       <div class="composer">
         <div id="anhaenge" class="row" style="margin-bottom:6px;display:none"></div>
         <div class="box">
+          <div class="skill-menue" id="skill-menue" role="listbox" aria-label="Skills" hidden></div>
+          <textarea aria-label="Deine Frage an KIplatz" id="eingabe" rows="2" placeholder="Frag „KIplatz“ etwas …"></textarea>
+          <div class="box-leiste">
           <div class="plus">
             <button class="werkzeug" id="btn-plus" type="button" title="Datei, Bild, Ordner oder Bildschirm dazugeben" aria-label="Hinzufügen"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg></button>
             <div class="plus-menu" id="plus-menu" hidden>
               <button type="button" id="btn-anhang" aria-label="Datei anhängen"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15.5 9.3 9.7 15.1a3.2 3.2 0 0 1-4.5-4.5l6.4-6.4a2.1 2.1 0 0 1 3 3l-6.4 6.4a1 1 0 0 1-1.5-1.5l5.6-5.6"/></svg><span><span class="was">Datei anhängen</span><span class="wie">PDF, Word, Excel oder Text</span></span></button>
               <button type="button" id="btn-bild" aria-label="Bild anhängen"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="14" height="12" rx="2"/><circle cx="7.5" cy="8" r="1.3"/><path d="M3 14l4-4 3 3 2-2 5 5"/></svg><span><span class="was">Bild anhängen</span><span class="wie">PNG oder JPG</span></span></button>
+              <button type="button" id="btn-skill-waehlen" aria-label="Skill wählen"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="9" height="9" rx="1.5"/><path d="M8 15.5V17h9V8h-1.5"/></svg><span><span class="was">Skill wählen</span><span class="wie">oder im Feld mit / beginnen</span></span></button>
               <button type="button" id="btn-ordner-frei" aria-label="Ordner freigeben"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h3.6l2 2h5.4A1.5 1.5 0 0 1 17 8.5v6A1.5 1.5 0 0 1 15.5 16h-11A1.5 1.5 0 0 1 3 14.5z"/></svg><span><span class="was">Ordner freigeben</span><span class="wie">KIplatz liest die Dokumente darin</span></span></button>
               <button type="button" id="btn-pdf-zusammen" aria-label="PDFs zusammenfügen"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h6l3 3v5"/><path d="M5 3v10h4"/><path d="M11 3v3h3"/><path d="M12 13h5M14.5 10.5v5"/></svg><span><span class="was">PDFs zusammenfügen</span><span class="wie">aus mehreren PDFs eine, am PC</span></span></button>
               <button type="button" id="btn-bildschirm" aria-label="Bildschirmfoto anhängen"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4" width="15" height="10" rx="1.5"/><path d="M7.5 17h5M10 14v3"/></svg><span><span class="was">Bildschirm aufnehmen</span><span class="wie">das Fenster verschwindet dafür kurz</span></span></button>
             </div>
           </div>
-          <textarea aria-label="Deine Frage an KIplatz" id="eingabe" rows="1" placeholder="Frag „KIplatz“ etwas …"></textarea>
+          
+          <span class="skill-feld"><select id="skill-wahl" aria-label="Skill für dieses Gespräch" title="Ein Skill gibt KIplatz Anweisungen für dieses Gespräch"><option value="">Kein Skill</option></select><button class="werkzeug" type="button" id="btn-skill-immer" aria-expanded="false" aria-label="Skills, die immer gelten" title="Skills, die in jedem Gespräch gelten, hier ein- und ausschalten"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M3.5 6h7M14.5 6h2M3.5 14h2M9.5 14h7"/><circle cx="12.5" cy="6" r="2"/><circle cx="7.5" cy="14" r="2"/></svg></button></span>
+          <span class="luecke"></span>
           <button class="werkzeug" id="btn-vervollstaendigen" type="button" title="Frage vervollständigen: KIplatz schreibt deine Bitte vollständig auf, mit Lücken für das, was noch fehlt. Du füllst aus und schickst ab." aria-label="Frage vervollständigen"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h9M4 10h12M4 15h7"/><path d="M15.5 12.5v5M13 15h5"/></svg></button>
           <button class="werkzeug" id="btn-sprechen" type="button" title="Sprechen statt tippen: drücken, sprechen, noch einmal drücken. Der Text landet im Eingabefeld. Bleibt am Gerät." aria-label="Sprechen"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7.25" y="2.5" width="5.5" height="9.5" rx="2.75"/><path d="M4.75 9.5a5.25 5.25 0 0 0 10.5 0M10 14.75V18M7 18h6"/></svg></button>
           <button class="send" id="btn-senden" title="Senden (Enter; Umschalt+Enter macht eine neue Zeile)" aria-label="Senden"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 16V4.5M4.75 9.75 10 4.5l5.25 5.25"/></svg></button>
           <button class="send stopp" id="btn-antwort-stopp" title="Antwort stoppen" aria-label="Antwort stoppen" hidden>■</button>
+          </div>
         </div>
         <div class="row wartend" id="wartend" hidden><span class="muted small">Wird gleich gesendet:</span><span class="small" id="wartend-text"></span><button class="btn klein" id="wartend-weg" type="button" title="Doch nicht senden">✕</button></div>
-        <div class="row" style="margin-top:6px;align-items:center"><span class="muted small">Skill:</span><select id="skill-wahl" class="small" title="Ein Skill gibt KIplatz Anweisungen für dieses Gespräch"><option value="">keiner</option></select><button class="btn klein" type="button" id="btn-skill-immer" style="margin-left:6px" aria-expanded="false" title="Skills, die in jedem Gespräch gelten, hier ein- und ausschalten">Immer an …</button><label class="switch small" id="daheim-leiste" style="display:none;margin-left:16px"><input type="checkbox" id="daheim-an"> <span id="daheim-text">In meinen Dateien suchen</span></label><span class="muted small" id="skill-hinweis"></span><span class="muted small" id="sprechen-hinweis"></span></div>
+        
+        <div class="unter-box"><label class="switch small" id="daheim-leiste" style="display:none"><input type="checkbox" id="daheim-an"> <span id="daheim-text">In meinen Dateien suchen</span></label><span class="muted small" id="sprechen-hinweis"></span></div>
+        <div class="start-anmelden" id="start-anmelden" hidden><span>Mit deinem KIplatz-Konto arbeitet dieses Gerät für die Community mit.</span><button class="btn primary" id="btn-start-anmelden" type="button">Anmelden</button></div>
         
         <div id="skill-immer-leiste" class="small" style="display:none;margin-top:6px;flex-wrap:wrap;gap:4px 16px"></div>
       </div>
@@ -1396,6 +1447,7 @@ window.addEventListener("unhandledrejection", (e) => __fehlerZeigen(String(e.rea
     document.documentElement.dataset.theme = z.dunkel ? "dark" : "light";
 
     $("#anmelde-band").style.display = (!z.mitglied && !z.admin && !z.erststart) ? "" : "none";
+    if ($("#page-gespraeche").classList.contains("leer")) startAnsicht(true);
     $("#fragt-community").value = z.fragt_community_wahl === true ? "community" : (z.fragt_community_wahl === false ? "selbst" : "auto");
     $("#fragt-community-hinweis").textContent = !z.mitglied ? "Dieses Gerät ist noch nicht angemeldet; dazukommen geht unter „Meine Community“." : (z.fragt_community ? "Zurzeit: Deine Fragen gehen an die Community." : "Zurzeit: Dieses Gerät antwortet selbst.");
     zeichneKi(z.ki);
@@ -1505,6 +1557,7 @@ window.addEventListener("unhandledrejection", (e) => __fehlerZeigen(String(e.rea
   $("#btn-austreten").addEventListener("click", () => { if (!confirm("Die Community verlassen? Am Server werden Name, Credits und Zähler gelöscht. Deine Gespräche und was du nachgeschaut hast, bleiben bei dir.")) return; api().community_austreten().then((r) => nach(r, () => { $("#meine-daten").style.display = "none"; api().zustand().then((r2) => nach(r2, uebernehme)); api().community().then((r3) => nach(r3, zeichneCommunity)); })); });
 
 
+  $("#btn-start-anmelden").addEventListener("click", () => $("#btn-anmelde-band").click());
   $("#btn-anmelde-band").addEventListener("click", () => { zeige("community", "Konto und Geräte"); setTimeout(() => { const k = $("#btn-beitreten-konto"); if (k) { k.scrollIntoView({ block: "center" }); k.focus(); } }, 50); });
 
   let beitrittTimer = null, beitrittNurCode = false;
@@ -2012,8 +2065,10 @@ window.addEventListener("unhandledrejection", (e) => __fehlerZeigen(String(e.rea
 
     const vorn = immer.includes("meine-ki") ? "meine-ki" : immer[0];
     const kurz = immer.length > 2 ? `${lesbar(vorn)} + ${immer.length - 1} weitere` : [vorn, ...immer.filter((n) => n !== vorn)].map(lesbar).join(" + ");
-    sel.innerHTML = `<option value="">${immer.length ? esc(kurz) : "keiner"}</option>` + skillListe.filter((b) => !(b.immer && b.name !== akt && immer.length === 1 && b.name === immer[0])).map((b) => `<option value="${esc(b.name)}"${b.name === akt ? " selected" : ""}>${esc(lesbar(b.name))}</option>`).join("");
-    $("#skill-hinweis").textContent = [akt ? "gilt für dieses Gespräch" : "", akt && immer.length ? "dazu immer an: " + immer.map(lesbar).join(", ") : ""].filter(Boolean).join(" · ");
+    sel.classList.toggle("gewaehlt", !!(akt || immer.length));
+    sel.innerHTML = `<option value="">${immer.length ? esc(kurz) : "Kein Skill"}</option>` + skillListe.filter((b) => !(b.immer && b.name !== akt && immer.length === 1 && b.name === immer[0])).map((b) => `<option value="${esc(b.name)}"${b.name === akt ? " selected" : ""}>${esc(lesbar(b.name))}</option>`).join("");
+
+    sel.title = akt ? "Gilt für dieses Gespräch" : "Ein Skill gibt KIplatz Anweisungen für dieses Gespräch";
     if ($("#skill-immer-leiste").style.display !== "none") skillImmerLeiste();
   }
 
@@ -2030,13 +2085,52 @@ window.addEventListener("unhandledrejection", (e) => __fehlerZeigen(String(e.rea
   $("#btn-skill-immer").addEventListener("click", () => {
     const box = $("#skill-immer-leiste"), auf = box.style.display === "none";
     if (auf) skillImmerLeiste();
-    box.style.display = auf ? "flex" : "none"; $("#btn-skill-immer").setAttribute("aria-expanded", String(auf));
+    box.style.display = auf ? "flex" : "none"; $("#btn-skill-immer").setAttribute("aria-expanded", String(auf)); $("#btn-skill-immer").classList.toggle("offen", auf);
   });
-  $("#skill-wahl").addEventListener("change", () => {
-    const name = $("#skill-wahl").value;
+  function skillSetzen(name) {
     const weiter = aktuell ? Promise.resolve({ ok: true, daten: aktuell }) : api().gespraech_neu();
     weiter.then((r) => nach(r, (g) => { aktuell = g; api().gespraech_skill(g.kennung, name).then((r2) => nach(r2, (g2) => { aktuell = g2; skillWahl(); ladeListe(); })); }));
+  }
+  $("#skill-wahl").addEventListener("change", () => skillSetzen($("#skill-wahl").value));
+
+
+  let skMenueWahl = 0, skMenueArt = "";
+  const skMenueOffen = () => !$("#skill-menue").hidden;
+  function skMenueEintraege(suche) {
+    const s = suche.toLowerCase();
+    return [{ name: "", titel: "Kein Skill", text: "für dieses Gespräch keinen eigenen" },
+      ...skillListe.map((b) => ({ name: b.name, titel: b.name === "meine-ki" ? "Meine KI" : b.name, text: b.beschreibung || "" }))]
+      .filter((e) => !s || e.titel.toLowerCase().includes(s) || e.name.toLowerCase().includes(s));
+  }
+  function skMenueZeigen(suche) {
+    const m = $("#skill-menue"), e = skMenueEintraege(suche);
+    skMenueWahl = Math.max(0, Math.min(skMenueWahl, e.length - 1));
+    m.innerHTML = e.length ? e.map((x, i) => `<button type="button" role="option" data-sk="${esc(x.name)}" aria-selected="${i === skMenueWahl}"><span class="was">${esc(x.titel)}</span>${x.text ? `<span class="wie">${esc(x.text)}</span>` : ""}</button>`).join("")
+      : '<p class="muted small">Kein Skill mit diesem Namen. Unter Skills schreibst oder übernimmst du einen.</p>';
+    m.hidden = false;
+    const ak = m.querySelector('[aria-selected="true"]'); if (ak) ak.scrollIntoView({ block: "nearest" });
+  }
+  function skMenueZu() { $("#skill-menue").hidden = true; skMenueWahl = 0; skMenueArt = ""; }
+  function skMenueNehmen(name) {
+    const ta = $("#eingabe");
+    if (/^\/\S*$/.test(ta.value)) { ta.value = ""; ta.dispatchEvent(new Event("input")); }
+    skMenueZu(); skillSetzen(name); ta.focus();
+  }
+  $("#skill-menue").addEventListener("mousedown", (e) => e.preventDefault());
+  $("#skill-menue").addEventListener("click", (e) => { const b = e.target.closest("[data-sk]"); if (b) skMenueNehmen(b.dataset.sk); });
+  $("#btn-skill-waehlen").addEventListener("click", (e) => { e.stopPropagation(); plusZu(); skMenueArt = "plus"; skMenueZeigen(""); $("#eingabe").focus(); });
+  $("#eingabe").addEventListener("input", () => {
+    const m = /^\/(\S*)$/.exec($("#eingabe").value);
+    if (m) { skMenueArt = "schraeg"; skMenueZeigen(m[1]); } else if (skMenueOffen()) skMenueZu();
   });
+  $("#eingabe").addEventListener("keydown", (e) => {
+    if (!skMenueOffen()) return;
+    const zahl = $("#skill-menue").querySelectorAll("[data-sk]").length;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); if (zahl) { skMenueWahl = (skMenueWahl + (e.key === "ArrowDown" ? 1 : zahl - 1)) % zahl; skMenueZeigen(skMenueArt === "schraeg" ? $("#eingabe").value.slice(1) : ""); } }
+    else if ((e.key === "Enter" && !e.shiftKey) || e.key === "Tab") { const b = $("#skill-menue").querySelector('[aria-selected="true"]'); if (b || e.key === "Enter") e.preventDefault(); if (b) skMenueNehmen(b.dataset.sk); }
+    else if (e.key === "Escape") { e.preventDefault(); skMenueZu(); }
+  });
+  document.addEventListener("click", (e) => { if (skMenueOffen() && !e.target.closest("#skill-menue")) skMenueZu(); });
 
   function zeichneVorlagen(v) {
     const meine = new Set(v.meine || []);
@@ -2230,9 +2324,32 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
     zeile("Credits", esc(l.credits || ""));
     return aus.join("");
   }
+
+
+  function tagesgruss(stunde) {
+    if (stunde >= 5 && stunde < 11) return "Guten Morgen";
+    if (stunde >= 11 && stunde < 14) return "Mahlzeit";
+    if (stunde >= 14 && stunde < 18) return "Schönen Nachmittag";
+    if (stunde >= 18 && stunde < 23) return "Guten Abend";
+    return "Noch munter";
+  }
+  function angemeldet() { return !!(Z && (Z.mitglied || Z.admin)); }
+  function startAnsicht(leer) {
+    $("#page-gespraeche").classList.toggle("leer", leer);
+    $("#start-anmelden").hidden = !(leer && Z && !angemeldet() && !Z.erststart);
+    if (!leer) return;
+    const name = String((Z && Z.kennenlernen && Z.kennenlernen.name) || "").replace(/\s+/g, " ").trim();
+    const m = $("#messages");
+
+    m.innerHTML = `<div class="start"><h2 class="start-gruss"><img alt="" src="${$("#brand img").src}"><span><span id="start-gruss"></span><span id="start-name" translate="no"></span></span></h2></div>`;
+    $("#start-gruss").textContent = tagesgruss(new Date().getHours());
+    $("#start-name").textContent = angemeldet() && name && name.length <= 24 ? ", " + name : "";
+  }
   function zeichneGespraech() {
     const m = $("#messages"); m.innerHTML = "";
-    if (!aktuell || !aktuell.nachrichten.length) { m.innerHTML = `<div class="empty"><h2>Frag „KIplatz“</h2><p>Die KI aus der Community. Sie erfindet nichts und fragt nach, statt zu raten. Unter jeder Antwort steht, woher sie kommt.</p></div>`; return; }
+    const leer = !aktuell || !aktuell.nachrichten.length;
+    startAnsicht(leer);
+    if (leer) return;
     let letzte = -1; aktuell.nachrichten.forEach((n, i) => { if (n.rolle !== "user") letzte = i; });
     aktuell.nachrichten.forEach((n, i) => { const d = nachricht(n.rolle, n.text, Object.assign({}, n.lieferschein || {}, { bewertung: n.bewertung || "" }), i === letzte); d.dataset.nummer = i; m.appendChild(d); });
     m.scrollTop = m.scrollHeight;
@@ -2623,7 +2740,7 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
     const weiter = aktuell ? Promise.resolve({ ok: true, daten: aktuell }) : api().gespraech_neu();
     weiter.then((r) => {
       if (!r.ok) { sag(r.text, true); return; }
-      aktuell = r.daten; if (!aktuell.nachrichten.length) $("#messages").innerHTML = "";
+      aktuell = r.daten; startAnsicht(false); if (!aktuell.nachrichten.length) $("#messages").innerHTML = "";
       laufendSetzen(true); if (vorgabe === undefined) { ta.value = ""; ta.style.height = "auto"; }
       document.querySelectorAll("#messages [data-tun=nochmal]").forEach((x) => x.remove());
       const u = nachricht("user", text); $("#messages").appendChild(u);
@@ -2638,7 +2755,14 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
         liveHalt();
         arbeitStoppen(); laufendSetzen(false); live.classList.remove("denkt");
         if (res.ok) { entwurfFertig(); live.innerHTML = ampelText(res.daten.text, ampelVon(res.daten.lieferschein)); videoKarten(live, res.daten.text, res.daten.lieferschein && res.daten.lieferschein.videos); document.querySelectorAll("#messages [data-tun=nochmal]").forEach((x) => x.remove()); a.insertAdjacentHTML("beforeend", lieferscheinHtml(res.daten.lieferschein, true)); aktuell = res.daten.gespraech; a.dataset.nummer = aktuell.nachrichten.length - 1; zeichneCredits(res.daten.credits); $("#titel").textContent = aktuell.titel; sag(""); }
-        else { entwurfFertig(); live.textContent = res.text; if (!wartend) { ta.value = text; ta.dispatchEvent(new Event("input")); } }
+
+
+        else {
+          entwurfFertig(); live.textContent = res.text;
+          const erneut = document.createElement("button"); erneut.type = "button"; erneut.className = "btn klein erneut"; erneut.textContent = "Nochmal senden";
+          erneut.addEventListener("click", () => { if (laufend) return; u.remove(); a.remove(); senden(text); });
+          a.appendChild(erneut);
+        }
         if (!kiAn) api().ki_zustand().then((r) => nach(r, zeichneKi));
         liveEnde(); ladeListe(); ansichtHalten(u, ansicht); ta.focus();
         if (wartend) { const n = wartend; wartend = ""; wartendZeigen(); senden(n); }
@@ -2737,7 +2861,7 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
     try { localStorage.setItem("kiplatz.dateien-je-gespraech", JSON.stringify(dateienJe)); } catch { }
   });
   $("#btn-senden").addEventListener("click", () => senden());
-  $("#eingabe").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); senden(); } });
+  $("#eingabe").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.defaultPrevented) { e.preventDefault(); senden(); } });
   $("#eingabe").addEventListener("input", (e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 180) + "px"; });
 
 
