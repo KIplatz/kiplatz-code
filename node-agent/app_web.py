@@ -198,6 +198,13 @@ def build_core(argv: list[str] | None = None) -> tuple[app_core.AppCore, argpars
 
 SPIELWIESE_DIRNAME = "CommunityAI-Spielwiese"
 SPIELWIESE_ADRESSE = "https://kiplatz.at:8445"
+ADMIN_FENSTER = frozenset({
+    "pruefstand_stand", "pruefstand_setzen", "pruefstand_jetzt", "kurztest_starten", "quellen_stand", "not_aus_setzen", "sammler_stand",
+    "sammler_setzen", "sammler_jetzt", "community_einladung", "community_schluessel_wechseln", "community_geraete", "community_geraet_admin",
+    "community_geraet_sperren", "community_geraet_lebenslang", "community_geraet_entfernen", "community_konto_suchen", "community_konten_alle",
+    "community_konto_ueberall", "community_teams_admin", "community_team_admin", "community_fehlerberichte", "fehler_woche", "fehler_entfernen",
+    "wissen_freigeben", "wissen_meldung_inhalt", "wissen_meldung_erledigt",
+})
 
 
 def spielwiese_vorbereiten(basis: Path, *, ki_von: Path | None = None) -> Path:
@@ -874,6 +881,8 @@ class Api:
 
     def _guarded(self, name: str, action, ok_text: str = "") -> dict:
         try:
+            if name in ADMIN_FENSTER and not self._admin_fenster():
+                raise app_core.AppError("NUR_ADMIN", "Das geht nur, wenn du als Admin mit deinem KIplatz-Konto angemeldet bist.")
             daten = action()
             _log(self._core, f"OK {name}")
             return {"ok": True, "text": ok_text, "daten": daten}
@@ -1815,8 +1824,6 @@ class Api:
 
     def kurztest_starten(self) -> dict:
         def go():
-            if not self._community.ist_admin():
-                raise app_core.AppError("NUR_ADMIN", "Den Kurztest startet nur der Admin-PC.")
             t = self._training_einstellung()
             if t is None or not (t["ordner"] / KURZTEST_SKRIPT).is_file():
                 raise app_core.AppError("KURZTEST_FEHLT", f"Training oder {KURZTEST_SKRIPT} fehlen im Trainingsordner (Einstellung „training“).")
@@ -3193,7 +3200,7 @@ class Api:
             "zoom": self.zoom(),
             "leiste_breite": self.leiste_breite(),
             "schnittstelle": self._schnittstelle_dict(),
-            "admin": self._community.ist_admin(),
+            "admin": self._admin_fenster(),
             "neu": self.neu_liste(),
             "erststart": self.erststart_offen(),
             "kennenlernen": self.einrichtung_stand(),
@@ -3325,7 +3332,7 @@ class Api:
     def _credits_dict(self) -> dict:
         try:
             st = self._kontobuch.stand()
-            admin = self._community.ist_admin()
+            admin = self._admin_fenster()
             return {"guthaben": st.guthaben, "verdient": st.verdient, "ausgegeben": st.ausgegeben, "admin": admin,
                     "text": ("Admin: Fragen kosten dich nichts. " if admin else "") + st.text_de(), "regel": credits.REGEL_DE,
                     "verlauf": verlauf_buendeln(self._kontobuch.verlauf(200))[-12:]}
@@ -3340,7 +3347,7 @@ class Api:
                 try:
                     st = self._kontobuch.reparieren(verdient=verdient, geraet=self._geraet_name)
                     _log(self._core, f"OK credits repariert (verdient laut Server: {verdient})")
-                    admin = self._community.ist_admin()
+                    admin = self._admin_fenster()
                     return {"guthaben": st.guthaben, "verdient": st.verdient, "ausgegeben": st.ausgegeben, "admin": admin,
                             "text": "Die Credits-Datei war beschädigt (zum Beispiel nach einem harten Ausschalten) und wurde neu angelegt"
                                     + ("; der Stand kommt aus der Bestenliste der Community. " if verdient is not None else "; die alte liegt daneben. ") + st.text_de(),
@@ -3419,7 +3426,7 @@ class Api:
             d = {"geraet": self._halter.stand(), "netz": None, "landkarte": None, "wikipedia": self._wiki.zustand(), "openstreetmap": self._osm.zustand()}
             try:
                 d["netz"] = (self._community.rechenstand().get("scheiben") or None) if self._community.geraet() is not None else None
-                if self._community.ist_admin():
+                if self._admin_fenster():
                     d["landkarte"] = self._community.scheiben_landkarte()
             except app_core.AppError as exc:
                 _log(self._core, f"ABGELEHNT speicher_stand: {exc.code}: {exc.detail}")
@@ -3438,8 +3445,6 @@ class Api:
 
     def quellen_stand(self) -> dict:
         def go():
-            if not self._community.ist_admin():
-                raise app_core.AppError("NUR_ADMIN", "nur für den Admin")
             q = self._quellen_sammeln()
             d = {"quellen": q, "zeilen": quellen_stand.zeilen(q), "geraete": None, "still": []}
             try:
@@ -4675,7 +4680,7 @@ class Api:
                 "rangliste": rangliste, "fehler": fehler,
                 "hinweis": " ".join(hinweis), "hinweis_saetze": hinweis,
                 "heimnetz": self._heimnetz_dict(),
-                "mitglied": geraet is not None, "admin": self._community.ist_admin(),
+                "mitglied": geraet is not None, "admin": self._admin_fenster(),
                 "not_aus": not_aus,
                 "konto": self._konto_dict(),
             }
@@ -4685,6 +4690,9 @@ class Api:
     def _konto_dict(self) -> dict | None:
         k = self._ki.einstellung().get("konto")
         return k if isinstance(k, dict) and k.get("name") else None
+
+    def _admin_fenster(self) -> bool:
+        return self._community.ist_admin() and self._konto_dict() is not None
 
     def _konto_fertig(self, id_token: str) -> None:
         a = self._community.konto_anmelden(id_token)
@@ -4759,7 +4767,7 @@ class Api:
             return {"laeuft": False}
         return self._guarded("konto_anmelden_abbrechen", go, "Abgebrochen.")
 
-    def konto_abmelden(self) -> dict:
+    def konto_abmelden(self, browser: bool = True) -> dict:
         def go():
             try:
                 self._community.konto_abmelden()
@@ -4768,8 +4776,13 @@ class Api:
                     raise
             self._ki.einstellung_setzen(konto=None)
             self._platzl.trennen()
+            if browser:
+                try:
+                    webbrowser.open(self._platzl_mod.FORUM + "/?abmelden=1")
+                except Exception as exc:
+                    _log(self._core, f"INFO browser nicht geöffnet: {type(exc).__name__}")
             return {"konto": None}
-        return self._guarded("konto_abmelden", go, "Abgemeldet. Dieses Gerät gehört zu keinem Konto mehr; Credits bleiben beim Gerät.")
+        return self._guarded("konto_abmelden", go, "Abgemeldet. Der Browser meldet dich jetzt auch auf der Website, im Platzl und in der Werkstatt ab. Credits bleiben beim Gerät.")
 
     def _dateien_haken_sichtbar(self) -> bool:
         try:
@@ -5353,7 +5366,7 @@ class Api:
         except app_core.AppError as exc:
             server, st = [], community.Stand(False, 0, "Community", exc.detail)
         self._community_stand = (time.time(), st)
-        admin = self._community.ist_admin()
+        admin = self._admin_fenster()
         wo = ("Wissen für alle am Community-Server (Wikipedia und Seiten mit Erlaubnis), Websites, die du hier liest, Nachgeschautes, Ordner und Gedächtnis-Pass privat nur auf diesem PC."
               if st.erreichbar else f"Wissen für alle am Community-Server (gerade nicht erreichbar: {st.text}), Websites, die du hier liest, Nachgeschautes, Ordner und Gedächtnis-Pass privat nur auf diesem PC.")
         quellen = server + lokal + privat
@@ -5390,7 +5403,7 @@ class Api:
     def wissen_seite_lesen(self, adresse: str, fuer_alle: bool = False, grund: str = "", notiz: str = "") -> dict:
         def go():
             if fuer_alle:
-                if not self._community.ist_admin():
+                if not self._admin_fenster():
                     raise app_core.AppError("SEITE_PRIVAT", "Für alle trägt nur der Admin eine Website ein. Für dich liest KIplatz sie privat auf diesem PC.")
                 q = self._community.seite_lesen(str(adresse), grund=str(grund), notiz=str(notiz))
                 return self._wissen_dict({"neu": q, "am_server": True})
@@ -5477,7 +5490,7 @@ class Api:
         return self._guarded("wissen_meldung_erledigt", go, "Meldung erledigt.")
 
     def community_geraete(self) -> dict:
-        return self._guarded("community_geraete", lambda: {"geraete": self._community.geraete(), "admin": self._community.ist_admin()})
+        return self._guarded("community_geraete", lambda: {"geraete": self._community.geraete(), "admin": self._admin_fenster()})
 
     def community_geraet_sperren(self, kennung: str, gesperrt: bool, grund: str = "") -> dict:
         def go():
@@ -5548,6 +5561,8 @@ class Api:
         def go():
             if self._wissen.entfernen(str(kennung)):
                 return self._wissen_dict()
+            if not self._admin_fenster():
+                raise app_core.AppError("NUR_ADMIN", "Das geht nur, wenn du als Admin mit deinem KIplatz-Konto angemeldet bist.")
             self._community.entfernen(str(kennung))
             return self._wissen_dict()
         return self._guarded("wissen_entfernen", go, "Quelle entfernt.")

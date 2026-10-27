@@ -160,6 +160,7 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
     ("2026-10-27e", frozenset(), "Eine Quelle steht nur noch unter einer Antwort, wenn ihr Titel oder ihre Adresse den Gegenstand nennt (wissen.quelle_passt); die gespeicherten Antworten stimmten in der Stichprobe in der Sache, sie laufen in 7 bis 30 Tagen ab und die Vorab-Liste erneuert sie, nichts zu verwerfen"),
     ("2026-10-27g", frozenset(), "nur die Mitgliederliste des Admins in app_web; der Antwortweg ist unverändert, nichts zu verwerfen"),
     ("2026-10-27i", frozenset(), "nur das Konto im Fensterzustand von app_web (Kontomenü); der Antwortweg ist unverändert, nichts zu verwerfen"),
+    ("2026-10-27k", frozenset(), "Admin im Fenster nur mit Konto, Abmelden auch im Browser (app_web); der Antwortweg ist unverändert, nichts zu verwerfen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())

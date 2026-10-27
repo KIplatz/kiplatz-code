@@ -1,6 +1,6 @@
 {
- "pruefwert": "df173fc90421ce3fc229ad4f",
+ "pruefwert": "47b78bbe3303ff5f1563df1a",
  "mindest_bau": "2026-10-26k",
- "erneuert": "2026-10-27i",
- "grund": "2026-10-27i: nur das Konto im Fensterzustand von app_web (Kontomenü), Antwortweg unverändert"
+ "erneuert": "2026-10-27k",
+ "grund": "2026-10-27k: Admin im Fenster nur mit Konto (auch Credits- und Wissen-Anzeige), Antwortweg unverändert"
 }

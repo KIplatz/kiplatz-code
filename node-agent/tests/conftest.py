@@ -134,3 +134,13 @@ def _keine_echte_tastatur(request):
     gelesen, _ECHTE_TASTATUR[:] = list(_ECHTE_TASTATUR), []
     assert not gelesen, (f"{request.node.nodeid} liest die echte Tastatur und Maus (Leerlauf-Messung). Dem Test leerlauf_s=… oder "
                          f"_jemand_am_pc geben, sonst hängt er, solange jemand am Laptop arbeitet (14.10.2026).")
+
+
+@pytest.fixture(autouse=True)
+def _kein_echter_browser(request, monkeypatch):
+    import webbrowser
+    geoeffnet = []
+    monkeypatch.setattr(webbrowser, "open", lambda adresse, *a, **k: geoeffnet.append(str(adresse)) or True)
+    yield
+    assert not geoeffnet, (f"{request.node.nodeid} wollte einen echten Browser öffnen: {geoeffnet}. Im Test `webbrowser.open` ersetzen "
+                           f"oder `browser=False` geben.")

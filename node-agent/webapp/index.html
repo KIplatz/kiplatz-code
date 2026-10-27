@@ -3269,7 +3269,7 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
   $("#btn-konto-qr-zu").addEventListener("click", () => qrZu(""));
   $("#btn-konto-anmelden").addEventListener("click", () => { api().konto_anmelden_start().then((r) => nach(r, (s) => { zeichneKonto(s); if (kontoTimer) clearTimeout(kontoTimer); kontoTimer = setTimeout(kontoNachsehen, 1500); })); });
   $("#btn-konto-abbrechen").addEventListener("click", () => { api().konto_anmelden_abbrechen().then((r) => nach(r, () => { if (kontoTimer) clearTimeout(kontoTimer); zeichneKonto({ konto: null, laeuft: false }); })); });
-  $("#btn-konto-abmelden").addEventListener("click", () => { if (!confirm("Vom KIplatz-Konto abmelden? Dieses Gerät gehört dann zu keinem Konto mehr; Credits bleiben beim Gerät.")) return; api().konto_abmelden().then((r) => nach(r, () => api().community().then((r2) => nach(r2, zeichneCommunity)))); });
+  $("#btn-konto-abmelden").addEventListener("click", () => { if (!confirm("Abmelden? Dieses Gerät gehört dann zu keinem Konto mehr, und der Browser meldet dich auch auf der Website, im Platzl und in der Werkstatt ab. Credits bleiben beim Gerät.")) return; api().konto_abmelden().then((r) => nach(r, () => api().community().then((r2) => nach(r2, zeichneCommunity)))); });
 
   function zeichneRangliste(r) {
 
@@ -3673,6 +3673,8 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
   let adminBereit = false;
   function adminZeigen(an) {
     $("#nav-admin").style.display = an ? "" : "none";
+
+    if (!an && $("#page-admin").classList.contains("active")) zeige("gespraeche");
     if (!an || adminBereit) return;
     adminBereit = true;
 
