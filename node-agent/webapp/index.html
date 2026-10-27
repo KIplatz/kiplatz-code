@@ -150,13 +150,19 @@
   .konto-menu button[hidden] { display: none; }
   .konto-menu .km-text { flex: 1; min-width: 0; }
   .konto-menu kbd { font: inherit; font-size: 12px; color: var(--text2); }
-  .konto-menu .km-pfeil { color: var(--text2); font-size: 13px; transition: transform .15s; }
+  .konto-menu .km-pfeil { color: var(--text2); font-size: 15px; line-height: 1; transition: transform .15s; }
+
+  .konto-menu button { font-size: 14px; padding: 9px 10px; }
+  .konto-menu button .ico { width: 20px; display: grid; place-items: center; }
+  .konto-menu button .ico svg { width: 18px; height: 18px; }
+  .konto-menu button:hover .ico, .konto-menu [aria-expanded="true"] .ico { color: var(--text); }
+  .konto-menu [aria-expanded="true"] { background: var(--hover); }
   .konto-menu [aria-expanded="true"] .km-pfeil { transform: rotate(90deg); }
   .km-wer { padding: 8px 10px 6px; font-size: 12px; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .km-wer b { color: var(--text); font-weight: 600; }
-  .km-unter { padding: 0 0 4px 26px; }
+  .km-unter { margin: 2px 4px 6px 19px; padding: 2px 0 2px 8px; border-left: 2px solid var(--accent-line); background: var(--zebra); border-radius: 0 8px 8px 0; }
   .km-unter[hidden] { display: none; }
-  .km-unter button { padding: 6px 10px; }
+  .km-unter button { padding: 7px 10px; font-size: 14px; }
   .km-unter button[aria-checked="true"]::after { content: "✓"; margin-left: auto; color: var(--accent-dark); }
   .seitenbereich { display: flex; flex: 1; min-height: 0; min-width: 0; }
   .reiter { width: 200px; flex: none; display: flex; flex-direction: column; gap: 2px; padding: 16px 10px; border-right: 1px solid var(--border); background: var(--ground); overflow: auto; }
@@ -603,26 +609,26 @@
       
       <div class="konto-menu" id="konto-menu" role="menu" hidden>
         <div class="km-wer" id="km-wer"></div>
-        <button type="button" data-page="einstellungen"><span class="ico">⚙</span><span class="km-text">Einstellungen</span><kbd>Strg+,</kbd></button>
-        <button type="button" data-km-auf="km-sprache" aria-expanded="false"><span class="ico">◍</span><span class="km-text">Sprache</span><span class="km-pfeil">›</span></button>
+        <button type="button" data-page="einstellungen"><span class="ico"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="2.6"/><path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4"/></svg></span><span class="km-text">Einstellungen</span><kbd>Strg+,</kbd></button>
+        <button type="button" data-km-auf="km-sprache" aria-expanded="false"><span class="ico"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="7.5"/><path d="M2.5 10h15M10 2.5c2.2 2.1 3.2 4.6 3.2 7.5s-1 5.4-3.2 7.5c-2.2-2.1-3.2-4.6-3.2-7.5s1-5.4 3.2-7.5z"/></svg></span><span class="km-text">Sprache</span><span class="km-pfeil">›</span></button>
         <div class="km-unter" id="km-sprache" hidden>
           <button type="button" data-km-sprache="auto">Wie Windows</button><button type="button" data-km-sprache="de" translate="no">Deutsch</button><button type="button" data-km-sprache="en" translate="no">English</button>
         </div>
-        <button type="button" data-km-auf="km-hilfe" aria-expanded="false"><span class="ico">?</span><span class="km-text">Hilfe</span><span class="km-pfeil">›</span></button>
+        <button type="button" data-km-auf="km-hilfe" aria-expanded="false"><span class="ico"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="7.5"/><path d="M7.7 7.6a2.4 2.4 0 0 1 4.6.9c0 1.6-2.3 2-2.3 3.4"/><path d="M10 14.4v.1"/></svg></span><span class="km-text">Hilfe</span><span class="km-pfeil">›</span></button>
         <div class="km-unter" id="km-hilfe" hidden>
           <button type="button" data-tun="update">Nach Update suchen</button><button type="button" data-tun="fehler">Fehler melden</button><button type="button" data-tun="hausordnung">Platzordnung</button>
         </div>
         <hr>
-        <button type="button" data-km-link="neuigkeiten"><span class="ico">✎</span><span class="km-text">Neuigkeiten</span><span class="km-pfeil">↗</span></button>
-        <button type="button" data-page="admin" id="nav-admin" style="display:none"><span class="ico">⚑</span><span class="km-text">Admin</span></button>
-        <button type="button" data-km-auf="km-mehr" aria-expanded="false"><span class="ico">ⓘ</span><span class="km-text">Mehr erfahren</span><span class="km-pfeil">›</span></button>
+        <button type="button" data-km-link="neuigkeiten"><span class="ico"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5v3h2.5l5 3.5v-10l-5 3.5z"/><path d="M14 7.5a3.5 3.5 0 0 1 0 5"/></svg></span><span class="km-text">Neuigkeiten</span><span class="km-pfeil">↗</span></button>
+        <button type="button" data-page="admin" id="nav-admin" style="display:none"><span class="ico"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2.5l6 2.3v4.6c0 3.8-2.6 6.6-6 8.1-3.4-1.5-6-4.3-6-8.1V4.8z"/></svg></span><span class="km-text">Admin</span></button>
+        <button type="button" data-km-auf="km-mehr" aria-expanded="false"><span class="ico"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v5M10 6.2v.1"/></svg></span><span class="km-text">Mehr erfahren</span><span class="km-pfeil">›</span></button>
         <div class="km-unter" id="km-mehr" hidden>
           <button type="button" data-page="ueber">Über KIplatz</button><button type="button" data-km-link="datenschutz">Datenschutz <span class="km-pfeil">↗</span></button>
         </div>
         <hr>
-        <button type="button" data-tun="konto-abmelden" id="km-abmelden" hidden><span class="ico">⇥</span><span class="km-text">Abmelden</span></button>
-        <button type="button" data-tun="konto-anmelden" id="km-anmelden" hidden><span class="ico">⇤</span><span class="km-text">Anmelden</span></button>
-        <button type="button" data-tun="beenden"><span class="ico">⏻</span><span class="km-text">KIplatz beenden</span><kbd>Strg+Q</kbd></button>
+        <button type="button" data-tun="konto-abmelden" id="km-abmelden" hidden><span class="ico"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3.5H4.5v13H8"/><path d="M12.5 6.5 16 10l-3.5 3.5M16 10H7.5"/></svg></span><span class="km-text">Abmelden</span></button>
+        <button type="button" data-tun="konto-anmelden" id="km-anmelden" hidden><span class="ico"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5h3.5v13H12"/><path d="M8.5 6.5 12 10l-3.5 3.5M12 10H3.5"/></svg></span><span class="km-text">Anmelden</span></button>
+        <button type="button" data-tun="beenden"><span class="ico"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2.8v6.4"/><path d="M6 5.3a6 6 0 1 0 8 0"/></svg></span><span class="km-text">KIplatz beenden</span><kbd>Strg+Q</kbd></button>
       </div>
     </div>
   </aside>

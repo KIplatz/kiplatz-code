@@ -14,6 +14,9 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-10-27j": [
+        "Die Symbole im Menü links unten sind größer, und ein aufgeklapptes Untermenü hebt sich ab, auch im dunklen Fenster.",
+    ],
     "2026-10-27i": [
         "Links unten im Programm zeigt das Menü jetzt, mit welchem Konto du angemeldet bist, und du meldest dich dort ab oder an. Dazu kommen Sprache, Hilfe, Neuigkeiten und Datenschutz, wie man es von anderen Programmen kennt.",
     ],
