@@ -42,20 +42,37 @@ def pruefwert() -> str:
     return h.hexdigest()[:24]
 
 
-def test_der_antwortweg_hat_eine_entscheidung_zu_mindest_bau():
+def test_der_antwortweg_hat_eine_entscheidung():
     stand = json.loads(STAND.read_text(encoding="utf-8"))
     assert stand["mindest_bau"] == ab.MINDEST_BAU, "antwortweg_stand.json nennt einen anderen MINDEST_BAU; mit --nachziehen festhalten"
+    assert stand.get("erneuert") == ab.ERNEUERT[-1][0], "antwortweg_stand.json nennt einen anderen letzten Eintrag in ERNEUERT; mit --nachziehen festhalten"
     assert pruefwert() == stand["pruefwert"], (
-        "Der Code des Antwortwegs hat sich geändert (" + ", ".join(ANTWORTWEG) + "). Ändert dieser Bau, wie Antworten entstehen? Dann "
-        "antwortspeicher_basis.MINDEST_BAU auf diesen Bau setzen. In jedem Fall danach: python node-agent/tests/test_antwortweg_sperre_2026_10_26.py "
-        "--nachziehen \"<Bau>: <warum>\". Siehe den Kopf dieser Datei.")
+        "Der Code des Antwortwegs hat sich geändert (" + ", ".join(ANTWORTWEG) + "). Welche gespeicherten Antworten betrifft dieser Bau? "
+        "Eine Zeile in antwortspeicher_basis.ERNEUERT mit diesem Bau und den Merkmalen (leer, wenn keine). Danach: python "
+        "node-agent/tests/test_antwortweg_sperre_2026_10_26.py --nachziehen \"<Bau>: <warum>\". Siehe den Kopf dieser Datei.")
+
+
+def test_mindest_bau_bleibt_der_boden():
+    assert ab.MINDEST_BAU == "2026-10-26k", "MINDEST_BAU nicht anheben (verwirft alle Antworten); den Bau in antwortspeicher_basis.ERNEUERT eintragen"
+
+
+def test_erneuert_ist_ordentlich():
+    baue = [b for b, _m, _g in ab.ERNEUERT]
+    assert baue == sorted(baue) and len(set(baue)) == len(baue) and all(b > ab.MINDEST_BAU for b in baue)
+    for b, m, grund in ab.ERNEUERT:
+        assert isinstance(m, frozenset) and m <= ab.MERKMALE, f"{b}: unbekanntes Merkmal {sorted(m - ab.MERKMALE)}"
+        assert len(grund.strip()) >= 20, f"{b}: der Grund fehlt"
 
 
 if __name__ == "__main__":
     if len(sys.argv) == 3 and sys.argv[1] == "--nachziehen" and sys.argv[2].strip():
-        STAND.write_text(json.dumps({"pruefwert": pruefwert(), "mindest_bau": ab.MINDEST_BAU, "grund": sys.argv[2].strip()}, ensure_ascii=False, indent=1)
-                         + "\n", encoding="utf-8", newline="\n")
-        print("nachgezogen:", ab.MINDEST_BAU)
+        import app_core
+        if ab.ERNEUERT[-1][0] != app_core.APP_BUILD:
+            print(f"Zuerst eine Zeile für Bau {app_core.APP_BUILD} in antwortspeicher_basis.ERNEUERT (welche Antworten betrifft er, leer wenn keine).")
+            raise SystemExit(2)
+        STAND.write_text(json.dumps({"pruefwert": pruefwert(), "mindest_bau": ab.MINDEST_BAU, "erneuert": ab.ERNEUERT[-1][0], "grund": sys.argv[2].strip()},
+                                    ensure_ascii=False, indent=1) + "\n", encoding="utf-8", newline="\n")
+        print("nachgezogen:", ab.ERNEUERT[-1][0])
     else:
         print(__doc__)
         raise SystemExit(2)

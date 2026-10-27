@@ -14,6 +14,11 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-10-27c": [
+        "Die PCs der Community beantworten jetzt nebenbei Wissensfragen im Voraus, die sich nicht ändern, etwa wer Mozart war oder wie hoch der Großglockner ist, aus aller Welt und auf Deutsch und Englisch. Ein zweiter PC liest die Quellen selbst nach und prüft jede Antwort, erst dann gilt sie für alle. Fragst du so etwas, kommt die Antwort danach sofort.",
+        "Ein Update von KIplatz verwirft die gesammelten Antworten nicht mehr alle auf einmal. Neu erarbeitet wird nur, was das Update wirklich betrifft.",
+        "Auch englische Fragen findet KIplatz jetzt in den gesammelten Antworten, egal ob du „Who is“ oder „Who was“ fragst. Fragen nach Wetter, Preisen oder nach dir selbst kommen nie aus diesem Speicher, auf Englisch genauso wie auf Deutsch.",
+    ],
     "2026-10-27b": [
         "„Meine Fragen helfen beim Lernen“ ist jetzt ab Werk aus. KIplatz lernt nur aus allgemeinen Wissensfragen von Mitgliedern, die den Haken selbst setzen, und was früher automatisch in die Lernliste kam, zählt nicht mehr.",
         "Fragst du KIplatz, wie es lernt, wie klug es ist oder was es nicht kann, antwortet es jetzt aus seiner eigenen Beschreibung, statt etwas über sich zu erfinden.",
@@ -1274,9 +1279,9 @@ ZURUECKGEHALTEN: dict[str, list[str]] = {
 
 KURZ_JE_TAG: dict[str, list[str]] = {
     "2026-10-27": [
+        "Die PCs der Community beantworten Wissensfragen jetzt im Voraus, ein zweiter PC prüft jede Antwort",
         "„Meine Fragen helfen beim Lernen“ ist ab Werk aus, nur wer den Haken selbst setzt, hilft mit",
         "Fragst du KIplatz nach sich selbst, antwortet es aus seiner eigenen Beschreibung und erfindet nichts",
-        "Eine lange Antwort endet jetzt beim letzten ganzen Satz, nicht mehr mitten bei einem Datum",
     ],
     "2026-10-26": [
         "Ob ein Tag ein Feiertag ist, sagt KIplatz jetzt für viele Länder, auch wenn er nur regional gilt",
@@ -1395,6 +1400,10 @@ KURZ_JE_TAG: dict[str, list[str]] = {
 
 
 GESCHICHTE_JE_TAG: dict[str, dict[str, str]] = {
+    "2026-10-27": {
+        "haken": "Frag KIplatz „Wer war Hulk Hogan?“, und die Antwort kommt sofort, sobald die PCs der Community sie im Voraus erarbeitet haben.",
+        "text": "Das machen sie nebenbei, für fast 3 000 Fragen aus aller Welt, die sich nicht ändern. Ein zweiter PC liest die Quellen selbst nach, bevor eine Antwort für alle gilt. Und ein Update wirft die gesammelten Antworten nicht mehr weg.",
+    },
     "2026-10-26": {
         "haken": "Frag KIplatz ab heute „Who was Mozart?“, und die Antwort kommt sofort auf Englisch.",
         "text": "Das spart Zeit. Und auf unserer Website kommen Fragen jetzt als erste dran, und du siehst gleich, woran der PC gerade für dich arbeitet.",

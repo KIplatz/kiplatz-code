@@ -1,5 +1,6 @@
 {
- "pruefwert": "e30f1147af75ce76bd780680",
+ "pruefwert": "45ccafde1dbb9232fa9f089c",
  "mindest_bau": "2026-10-26k",
- "grund": "27b: Selbstauskunft erkennt Fragen an „du“ über das eigene Wesen (nur Quelle, kein fester Text); MINDEST_BAU bleibt 26k, Anheben würde den ganzen Antwort-Speicher leeren"
+ "erneuert": "2026-10-27c",
+ "grund": "27c: Vorab-Fragen (app_web._vorab_auftrag, vorab_gegenpruefen mit eigener Suche des Prüfers, Prüfsuche auch in den Phasen vorab und vorab_prueft); Antworten für Mitglieder entstehen wie bisher, ERNEUERT ohne Merkmal"
 }

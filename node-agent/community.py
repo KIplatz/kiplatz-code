@@ -625,8 +625,9 @@ class Community:
         self._anfrage("/admin-schluessel-bestaetigen", {}, mit_schluessel=True)
 
     def auftrag_holen(self, *, pruefen: bool = False, antworten: bool = False, leistung: dict | None = None, vertiefen: bool = False, speicher: dict | None = None, stand: str = "",
-                      warten_s: float = 0.0, nur_fragen: bool = False) -> dict | None:
-        flags = [f for f, an in (("pruefen=1", pruefen), ("antworten=1", antworten), ("vertiefen=1", vertiefen), ("nur_fragen=1", nur_fragen)) if an]
+                      warten_s: float = 0.0, nur_fragen: bool = False, vorab: bool = False) -> dict | None:
+        flags = [f for f, an in (("pruefen=1", pruefen), ("antworten=1", antworten), ("vertiefen=1", vertiefen), ("nur_fragen=1", nur_fragen),
+                                 ("vorab=1", vorab and not nur_fragen)) if an]
         if leistung:
             werte = {"modell": str(leistung.get("modell") or "")[:60]}
             if leistung.get("geschwister"):
@@ -1071,6 +1072,13 @@ class Community:
     def vertiefung_urteil_senden(self, auftrag: str, urteil: str, grund: str = "", *, raus: list[int] | None = None, fassung: int = 1) -> dict:
         return self._anfrage("/ergebnis", {"auftrag": auftrag, "vertiefung_urteil": urteil, "grund": grund, "raus": list(raus or []), "fassung": int(fassung)},
                              als_geraet=True, timeout=ERGEBNIS_TIMEOUT_S)
+
+    def vorab_senden(self, auftrag: str, text: str = "", lieferschein: dict | None = None, *, verzicht: str = "") -> dict:
+        inhalt = {"verzicht": str(verzicht)[:120]} if verzicht else {"text": str(text), "lieferschein": dict(lieferschein or {})}
+        return self._anfrage("/ergebnis", {"auftrag": auftrag, "vorab": inhalt}, als_geraet=True, timeout=ERGEBNIS_TIMEOUT_S)
+
+    def vorab_urteil_senden(self, auftrag: str, urteil: str) -> dict:
+        return self._anfrage("/ergebnis", {"auftrag": auftrag, "vorab_urteil": urteil}, als_geraet=True, timeout=ERGEBNIS_TIMEOUT_S)
 
     def ergebnis_senden(self, auftrag: str, modell: str, ergebnisse: list[dict], pruefsumme: str) -> dict:
         return self._anfrage("/ergebnis", {"auftrag": auftrag, "modell": modell, "ergebnisse": ergebnisse, "pruefsumme": pruefsumme},

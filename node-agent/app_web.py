@@ -796,6 +796,7 @@ class Api:
                                                             vertiefen=self._vertiefen, vertiefen_pruefen=self._vertiefen_pruefen,
                                                             vorwaermen=self._vorwaermen_lauf,
                                                             pruefstand=self._pruefstand_lauf,
+                                                            vorab=self._vorab_auftrag, vorab_frei=self._vorab_frei,
                                                             karte_vergeben=lambda: self._ki.gesperrt if self._kurztest_laeuft() else "",
                                                             modell_name=lambda: self._ki.wahl.modell.name if (self._ki.wahl and self._ki.quelle() == "lokal"
                                                                                                               and self._ki.ordner.modell_da(self._ki.wahl.modell)) else "",
@@ -1631,13 +1632,79 @@ class Api:
             self._ki.einstellung_setzen(pruefrunden={"tag": datetime.now().strftime("%Y-%m-%d"), "n": self._pruefrunden_heute() + 1})
         return b
 
+
+    def _vorab_frei(self) -> bool:
+        if self._karte_fremd():
+            return False
+        try:
+            if self._pruefen_pausiert():
+                return True
+            if self._community.ist_admin():
+                return not (self.pruefstand_an() and self._pruefrunden_heute() < pruefstand.DURCHGANG_RUNDEN
+                            and time.monotonic() >= getattr(self, "_pruefrunde_pause_bis", 0.0))
+            stufe = modell_stufe(self._ki.wahl.modell.name if self._ki.wahl else "")
+            return not (PRUEFSTAND_MITGLIEDER and stufe >= PRUEFSTAND_AB_B
+                        and pruefstand.faellig(str(self._ki.einstellung().get("pruefstand_zuletzt", "")), datetime.now()))
+        except Exception:
+            return False
+
+    def _vorab_auftrag(self, auftrag: dict) -> None:
+        kennung = str(auftrag.get("auftrag", ""))
+        if auftrag.get("art") == antwortspeicher_basis.VORAB_PRUEF_ART:
+            frage = " ".join(str(auftrag.get("frage", "")).split())[:antwortspeicher_basis.MAX_FRAGE]
+            if not hasattr(self, "_mess_suche_zuletzt"):
+                self._mess_suche_zuletzt = 0.0
+            self._mess_suchen, self._mess_suche_gemeldet, self._mess_geschont, self._mess_gewartet = 0, False, False, 0.0
+            self._mess_bremse = True
+            try:
+                gefunden = self._websuche(frage) if frage else []
+            except Exception as exc:
+                gefunden = None
+                _log(self._core, f"INFO vorab gegenprüfung zurückgegeben: die Suche kam nicht durch ({type(exc).__name__})")
+            finally:
+                self._mess_bremse = False
+            if gefunden is None:
+                self._community.vorab_urteil_senden(kennung, "verzicht")
+                return
+            urteil = vorab_gegenpruefen(str(auftrag.get("antwort", "")), auftrag.get("quellen") if isinstance(auftrag.get("quellen"), list) else [],
+                                        gefunden=gefunden)
+            self._community.vorab_urteil_senden(kennung, urteil)
+            _log(self._core, f"OK vorab gegenprüfung: {urteil}")
+            return
+        frage = " ".join(str(auftrag.get("frage", "")).split())[:antwortspeicher_basis.MAX_FRAGE]
+        vorrang = getattr(self._rechen, "vorrang", None)
+        if not frage or self._karte_fremd():
+            self._community.vorab_senden(kennung, verzicht="die Grafikkarte ist belegt" if frage else "leer")
+            return
+        self._ki_starten_blockierend()
+        if not hasattr(self, "_mess_suche_zuletzt"):
+            self._mess_suche_zuletzt = 0.0
+        self._mess_suchen, self._mess_suche_gemeldet, self._mess_geschont, self._mess_gewartet = 0, False, False, 0.0
+        self._mess_bremse = True
+        t0 = time.time()
+        try:
+            with ki_laufzeit.abbruch_bei(vorrang) if isinstance(vorrang, threading.Event) else contextlib.nullcontext():
+                text, ls = self._antwort_fuer_mitglied([{"role": "user", "content": frage}], [], "KIplatz", messen=True)
+        except app_core.AppError as exc:
+            text, ls = "", {"fehler": exc.code}
+        finally:
+            self._mess_bremse = False
+        if (isinstance(vorrang, threading.Event) and vorrang.is_set()) or getattr(self, "_mess_geschont", False) or not text:
+            grund = ("eine echte Frage kam dazwischen" if isinstance(vorrang, threading.Event) and vorrang.is_set()
+                     else "die Suche war gebremst" if getattr(self, "_mess_geschont", False) else str(ls.get("fehler") or "keine Antwort"))
+            self._community.vorab_senden(kennung, verzicht=grund)
+            _log(self._core, f"INFO vorab zurückgegeben: {grund}")
+            return
+        r = self._community.vorab_senden(kennung, text, ls)
+        _log(self._core, f"OK vorab beantwortet in {time.time() - t0:.0f} s: {'wartet auf die Gegenprüfung' if r.get('angenommen') else 'taugte nicht für den Speicher'}")
+
     def _pruefrunde_fehlschlag(self, grund: str) -> None:
         self._pruefrunde_pause_bis = time.monotonic() + PRUEFRUNDE_NACH_FEHLER_S
         _log(self._core, f"INFO pruefstand: {grund}; die nächste Prüfrunde frühestens in {PRUEFRUNDE_NACH_FEHLER_S // 60} Minuten")
 
     def _websuche(self, frage: str, **kw) -> list[dict]:
         vorrang = getattr(self._rechen, "vorrang", None)
-        pruef = (getattr(self, "_mess_bremse", False) and getattr(self._rechen, "phase", "") == "prueft_selbst"
+        pruef = (getattr(self, "_mess_bremse", False) and getattr(self._rechen, "phase", "") in ("prueft_selbst", "vorab", "vorab_prueft")
                  and not (isinstance(vorrang, threading.Event) and vorrang.is_set()))
         if pruef:
             try:
@@ -5893,6 +5960,42 @@ def gegenprobe_satz(satz: str) -> str:
 def notiz_zusammen(vorne: str, hinten: str) -> str:
     hinten = hinten[:300]
     return vorne[:max(0, pruefstand.NOTIZ_MAX - len(hinten))] + hinten
+
+
+VORAB_QUELLEN_MAX = 6
+
+
+def _wirt(adresse: str) -> str:
+    import urllib.parse
+    try:
+        h = (urllib.parse.urlsplit(str(adresse or "")).hostname or "").lower()
+    except ValueError:
+        return ""
+    return h[4:] if h.startswith("www.") else h
+
+
+def vorab_gegenpruefen(antwort: str, quellen: list, *, lesen=None, gefunden: list | None = None) -> str:
+    if gefunden is not None:
+        bekannt = {_wirt(t.get("adresse")) for t in gefunden if isinstance(t, dict)} - {""}
+        quellen = [q for q in quellen if isinstance(q, dict) and _wirt(q.get("adresse")) in bekannt]
+    lesen = lesen or (lambda adresse: wissen.seite_holen(adresse)[2])
+    auszuege: list[tuple[int, str]] = []
+    for q in quellen[:VORAB_QUELLEN_MAX]:
+        adresse = str((q or {}).get("adresse") or "") if isinstance(q, dict) else ""
+        if not adresse.startswith(("https://", "http://")):
+            continue
+        try:
+            text = lesen(adresse)
+        except Exception:
+            continue
+        for teil in wissen.abschnitte(str(text or "")):
+            auszuege.append((len(auszuege) + 1, teil))
+    if not auszuege:
+        return "unklar"
+    pr = pruefung.pruefen(antwort, auszuege)
+    if pr.rot or pr.widersprueche or pr.gruen == 0 or pr.gruen < pr.gelb:
+        return "falsch"
+    return "ok"
 
 
 def mess_bericht(eintrag: dict) -> dict:

@@ -14,6 +14,7 @@ _HERE = Path(__file__).resolve().parent
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
+import antwortspeicher_basis
 import app_core
 import community
 import credits
@@ -60,6 +61,8 @@ TEXTE = {
     "vorwaermt": "Holt Wetter und Schlagzeilen für alle Mitglieder vor (einmal am Morgen).",
     "prueft_selbst": "Prüfstand: stellt KIplatz eine Prüfrunde, solange die Grafikkarte sonst frei ist.",
     "trainiert": "Trainiert KIplatz. Fragen beantworten so lange andere PCs.",
+    "vorab": "Beantwortet eine Wissensfrage im Voraus, damit KIplatz sie künftig sofort weiß.",
+    "vorab_prueft": "Prüft die Antwort eines anderen PCs gegen ihre Quellen, bevor sie für alle gilt.",
     "antwortet": "Beantwortet eine Frage von {fuer}.",
     "bereit": "Bereit, KIplatz ist geladen. Gerade fragt niemand.",
     "fehler": "Gerade geht es nicht: {text} Nächster Versuch in einer Minute.",
@@ -74,7 +77,8 @@ WACHE_WARTEN_S = 20
 MITGLIED_NACHLAUF_S = 10
 KARTE_NACHLAUF_S = 2
 TIPPEN_HALTEN_S = 60
-HINTERGRUND_ARTEN = (verteiler.PRUEF_ART, verteiler.VERTIEF_ART, verteiler.VERTIEF_PRUEF_ART)
+HINTERGRUND_ARTEN = (verteiler.PRUEF_ART, verteiler.VERTIEF_ART, verteiler.VERTIEF_PRUEF_ART,
+                     antwortspeicher_basis.VORAB_ART, antwortspeicher_basis.VORAB_PRUEF_ART)
 
 
 def fehler_warten_s(code: str, n: int) -> float:
@@ -121,7 +125,7 @@ class Rechenarbeit:
                  leerlauf_s=None, schlafen=None, protokoll=None, urteil=None, urteil_bereit=None,
                  antworten=None, ki_starten=None, ki_stoppen=None, antworten_moeglich=None, fragen_immer=None, am_strom=None,
                  vertiefen=None, vertiefen_pruefen=None, vorwaermen=None, pruefstand=None, server_geteilt=None, jetzt=None, halter=None, themen=None, hitze_messen=None, ram_messen=None,
-                 modell_name=None, stand=None, kartenteiler=None, kopie=None, speicher_freigeben=None, karte_vergeben=None) -> None:
+                 modell_name=None, stand=None, kartenteiler=None, kopie=None, speicher_freigeben=None, karte_vergeben=None, vorab=None, vorab_frei=None) -> None:
         self._core = core
         self._gemeinschaft = gemeinschaft if callable(gemeinschaft) else (lambda: gemeinschaft)
         self._urteil = urteil
@@ -136,6 +140,8 @@ class Rechenarbeit:
         self._am_strom = am_strom or am_strom_windows
         self._vertiefen = vertiefen
         self._vertiefen_pruefen = vertiefen_pruefen
+        self._vorab = vorab
+        self._vorab_frei = vorab_frei
         self._vorwaermen = vorwaermen
         self._pruefstand = pruefstand
         self._karte_vergeben = karte_vergeben
@@ -758,8 +764,10 @@ class Rechenarbeit:
                 stand = str(self._stand() or "")
             except Exception as exc:
                 self._log(f"FEHLER stand: {type(exc).__name__}")
+        kann_vorab = self._vorab is not None and (kann_pruefen or kann_vertiefen) and self._vorab_ok()
         auftrag = self._community.auftrag_holen(pruefen=kann_pruefen, antworten=kann_antworten, leistung=leistung, vertiefen=kann_vertiefen, speicher=speicher,
-                                                warten_s=self.warten_arbeit_s if kann_antworten else 0.0, **({"stand": stand} if stand else {}))
+                                                warten_s=self.warten_arbeit_s if kann_antworten else 0.0, **({"stand": stand} if stand else {}),
+                                                **({"vorab": True} if kann_vorab else {}))
         if self._halt.is_set():
             if auftrag is not None and auftrag.get("art") == vermittlung_basis.ART:
                 self._frage_zurueck(auftrag, "das Gerät wurde gerade angehalten")
@@ -824,6 +832,13 @@ class Rechenarbeit:
             return
         if auftrag is not None and auftrag.get("art") in (verteiler.VERTIEF_ART, verteiler.VERTIEF_PRUEF_ART):
             self._vertiefen_auftrag(auftrag)
+            return
+        if auftrag is not None and auftrag.get("art") in (antwortspeicher_basis.VORAB_ART, antwortspeicher_basis.VORAB_PRUEF_ART) and self._vorab is not None:
+            self.phase, self.meldung, self.auftrag_n = ("vorab" if auftrag["art"] == antwortspeicher_basis.VORAB_ART else "vorab_prueft"), "", 1
+            try:
+                self._vorab(auftrag)
+            finally:
+                self.auftrag_n = 0
             return
         if auftrag is not None and auftrag.get("art") in (scheiben.HALTEN_ART, scheiben.LIEFERN_ART):
             if self._halter is not None:
@@ -1077,6 +1092,12 @@ class Rechenarbeit:
                                          was="Abschnitt vertieft: Zusammenfassung und Fragen geschrieben" if art == verteiler.VERTIEF_ART else "Vertiefung eines anderen Geräts geprüft")
         self.server_stand = {"geraet": r.get("geraet")} if r.get("geraet") else self.server_stand
         self.auftrag_n = 0
+
+    def _vorab_ok(self) -> bool:
+        try:
+            return bool(self._vorab_frei()) if self._vorab_frei is not None else True
+        except Exception:
+            return False
 
     def _leistung(self) -> dict:
         return {"warm": bool(self._urteil_bereit()), "tempo": self._tempo(), "modell": self._modell(), "kopie": bool(self._kopie())}

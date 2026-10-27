@@ -11,7 +11,7 @@ import zlib
 MIN_ANTWORT, MAX_ANTWORT = 20, 4000
 
 
-FORMAT = "2"
+FORMAT = "3"
 
 
 MAX_FRAGE = 200
@@ -25,15 +25,20 @@ AB_STUFE = 8.0
 
 _FUELL = frozenset("""hat haben hatte hatten der die das den dem des ein eine einer eines einen einem ist sind war waren es gibt
 bitte mal denn eigentlich ungefaehr zirka circa ca etwa so von in im am kannst koenntest du sag sage sagen weisst
-wie wieviel""".split())
+wie wieviel
+is are were be been the a an of to do does did please""".split())
+_EN_FRAGE = frozenset("who what when where which how why".split())
 
 
 _ZEIT = frozenset("""heute morgen gestern uebermorgen jetzt aktuell aktuelle aktuellen derzeit momentan gerade neueste neuesten neuester
 letzte letzten letzter naechste naechsten kommende kommenden diese dieses diesen dieser woche wochenende monat jahr wetter news nachrichten
-schlagzeilen live preis preise kurs kurse uhr uhrzeit datum spiel spiele tabelle ergebnis ergebnisse stand""".split())
+schlagzeilen live preis preise kurs kurse uhr uhrzeit datum spiel spiele tabelle ergebnis ergebnisse stand
+today tomorrow yesterday tonight now current currently latest recent recently newest next last upcoming this week weekend month year weather
+headlines price prices rate rates time date game games match score scores result results standings""".split())
 
 
-_PERSON = frozenset("""ich mein meine meinen meinem meiner meines mich mir wir unser unsere unseren unserem uns dein deine deinen deinem dich dir""".split())
+_PERSON = frozenset("""ich mein meine meinen meinem meiner meines mich mir wir unser unsere unseren unserem uns dein deine deinen deinem dich dir
+i me my mine we our ours us you your yours""".split())
 
 
 _NIE = _ZEIT | _PERSON
@@ -43,8 +48,12 @@ _WANDEL = ("kost", "preis", "gebuehr", "maut", "vignett", "tarif", "ticket", "ei
            "frist", "tempolimit", "hoechstgeschwindigkeit", "vorgeschrieb", "gesetz", "mindestalter", "pickerl")
 
 
+_WANDEL_EN = frozenset("""cost costs price prices fee fees toll tolls fare fares tariff tariffs ticket tickets admission mandatory required allowed
+legal illegal banned ban law laws rule rules penalty penalties fine fines deadline deadlines limit limits minimum""".split())
+
+
 def wandelt_sich(woerter) -> bool:
-    return any((x.startswith(s) if s == "kost" else s in x) for x in woerter for s in _WANDEL)
+    return any((x.startswith(s) if s == "kost" else s in x) for x in woerter for s in _WANDEL) or any(x in _WANDEL_EN for x in woerter)
 
 
 _GLEICH = {"einwohnerzahl": "einwohner", "bewohner": "einwohner", "einwohnern": "einwohner", "groesse": "gross", "groess": "gross",
@@ -80,7 +89,12 @@ def frage_taugt(nachrichten, *, frisch: bool = False, skill=None, zuhause=None) 
         return ""
     if any(x in _VERGLEICH for x in w):
         return ""
-    kern = sorted({_GLEICH.get(x, x) for x in w if x not in _FUELL})
+    return kern_aus(w)
+
+
+def kern_aus(w: list[str]) -> str:
+    englisch = bool(w) and w[0] in _EN_FRAGE
+    kern = sorted({_GLEICH.get(x, x) for x in w if x not in _FUELL and not (englisch and x == "was")})
     return " ".join(kern) if len(kern) >= 2 else ""
 
 
@@ -137,6 +151,44 @@ def vor_mindest_bau(lieferschein) -> bool:
     return str(ls.get("bau") or "") < MINDEST_BAU
 
 
+MERKMALE = frozenset(("alle", "de", "en", "suche", "ohne_suche", "zahl", "quelle:seite", "quelle:suche", "quelle:ortswissen", "quelle:berechnet",
+                      "quelle:abgefragt", "quelle:berichtigung", "quelle:wikipedia", "quelle:stelle"))
+ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
+    ("2026-10-27c", frozenset(), "Vorab-Fragen der Community: Antworten entstehen auf demselben Weg wie für Mitglieder, nichts zu verwerfen"),
+)
+
+_EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())
+_DE_WORT = frozenset("der die das ist sind war und von in zu mit für den dem des ein eine einer wurde hat haben im auf".split())
+
+
+def sprache_der_antwort(text) -> str:
+    w = re.findall(r"[a-zäöüß]+", str(text or "").lower())
+    return "en" if sum(x in _EN_WORT for x in w) > sum(x in _DE_WORT for x in w) else "de"
+
+
+def merkmale(lieferschein, text=None) -> frozenset:
+    ls = lieferschein if isinstance(lieferschein, dict) else {}
+    st = ls.get("stand") if isinstance(ls.get("stand"), dict) else {}
+    arten = {str(q.get("art") or "") for q in (ls.get("quellen_liste") or []) if isinstance(q, dict)}
+    gesucht = st.get("art") == "suche" or str(ls.get("gemacht") or "").startswith("nachgeschaut") or "suche" in arten
+    m = {"alle", sprache_der_antwort(text), "suche" if gesucht else "ohne_suche"} | {f"quelle:{a}" for a in arten if a}
+    if re.search(r"\d", str(text or "")):
+        m.add("zahl")
+    return frozenset(m)
+
+
+def erneuert_von(lieferschein, text=None) -> str:
+    ls = lieferschein if isinstance(lieferschein, dict) else {}
+    bau = str(ls.get("bau") or "")
+    m = None
+    for b, betrifft, _grund in ERNEUERT:
+        if bau < b and betrifft:
+            m = merkmale(ls, text) if m is None else m
+            if betrifft & m:
+                return b
+    return ""
+
+
 _SCHLUSS_ANGEBOT = re.compile(
     r"^(?:"
     r"(?:gibt es|hast du|haben sie)\b[^?]*\b(?:noch|sonst|weitere)\b[^?]*\?"
@@ -176,7 +228,8 @@ def fremde_fassung(lieferschein) -> bool:
 
 
 AUSLIEFERN_STAND = (f"2026-10-20 schlussangebot, 2026-10-26 weiss-nicht-en, {MINDEST_BAU}, fassung "
-                    + ",".join(f"{n}={f or 'grund'}" for n, f in sorted(_fassungen().items())))
+                    + ",".join(f"{n}={f or 'grund'}" for n, f in sorted(_fassungen().items()))
+                    + "".join(f", {b}:{'+'.join(sorted(m))}" for b, m, _g in ERNEUERT if m))
 
 
 def schlussangebot(text) -> bool:
@@ -184,8 +237,8 @@ def schlussangebot(text) -> bool:
 
 
 def ausliefern_ok(lieferschein, text=None) -> bool:
-    return (not nachgebessert(lieferschein) and not vor_mindest_bau(lieferschein) and not fremde_fassung(lieferschein)
-            and not schlussangebot(text) and not (isinstance(text, str) and _WEISS_NICHT.search(text)))
+    return (not nachgebessert(lieferschein) and not vor_mindest_bau(lieferschein) and not erneuert_von(lieferschein, text)
+            and not fremde_fassung(lieferschein) and not schlussangebot(text) and not (isinstance(text, str) and _WEISS_NICHT.search(text)))
 
 
 def antwort_taugt(text: str, lieferschein) -> bool:
@@ -221,6 +274,11 @@ def stand_bis(lieferschein) -> float | None:
     except ValueError:
         return None
     return bis if bis > time.time() else None
+
+
+VORAB_ART = "vorab"
+VORAB_PRUEF_ART = "vorab_pruefen"
+VORAB_FRIST_S = 1800
 
 
 PC_FORMAT = 1
