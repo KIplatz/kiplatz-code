@@ -109,6 +109,14 @@ TEXTE: dict[str, str] = {
                  "kostenlos, ohne Werbung und ohne Konzern dahinter, und Fragen über dich selbst speichert der Server nie. Am besten "
                  "probierst du es aus: Frag mich etwas, das du wirklich wissen willst. Und je mehr Mitglieder mitmachen, desto mehr weiß ich.",
     "steckbrief": STECKBRIEF,
+    "lernen": "KIplatz ist ein Programm mit einem Sprachmodell, keine Person: Es hat kein Bewusstsein und keine Gefühle. Mit deinen "
+              "Gesprächen wird keine KI trainiert. Besser wird KIplatz, weil Mitglieder Antworten berichtigen: unter einer Antwort Daumen "
+              "runter tippen und die richtige Fassung dazuschreiben; dein PC hält sich sofort daran, und sobald ein zweites Gerät sie "
+              "geprüft hat, gilt sie für alle. Dazu bereiten die PCs der Community in freien Minuten Wissen auf und prüfen sich dabei "
+              "gegenseitig, und geprüfte Antworten auf allgemeine Wissensfragen sind beim nächsten Mal sofort da. Nur wer den Haken "
+              "„Meine Fragen helfen beim Lernen“ selbst setzt, hilft mit seinen allgemeinen Wissensfragen mit; ab Werk ist er aus. Was "
+              "aktuell ist, schaut KIplatz im Internet nach, einen festen Wissensstand, an dem es aufhört, gibt es darum nicht. KIplatz "
+              "schreibt auch Texte, Briefe und Bewerbungen, wenn du darum bittest.",
     "seit": "KIplatz gibt es seit September 2026: eine KI ohne Rechenzentrum, die auf den Computern der Mitglieder läuft und die die Community seitdem gemeinsam weiterbaut.",
     "merken": "Innerhalb dieses Gesprächs behalte ich, was du mir sagst. Über das Gespräch hinaus kann ich mir nichts merken. "
               "Soll KIplatz etwas dauerhaft richtig wissen, geht das im Programm am PC: unter einer Antwort auf Daumen runter tippen "
@@ -148,19 +156,36 @@ def feste_antwort(nachrichten: list[dict]) -> str | None:
 _BETRIFFT = re.compile(r"\b(kiplatz|ki-platz|ki platz|dezentrale?[rns]? ki\b|dezentrale?[rns]? künstliche|diese[rs]? (programm|ki|community|chatbot)|"
                        r"eure[rns]? (ki|programm|community|server)|bei euch|ihr (seid|macht|speichert|sammelt)|(speichert|sammelt|seht|lest|kennt) ihr\b|dein(e|em|en)? (server|community|mitglieder))", re.I)
 
+_WESEN = re.compile(
+    r"\b(?:(?:lernst|lernt) du|du (?:\w+ ){0,2}(?:lernst|dazulernst)|kannst du (?:\w+ ){0,2}(?:lernen|dazulernen|fühlen|denken)|"
+    r"wie (?:kann|könnte|lässt sich|kann man|könnte man|soll man) (?:man )?dich (?:\w+ ){0,3}(?:trainier\w*|verbesser\w*|beibring\w*|schlauer|klüger)|"
+    r"(?:wer|was|womit|wie) (?:hat|wurdest|bist|wirst) (?:dich |du )?(?:\w+ ){0,2}trainiert|(?:wirst|wurdest) du (?:\w+ ){0,2}trainiert|"
+    r"wie (?:intelligent|schlau|klug|gut|dumm) bist du|(?:bist|wirst) du (?:\w+ ){0,2}(?:intelligent|schlau|klug|dumm|lernfähig|besser|klüger|schlauer)\b(?! als)|"
+    r"warum (?:kannst|darfst|machst|weißt) du (?:das|dies|es|so etwas|sowas)? ?nicht|was kannst du nicht|"
+    r"dein(?:e|en)? (?:grenzen|schwächen|stärken|trainingsdaten|training|wissensstand|trainingsstand|gedächtnis)|"
+    r"hast du (?:ein |eine |einen )?(?:bewusstsein|gefühle|gedächtnis|eigene meinung|meinung)|"
+    r"do you (?:learn|remember|have feelings|have (?:a )?consciousness)|can you (?:learn|feel|think)\b|"
+    r"how (?:can|do|could) (?:i|we|one|you) (?:train|improve|teach) you|how (?:smart|intelligent|clever|good) are you|"
+    r"are you (?:\w+ ){0,1}(?:smart|intelligent|conscious|sentient|learning)|who (?:trained|made|built) you|"
+    r"why (?:can't|can not|cannot|won't|don't) you|what can't you do|your (?:limits|limitations|weaknesses|strengths|training(?: data)?|knowledge cutoff))\b",
+    re.I)
+
 ANWEISUNG = ("Zu KIplatz selbst gilt allein die Quelle „" + QUELLE["titel"] + "“: Nenne keine anderen Orte, Personen, Preise oder Aufgaben des Servers "
              "als dort stehen. Der Server in Wien vermittelt und antwortet nicht selbst. Erfinde keine Regeln darüber, was KIplatz speichert, "
-             "sich merkt oder darf. Steht etwas nicht in dieser Quelle, sag das.")
+             "sich merkt, lernt oder darf, nenne keinen Trainingsstand und kein Datum, bis zu dem du etwas weißt, und beschreib dich nicht kleiner, "
+             "als die Quelle sagt. Steht etwas nicht in dieser Quelle, sag das.")
 
 
 def betrifft(frage: str) -> bool:
-    return bool(_BETRIFFT.search(" ".join((frage or "").split())))
+    f = " ".join((frage or "").split())
+    return bool(_BETRIFFT.search(f) or _WESEN.search(f))
 
 
 def treffer():
     import wissen
     q = wissen.Quelle("selbstauskunft", QUELLE["art"], QUELLE["titel"], QUELLE["adresse"], wissen._jetzt(), sum(len(t) for t in TEXTE.values()))
-    return [wissen.Treffer(q, TEXTE[k], 9.0 - i * 0.1) for i, k in enumerate(("was", "funktion", "steckbrief", "koennen", "wer", "kosten", "credits", "platzordnung"))]
+    return [wissen.Treffer(q, TEXTE[k], 9.0 - i * 0.1)
+            for i, k in enumerate(("was", "funktion", "steckbrief", "koennen", "lernen", "wer", "kosten", "credits", "platzordnung"))]
 
 
 __all__ = ["art", "antwort", "feste_antwort", "betrifft", "treffer", "ANWEISUNG", "TEXTE", "QUELLE"]

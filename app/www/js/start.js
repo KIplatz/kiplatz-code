@@ -1233,8 +1233,8 @@ function kontenBlattAuf() {
 async function lernenZeichnen() {
   const s = $("#e-lernen");
   s.disabled = true; $("#e-lernen-hinweis").hidden = true;
-  if (!z.geraet?.konto) { s.checked = true; $("#e-lernen-text").textContent = "Ohne KIplatz-Konto merkt sich KIplatz keine Frage, also lernt es auch nichts daraus."; return; }
-  try { const r = await holen("/lernen", { body: {}, geraet: z.geraet }); s.checked = r.an !== false; s.disabled = false; }
+  if (!z.geraet?.konto) { s.checked = false; $("#e-lernen-text").textContent = "Ohne KIplatz-Konto merkt sich KIplatz keine Frage, also lernt es auch nichts daraus."; return; }
+  try { const r = await holen("/lernen", { body: {}, geraet: z.geraet }); s.checked = r.an === true; s.disabled = false; }
   catch (e) { }
 }
 
@@ -2339,7 +2339,7 @@ function verdrahten() {
     try {
       const r = await holen("/lernen", { body: { an }, geraet: z.geraet });
       e.target.checked = r.an !== false;
-      h.textContent = r.an !== false ? "Danke. Deine Fragen helfen KIplatz ab jetzt beim Lernen." : "Ausgeschaltet. Deine Fragen, Daumen und Berichtigungen kommen nicht mehr in die Lernliste.";
+      h.textContent = r.an === true ? "Danke. Deine Fragen helfen KIplatz ab jetzt beim Lernen." : "Ausgeschaltet. Deine Fragen, Daumen und Berichtigungen kommen nicht mehr in die Lernliste.";
     } catch (err) { e.target.checked = !an; h.textContent = err.message; }
     e.target.disabled = false; h.hidden = false;
   };

@@ -214,7 +214,7 @@ STUECKLISTEN: dict[str, str] = {
     "mmproj-Qwen3-ASR-0.6B-Q8_0.gguf": "f542db65c955965a2fc83ddd1785f95c82d7fd284dbfda1a4d974f1983aefc62",
 }
 
-_FASSUNG = re.compile(r"-kiplatz-(\d{4}-\d{2}-\d{2})(?:-(\d+))?-", re.I)
+_FASSUNG = re.compile(r"(?:^|[-/\\])kiplatz-(?:\d+b-)?(\d{4}-\d{2}-\d{2})(?:-(\d+))?-", re.I)
 
 
 def fassung(datei: str) -> str:

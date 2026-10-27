@@ -1102,15 +1102,25 @@ class Antwort:
 
 PLATZ_REST = 96
 _KONTEXT_ZU_KLEIN = re.compile(r"request \((\d+) tokens\) exceeds the available context size \((\d+) tokens\)")
-_SATZENDE = re.compile(r"[.!?…:][\")»“]?(?=\s|$)")
 
 
 def bis_zum_letzten_satz(text: str) -> str:
+    import pruefung
     t = (text or "").rstrip()
-    ende = [m.end() for m in _SATZENDE.finditer(t)]
-    if ende and ende[-1] >= len(t) * 0.4:
-        return t[:ende[-1]].rstrip()
-    return t + " …" if t else t
+    if not t:
+        return t
+    zeilen = t.split("\n")
+    enden = [m.start() for m in pruefung._SATZ_ENDE.finditer(zeilen[-1])]
+    if enden:
+        zeilen[-1] = zeilen[-1][:enden[-1]]
+    else:
+        zeilen.pop()
+    while zeilen and (not zeilen[-1].strip() or zeilen[-1].rstrip().endswith(":")):
+        zeilen.pop()
+    rest = "\n".join(zeilen).rstrip()
+    if rest and len(rest) >= len(t) * 0.4:
+        return rest
+    return t + " …"
 
 
 VEKTOR_RESERVE = 16

@@ -64,7 +64,7 @@ def test_texte_folgen_den_regeln_der_website():
         assert "KIplatz aus KIplatz" not in text, name
         assert not re.search(r"\b(kann (ich|KIplatz) nicht|noch nicht|Testbetrieb|im Aufbau|leider)\b", text), name
         assert "—" not in text and "–" not in text, name
-        assert "Rechenzentrum" in text or name in ("koennen", "funktion", "credits", "platzordnung", "merken"), name
+        assert "Rechenzentrum" in text or name in ("koennen", "funktion", "credits", "platzordnung", "merken", "lernen"), name
         for satz in re.split(r"(?<=[.!?])\s+", text):
             assert len(satz.split()) <= 45, (name, satz)
 

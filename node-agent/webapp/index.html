@@ -866,7 +866,7 @@
           
           <div class="card"><h3>Lernen</h3>
             <label class="switch"><input type="checkbox" id="lernen-an" disabled> <span>Meine Fragen helfen beim Lernen</span></label>
-            <p class="muted small" id="lernen-text">KIplatz lernt aus allgemeinen Wissensfragen, nie wer gefragt hat und nie Persönliches. Schaltest du das aus, kommen deine Fragen, „Daumen hoch“ und Berichtigungen nicht mehr in die Lernliste. Das gilt für dein ganzes Konto, am Handy und am PC.</p></div>
+            <p class="muted small" id="lernen-text">Ab Werk aus. Nur wenn du den Haken setzt, lernt KIplatz aus deinen allgemeinen Wissensfragen, nie wer gefragt hat und nie Persönliches. Ausschalten geht jederzeit. Das gilt für dein ganzes Konto, am Handy und am PC.</p></div>
           <div class="card"><h3>Wohin dieses Programm Verbindung aufnimmt</h3>
             <p class="muted small" style="margin-top:0">Seit dem Start, live. Was hier nicht steht, verlässt deinen Rechner nicht. Eine Frage geht nur dann an einen anderen Rechner der Community, wenn er für dich antwortet, ohne Namen.</p>
             <div id="df-hosts"></div></div>
@@ -1431,7 +1431,7 @@ window.addEventListener("unhandledrejection", (e) => __fehlerZeigen(String(e.rea
 
   function zeichneLernen(l) {
     $("#lernen-an").disabled = !(l && l.konto);
-    $("#lernen-an").checked = !l || l.an !== false;
+    $("#lernen-an").checked = !!(l && l.an === true);
     if (l && !l.konto) $("#lernen-text").textContent = "Ohne KIplatz-Konto merkt sich KIplatz keine Frage, also lernt es auch nichts daraus.";
   }
   $("#lernen-an").addEventListener("change", () => api().lernen_stand($("#lernen-an").checked).then((r) => { nach(r, zeichneLernen); if (!r.ok) $("#lernen-an").checked = !$("#lernen-an").checked; }));

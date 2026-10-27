@@ -17,7 +17,7 @@ def test_betrifft_recognises_the_own_name_and_decentralised_ai():
     assert selbstauskunft.betrifft("speichert ihr meine Fragen?")
     assert not selbstauskunft.betrifft("Wie wird das Wetter morgen in Wels?")
     t = selbstauskunft.treffer()
-    assert len(t) == 8 and t[0].quelle.kennung == "selbstauskunft" and t[0].punkte > t[1].punkte and "kostenlose KI" in t[0].text
+    assert len(t) == 9 and t[0].quelle.kennung == "selbstauskunft" and t[0].punkte > t[1].punkte and "kostenlose KI" in t[0].text
 
 
 def test_the_window_puts_the_self_description_first_with_the_instruction(tmp_path):

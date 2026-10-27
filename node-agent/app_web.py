@@ -1867,6 +1867,8 @@ class Api:
                     weg, _MESSWEG.d = getattr(_MESSWEG, "d", None), None
                     anfragen = ki_laufzeit.mitschnitt_ende()
                 if ki_aus:
+                    if self._core.run_state() is not node_local_state.RunState.ACTIVE:
+                        break
                     _log(self._core, f"INFO pruefstand: die KI war bei Prüffrage {len(antworten) + 1} aus{self._ki_ende_grund()}; sie wird neu gestartet")
                     if versuch == PRUEFSTAND_VERSUCHE - 1:
                         break
@@ -1880,7 +1882,8 @@ class Api:
                     break
                 _log(self._core, "OK pruefstand: Prüffrage für eine echte Frage abgebrochen, sie wird wiederholt")
             if ki_aus:
-                ruht = "die KI ist ausgefallen"
+                ruht = ("die KI ist ausgefallen" if self._core.run_state() is node_local_state.RunState.ACTIVE
+                        else "Pause oder Programmende")
                 break
             if getattr(self, "_mess_geschont", False):
                 geschont += 1
@@ -5034,9 +5037,9 @@ class Api:
     def lernen_stand(self, an: object = None) -> dict:
         def go():
             if not self._konto_dict() or self._community.geraet() is None:
-                return {"konto": False, "an": True}
+                return {"konto": False, "an": False}
             r = self._community.lernen(None if an is None else an is True)
-            return {"konto": True, "an": r.get("an") is not False}
+            return {"konto": True, "an": r.get("an") is True}
         r = self._guarded("lernen_stand", go)
         if r["ok"] and an is not None:
             r["text"] = ("Danke. Deine Fragen helfen KIplatz ab jetzt beim Lernen." if r["daten"]["an"]

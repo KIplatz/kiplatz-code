@@ -14,6 +14,15 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-10-27b": [
+        "„Meine Fragen helfen beim Lernen“ ist jetzt ab Werk aus. KIplatz lernt nur aus allgemeinen Wissensfragen von Mitgliedern, die den Haken selbst setzen, und was früher automatisch in die Lernliste kam, zählt nicht mehr.",
+        "Fragst du KIplatz, wie es lernt, wie klug es ist oder was es nicht kann, antwortet es jetzt aus seiner eigenen Beschreibung, statt etwas über sich zu erfinden.",
+        "Auf der Startseite steht jetzt deutlich: Bei uns passiert nichts heimlich.",
+    ],
+    "2026-10-27a": [
+        "Läuft eine lange Antwort an ihre Grenze, endet sie jetzt beim letzten ganzen Satz. Vorher konnte am Schluss ein halber Satz wie „Ab 29.10.“ stehen bleiben, weil der Punkt im Datum als Satzende galt.",
+    ],
+    "2026-10-26p": [],
     "2026-10-26o": [],
     "2026-10-26n": [],
     "2026-10-26m": [
@@ -1264,6 +1273,11 @@ ZURUECKGEHALTEN: dict[str, list[str]] = {
 }
 
 KURZ_JE_TAG: dict[str, list[str]] = {
+    "2026-10-27": [
+        "„Meine Fragen helfen beim Lernen“ ist ab Werk aus, nur wer den Haken selbst setzt, hilft mit",
+        "Fragst du KIplatz nach sich selbst, antwortet es aus seiner eigenen Beschreibung und erfindet nichts",
+        "Eine lange Antwort endet jetzt beim letzten ganzen Satz, nicht mehr mitten bei einem Datum",
+    ],
     "2026-10-26": [
         "Ob ein Tag ein Feiertag ist, sagt KIplatz jetzt für viele Länder, auch wenn er nur regional gilt",
         "Fragen auf Englisch beantwortet KIplatz jetzt direkt, auch zu Österreich, ohne Umweg über eine Übersetzung",

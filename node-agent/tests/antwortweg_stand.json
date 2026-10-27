@@ -1,5 +1,5 @@
 {
- "pruefwert": "32a62bd6b1bdbd610e9e13d3",
+ "pruefwert": "e30f1147af75ce76bd780680",
  "mindest_bau": "2026-10-26k",
- "grund": "2026-10-26o: nur Mitschnitt der Anfrage im Prüfstand am Gerät mit Trainingsordner, Antworten unverändert, MINDEST_BAU bleibt 26k"
+ "grund": "27b: Selbstauskunft erkennt Fragen an „du“ über das eigene Wesen (nur Quelle, kein fester Text); MINDEST_BAU bleibt 26k, Anheben würde den ganzen Antwort-Speicher leeren"
 }
