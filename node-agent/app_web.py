@@ -3183,6 +3183,7 @@ class Api:
             "vorwaermen": vorwaermen.einstellung_lesen(self._ki.einstellung())["an"],
             "ki_auto": self.ki_auto(),
             "mitglied": self._community.geraet() is not None,
+            "konto": self._konto_dict(),
             "fragt_community": self.fragt_community(),
             "fragt_community_wahl": self._ki.einstellung().get("fragt_community"),
             "weitergeben": {"an": self._weitergeber.an(), "zeile": self._weitergeber.zeile()},

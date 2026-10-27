@@ -146,6 +146,18 @@
   .konto-menu button:hover { background: var(--hover); }
   .konto-menu button .ico { width: 18px; text-align: center; color: var(--text2); flex: none; }
   .konto-menu hr { border: 0; border-top: 1px solid var(--border); margin: 5px 6px; }
+  .konto-menu { max-height: calc(100vh - 120px); overflow-y: auto; }
+  .konto-menu button[hidden] { display: none; }
+  .konto-menu .km-text { flex: 1; min-width: 0; }
+  .konto-menu kbd { font: inherit; font-size: 12px; color: var(--text2); }
+  .konto-menu .km-pfeil { color: var(--text2); font-size: 13px; transition: transform .15s; }
+  .konto-menu [aria-expanded="true"] .km-pfeil { transform: rotate(90deg); }
+  .km-wer { padding: 8px 10px 6px; font-size: 12px; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .km-wer b { color: var(--text); font-weight: 600; }
+  .km-unter { padding: 0 0 4px 26px; }
+  .km-unter[hidden] { display: none; }
+  .km-unter button { padding: 6px 10px; }
+  .km-unter button[aria-checked="true"]::after { content: "✓"; margin-left: auto; color: var(--accent-dark); }
   .seitenbereich { display: flex; flex: 1; min-height: 0; min-width: 0; }
   .reiter { width: 200px; flex: none; display: flex; flex-direction: column; gap: 2px; padding: 16px 10px; border-right: 1px solid var(--border); background: var(--ground); overflow: auto; }
   .reiter[hidden] { display: none; }
@@ -588,11 +600,29 @@
     
     <div class="sidefoot konto-fuss">
       <button class="konto-knopf" id="konto-knopf" type="button" aria-haspopup="menu" aria-expanded="false" title="Konto, Einstellungen und mehr"><span id="geraet">…</span><span class="credits-chip" id="chip">… Credits</span><span class="pfeil">▴</span></button>
+      
       <div class="konto-menu" id="konto-menu" role="menu" hidden>
-        <button type="button" data-page="einstellungen"><span class="ico">⚙</span>Einstellungen</button>
-        <button type="button" data-page="admin" id="nav-admin" style="display:none"><span class="ico">⚑</span>Admin</button>
-        <button type="button" data-page="ueber"><span class="ico">ⓘ</span>Über KIplatz</button>
-        <hr><button type="button" data-tun="beenden"><span class="ico">⏻</span>KIplatz beenden</button>
+        <div class="km-wer" id="km-wer"></div>
+        <button type="button" data-page="einstellungen"><span class="ico">⚙</span><span class="km-text">Einstellungen</span><kbd>Strg+,</kbd></button>
+        <button type="button" data-km-auf="km-sprache" aria-expanded="false"><span class="ico">◍</span><span class="km-text">Sprache</span><span class="km-pfeil">›</span></button>
+        <div class="km-unter" id="km-sprache" hidden>
+          <button type="button" data-km-sprache="auto">Wie Windows</button><button type="button" data-km-sprache="de" translate="no">Deutsch</button><button type="button" data-km-sprache="en" translate="no">English</button>
+        </div>
+        <button type="button" data-km-auf="km-hilfe" aria-expanded="false"><span class="ico">?</span><span class="km-text">Hilfe</span><span class="km-pfeil">›</span></button>
+        <div class="km-unter" id="km-hilfe" hidden>
+          <button type="button" data-tun="update">Nach Update suchen</button><button type="button" data-tun="fehler">Fehler melden</button><button type="button" data-tun="hausordnung">Platzordnung</button>
+        </div>
+        <hr>
+        <button type="button" data-km-link="neuigkeiten"><span class="ico">✎</span><span class="km-text">Neuigkeiten</span><span class="km-pfeil">↗</span></button>
+        <button type="button" data-page="admin" id="nav-admin" style="display:none"><span class="ico">⚑</span><span class="km-text">Admin</span></button>
+        <button type="button" data-km-auf="km-mehr" aria-expanded="false"><span class="ico">ⓘ</span><span class="km-text">Mehr erfahren</span><span class="km-pfeil">›</span></button>
+        <div class="km-unter" id="km-mehr" hidden>
+          <button type="button" data-page="ueber">Über KIplatz</button><button type="button" data-km-link="datenschutz">Datenschutz <span class="km-pfeil">↗</span></button>
+        </div>
+        <hr>
+        <button type="button" data-tun="konto-abmelden" id="km-abmelden" hidden><span class="ico">⇥</span><span class="km-text">Abmelden</span></button>
+        <button type="button" data-tun="konto-anmelden" id="km-anmelden" hidden><span class="ico">⇤</span><span class="km-text">Anmelden</span></button>
+        <button type="button" data-tun="beenden"><span class="ico">⏻</span><span class="km-text">KIplatz beenden</span><kbd>Strg+Q</kbd></button>
       </div>
     </div>
   </aside>
@@ -651,7 +681,7 @@
         <div class="row wartend" id="wartend" hidden><span class="muted small">Wird gleich gesendet:</span><span class="small" id="wartend-text"></span><button class="btn klein" id="wartend-weg" type="button" title="Doch nicht senden">✕</button></div>
         
         <div class="unter-box"><label class="switch small" id="daheim-leiste" style="display:none"><input type="checkbox" id="daheim-an"> <span id="daheim-text">In meinen Dateien suchen</span></label><span class="muted small" id="sprechen-hinweis"></span></div>
-        <div class="start-anmelden" id="start-anmelden" hidden><span>Mit deinem KIplatz-Konto arbeitet dieses Gerät für die Community mit.</span><button class="btn primary" id="btn-start-anmelden" type="button">Anmelden</button></div>
+        <div class="start-anmelden" id="start-anmelden" hidden><span id="start-anmelden-text"></span><button class="btn primary" id="btn-start-anmelden" type="button">Anmelden</button></div>
         
         <div id="skill-immer-leiste" class="small" style="display:none;margin-top:6px;flex-wrap:wrap;gap:4px 16px"></div>
       </div>
@@ -1268,7 +1298,38 @@ window.addEventListener("unhandledrejection", (e) => __fehlerZeigen(String(e.rea
   $("#konto-knopf").addEventListener("click", (e) => { e.stopPropagation(); const auf = $("#konto-menu").hidden; $("#konto-menu").hidden = !auf; $("#konto-knopf").setAttribute("aria-expanded", String(auf)); });
   document.addEventListener("click", (e) => { if (!e.target.closest("#konto-menu")) kontoMenuZu(); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") kontoMenuZu(); });
-  document.querySelectorAll("#konto-menu button").forEach((b) => b.addEventListener("click", () => { kontoMenuZu(); if (b.dataset.page) zeige(b.dataset.page); else if (b.dataset.tun === "beenden") api().beenden(); }));
+
+  const KM_LINKS = { neuigkeiten: ["https://kiplatz.at/neuigkeiten/", "https://kiplatz.com/news/"], datenschutz: ["https://kiplatz.at/datenschutz/", "https://kiplatz.com/privacy/"] };
+  document.querySelectorAll("#konto-menu button").forEach((b) => b.addEventListener("click", (e) => {
+    if (b.dataset.kmAuf) {
+      e.stopPropagation();
+      const u = $("#" + b.dataset.kmAuf), auf = u.hidden;
+      document.querySelectorAll("#konto-menu .km-unter").forEach((x) => { x.hidden = true; });
+      document.querySelectorAll("#konto-menu [data-km-auf]").forEach((x) => x.setAttribute("aria-expanded", "false"));
+      u.hidden = !auf; b.setAttribute("aria-expanded", String(auf));
+      return;
+    }
+    kontoMenuZu();
+    if (b.dataset.page) zeige(b.dataset.page);
+    else if (b.dataset.kmSprache) { kiplatzSprache.setzen(b.dataset.kmSprache); $("#oberflaeche-sprache").value = b.dataset.kmSprache; }
+    else if (b.dataset.kmLink) api().link_oeffnen(KM_LINKS[b.dataset.kmLink][kiplatzSprache.aktiv() === "en" ? 1 : 0]).then((r) => { if (!r.ok) nach(r); });
+    else if (b.dataset.tun === "konto-abmelden") $("#btn-konto-abmelden").click();
+    else if (b.dataset.tun === "konto-anmelden") anmeldenStarten();
+    else if (b.dataset.tun === "beenden") api().beenden();
+    else if (b.dataset.tun) { const m = document.querySelector(`#menubar .items button[data-tun="${b.dataset.tun}"]`); if (m) m.click(); }
+  }));
+
+  function kontoMenuZeichnen() {
+    const k = Z && Z.konto, wer = $("#km-wer");
+    document.querySelectorAll("#konto-menu .km-unter").forEach((x) => { x.hidden = true; });
+    document.querySelectorAll("#konto-menu [data-km-auf]").forEach((x) => x.setAttribute("aria-expanded", "false"));
+    wer.innerHTML = k ? '<span>Angemeldet als</span> <b translate="no"></b>' : "<span>Nicht angemeldet</span>";
+    if (k) wer.querySelector("b").textContent = k.name;
+    $("#km-abmelden").hidden = !k; $("#km-anmelden").hidden = !!k;
+    const s = kiplatzSprache.gewaehlt();
+    document.querySelectorAll("[data-km-sprache]").forEach((x) => { x.setAttribute("role", "menuitemradio"); x.setAttribute("aria-checked", String(x.dataset.kmSprache === s)); });
+  }
+  $("#konto-knopf").addEventListener("click", kontoMenuZeichnen);
 
   const menus = document.querySelectorAll("#menubar .menu");
   const menuZu = () => menus.forEach((m) => m.classList.remove("open"));
@@ -1557,7 +1618,12 @@ window.addEventListener("unhandledrejection", (e) => __fehlerZeigen(String(e.rea
   $("#btn-austreten").addEventListener("click", () => { if (!confirm("Die Community verlassen? Am Server werden Name, Credits und Zähler gelöscht. Deine Gespräche und was du nachgeschaut hast, bleiben bei dir.")) return; api().community_austreten().then((r) => nach(r, () => { $("#meine-daten").style.display = "none"; api().zustand().then((r2) => nach(r2, uebernehme)); api().community().then((r3) => nach(r3, zeichneCommunity)); })); });
 
 
-  $("#btn-start-anmelden").addEventListener("click", () => $("#btn-anmelde-band").click());
+  function anmeldenStarten() {
+    if (!(Z && Z.mitglied)) { $("#btn-anmelde-band").click(); return; }
+    zeige("community", "Konto und Geräte");
+    setTimeout(() => { const k = $("#btn-konto-anmelden"); if (k && !k.disabled) { k.scrollIntoView({ block: "center" }); k.click(); } }, 50);
+  }
+  $("#btn-start-anmelden").addEventListener("click", anmeldenStarten);
   $("#btn-anmelde-band").addEventListener("click", () => { zeige("community", "Konto und Geräte"); setTimeout(() => { const k = $("#btn-beitreten-konto"); if (k) { k.scrollIntoView({ block: "center" }); k.focus(); } }, 50); });
 
   let beitrittTimer = null, beitrittNurCode = false;
@@ -2333,17 +2399,20 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
     if (stunde >= 18 && stunde < 23) return "Guten Abend";
     return "Noch munter";
   }
-  function angemeldet() { return !!(Z && (Z.mitglied || Z.admin)); }
+  function angemeldet() { return !!(Z && Z.konto); }
   function startAnsicht(leer) {
     $("#page-gespraeche").classList.toggle("leer", leer);
     $("#start-anmelden").hidden = !(leer && Z && !angemeldet() && !Z.erststart);
+    $("#start-anmelden-text").textContent = Z && Z.mitglied ? "Mit deinem KIplatz-Konto zählen deine Credits auf allen Geräten, und deine Gespräche sind überall dabei."
+      : "Mit deinem KIplatz-Konto arbeitet dieses Gerät für die Community mit.";
     if (!leer) return;
     const name = String((Z && Z.kennenlernen && Z.kennenlernen.name) || "").replace(/\s+/g, " ").trim();
     const m = $("#messages");
 
     m.innerHTML = `<div class="start"><h2 class="start-gruss"><img alt="" src="${$("#brand img").src}"><span><span id="start-gruss"></span><span id="start-name" translate="no"></span></span></h2></div>`;
     $("#start-gruss").textContent = tagesgruss(new Date().getHours());
-    $("#start-name").textContent = angemeldet() && name && name.length <= 24 ? ", " + name : "";
+    const anrede = name || (Z && Z.konto ? String(Z.konto.name || "").trim() : "");
+    $("#start-name").textContent = angemeldet() && anrede && anrede.length <= 24 ? ", " + anrede : "";
   }
   function zeichneGespraech() {
     const m = $("#messages"); m.innerHTML = "";
@@ -3026,6 +3095,8 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
   function zeichneKonto(s) {
     if (s.mitglied !== undefined) kontoMitglied = s.mitglied;
     const k = s.konto;
+
+    if (Z && "konto" in s && !s.laeuft && !!k !== !!Z.konto) api().zustand().then((r) => nach(r, uebernehme));
 
     $("#konto-ohne").style.display = (!k && !s.laeuft && !qrTimer && kontoMitglied) ? "" : "none";
     if (k && qrTimer) { clearTimeout(qrTimer); qrTimer = null; $("#konto-qr-box").style.display = "none"; }
