@@ -1657,13 +1657,16 @@ async function loeschenAusfuehren() {
   abmeldeGrund = "";
 }
 
+
+let adminKontenAlle = false;
 async function adminKontenSuchen() {
   const ul = $("#admin-konten"), meldung = $("#admin-konto-meldung");
   const q = $("#admin-konto-suche").value.trim();
   ul.replaceChildren(); meldung.textContent = "";
-  if (q.length < 2) return;
+  if (!adminKontenAlle && q.length < 2) return;
+  if (adminKontenAlle) meldung.textContent = "Lädt alle Mitglieder …";
   let r; const nr = (adminKontenSuchen.nr = (adminKontenSuchen.nr || 0) + 1);
-  try { r = await holen("/konto-suchen", { body: { q }, geraet: z.geraet }); } catch (e) { if (nr === adminKontenSuchen.nr) meldung.textContent = e.message; return; }
+  try { r = await holen("/konto-suchen", { body: adminKontenAlle ? { alle: true } : { q }, geraet: z.geraet }); } catch (e) { if (nr === adminKontenSuchen.nr) meldung.textContent = e.message; return; }
   if (nr !== adminKontenSuchen.nr) return;
   if (r.bereit && !r.bereit.werkstatt) { meldung.textContent = "Die Kontoverwaltung ist am Server noch nicht eingerichtet."; return; }
   for (const k of r.konten || []) {
@@ -1671,7 +1674,7 @@ async function adminKontenSuchen() {
     const t = document.createElement("div");
     const n = document.createElement("strong"); n.textContent = k.anzeigename || k.name;
     const i = document.createElement("small");
-    i.textContent = [k.name, k.email, k.admin ? "Admin" : "", k.gesperrt || k.kiplatz_gesperrt ? "gesperrt" : "", k.geraete ? `${k.geraete} Geräte` : ""].filter(Boolean).join(" · ");
+    i.textContent = [k.name, k.email, k.angelegt ? "Konto seit" + " " + k.angelegt.split("-").reverse().join(".") : "", k.admin ? "Admin" : "", k.gesperrt || k.kiplatz_gesperrt ? "gesperrt" : "", k.geraete ? `${k.geraete} Geräte` : ""].filter(Boolean).join(" · ");
     t.append(n, document.createElement("br"), i); li.append(t);
     const knoepfe = document.createElement("div"); knoepfe.className = "knopf-paar";
     const knopf = (text, f) => { const b = document.createElement("button"); b.type = "button"; b.className = "knopf klein-knopf"; b.textContent = text; b.onclick = () => f(b); knoepfe.append(b); };
@@ -1683,7 +1686,7 @@ async function adminKontenSuchen() {
     }
     li.append(knoepfe); ul.append(li);
   }
-  if (!ul.children.length) meldung.textContent = "Kein Konto gefunden.";
+  meldung.textContent = !ul.children.length ? "Kein Konto gefunden." : adminKontenAlle ? "Mitglieder insgesamt:" + " " + ul.children.length + " · " + "Die neuesten stehen oben." : "";
 }
 async function adminKontoTun(knopf, k, aktion, grund) {
   const meldung = $("#admin-konto-meldung");
@@ -2284,7 +2287,8 @@ function verdrahten() {
   $("#btn-meineki").onclick = meineKiAuf; $("#btn-meineki-zu").onclick = meineKiZu;
   $("#admin-suche").oninput = (e) => { admin.suche = e.target.value; adminGeraeteZeichnen(); };
   let kontoWarten = 0;
-  $("#admin-konto-suche").oninput = () => { clearTimeout(kontoWarten); kontoWarten = setTimeout(adminKontenSuchen, 400); };
+  $("#admin-konto-suche").oninput = () => { adminKontenAlle = false; clearTimeout(kontoWarten); kontoWarten = setTimeout(adminKontenSuchen, 400); };
+  $("#admin-konten-alle").onclick = () => { adminKontenAlle = true; $("#admin-konto-suche").value = ""; adminKontenSuchen(); };
   for (const r of document.querySelectorAll('input[name="aussehen"], input[name="schrift"]'))
     r.onchange = () => { z.einst[r.name] = r.value; ablageSchreiben("einstellungen", z.einst); aussehenSchreiben(); einstAnwenden(); };
 

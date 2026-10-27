@@ -847,7 +847,7 @@
             <div id="einladung-qr" class="row" style="display:none;margin-top:10px;align-items:flex-start"><img id="einladung-bild" alt="QR-Code zur Handy-Seite" width="150" height="150" style="border-radius:8px;background:#fff"><p class="muted small" style="margin:0;max-width:320px">Am Handy danach „Zum Home-Bildschirm“. Adresse: <span id="einladung-adresse"></span></p></div></div>
           
           <div class="card" id="teams-admin-card" style="display:none"><h3>Teams verwalten</h3><p class="muted small" style="margin-top:0">Sperren, umbenennen oder entfernen, immer mit Grund. Die Mitglieder lesen ihn bei „Dein Team“, mit dem Hinweis auf Einspruch an melden@kiplatz.at. Ein gesperrtes Team steht nicht in der Rangliste, und niemand kann beitreten.</p><div id="teams-admin-liste"></div></div>
-          <div class="card" id="geraete-card" style="display:none"><h3>Angemeldete Geräte</h3><p class="muted small" style="margin-top:0">Ein gesperrtes Gerät bekommt keine Arbeit mehr und kann nichts ablegen.</p><div id="geraete-liste"></div><h3 style="margin-top:18px">Konten</h3><p class="muted small" style="margin-top:0">Ein Konto in Mitreden, Mitbauen und KIplatz zugleich sperren, freigeben oder löschen. Suche nach Name oder E-Mail-Adresse.</p><input id="konto-suche" type="search" autocomplete="off" spellcheck="false" placeholder="Name oder E-Mail-Adresse" aria-label="Konto suchen, Name oder E-Mail-Adresse"><div id="konten-liste"></div><p class="muted small" id="konto-meldung"></p></div>
+          <div class="card" id="geraete-card" style="display:none"><h3>Angemeldete Geräte</h3><p class="muted small" style="margin-top:0">Ein gesperrtes Gerät bekommt keine Arbeit mehr und kann nichts ablegen.</p><div id="geraete-liste"></div><h3 style="margin-top:18px">Konten</h3><p class="muted small" style="margin-top:0">Ein Konto in Mitreden, Mitbauen und KIplatz zugleich sperren, freigeben oder löschen. Suche nach Name oder E-Mail-Adresse.</p><input id="konto-suche" type="search" autocomplete="off" spellcheck="false" placeholder="Name oder E-Mail-Adresse" aria-label="Konto suchen, Name oder E-Mail-Adresse"> <button type="button" class="btn klein" id="konten-alle">Alle Mitglieder zeigen</button><div id="konten-liste"></div><p class="muted small" id="konto-meldung"></p></div>
         </div>
       </div></div>
     </section>
@@ -3261,18 +3261,19 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
   }
 
   const STELLEN = { kiplatz: "KIplatz", werkstatt: "Mitbauen", platzl: "Mitreden" };
-  let kontoNr = 0, kontoWarten = 0;
+
+  let kontoNr = 0, kontoWarten = 0, kontoAlle = false;
   function kontenSuchen(danach) {
     const q = $("#konto-suche").value.trim(), nr = ++kontoNr;
-    $("#konten-liste").innerHTML = ""; if (q.length < 2) { $("#konto-meldung").textContent = ""; return; }
-    api().community_konto_suchen(q).then((r) => {
+    $("#konten-liste").innerHTML = ""; if (!kontoAlle && q.length < 2) { $("#konto-meldung").textContent = ""; return; }
+    (kontoAlle ? api().community_konten_alle() : api().community_konto_suchen(q)).then((r) => {
       if (nr !== kontoNr) return;
       if (!r.ok) { $("#konto-meldung").textContent = r.text || "Das hat nicht geklappt."; return; }
       const d = r.daten || {};
       if (d.bereit && !d.bereit.werkstatt) { $("#konto-meldung").textContent = "Die Kontoverwaltung ist am Server noch nicht eingerichtet."; return; }
       const konten = d.konten || [];
-      $("#konto-meldung").textContent = konten.length ? "" : "Kein Konto gefunden.";
-      $("#konten-liste").innerHTML = konten.map((k) => { const zu = k.gesperrt || k.kiplatz_gesperrt; return `<div class="geraet-zeile"><span><b>${esc(k.anzeigename || k.name)}</b> <span class="muted small">${[k.name, k.email, k.admin ? "Admin" : "", zu ? "gesperrt" : "", k.geraete ? k.geraete + " Geräte" : ""].filter(Boolean).map(esc).join(" · ")}</span></span><span class="row" style="flex-wrap:nowrap">${k.admin ? "" : `<button class="btn ${zu ? "" : "danger"}" data-konto="${esc(k.id)}" data-name="${esc(k.name)}" data-aktion="${zu ? "entsperren" : "sperren"}">${zu ? "Überall freigeben" : "Überall sperren"}</button><button class="btn danger" data-konto="${esc(k.id)}" data-name="${esc(k.name)}" data-aktion="loeschen">Überall löschen</button>`}</span></div>`; }).join("");
+      $("#konto-meldung").textContent = !konten.length ? "Kein Konto gefunden." : kontoAlle ? "Mitglieder insgesamt:" + " " + konten.length + " · " + "Die neuesten stehen oben." : "";
+      $("#konten-liste").innerHTML = konten.map((k) => { const zu = k.gesperrt || k.kiplatz_gesperrt; return `<div class="geraet-zeile"><span><b>${esc(k.anzeigename || k.name)}</b> <span class="muted small">${[k.name, k.email, k.angelegt ? "Konto seit" + " " + k.angelegt.split("-").reverse().join(".") : "", k.admin ? "Admin" : "", zu ? "gesperrt" : "", k.geraete ? k.geraete + " Geräte" : ""].filter(Boolean).map(esc).join(" · ")}</span></span><span class="row" style="flex-wrap:nowrap">${k.admin ? "" : `<button class="btn ${zu ? "" : "danger"}" data-konto="${esc(k.id)}" data-name="${esc(k.name)}" data-aktion="${zu ? "entsperren" : "sperren"}">${zu ? "Überall freigeben" : "Überall sperren"}</button><button class="btn danger" data-konto="${esc(k.id)}" data-name="${esc(k.name)}" data-aktion="loeschen">Überall löschen</button>`}</span></div>`; }).join("");
       document.querySelectorAll("[data-konto]").forEach((b) => b.addEventListener("click", () => kontoTun(b)));
       if (danach) $("#konto-meldung").innerHTML = danach;
     });
@@ -3292,7 +3293,8 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
     });
   }
   $("#konto-meldung").addEventListener("click", (e) => { const a = e.target.closest("a.pl-aufheben"); if (!a) return; e.preventDefault(); api().link_oeffnen(a.getAttribute("href")).then((r) => { if (!r.ok) nach(r); }); });
-  $("#konto-suche").addEventListener("input", () => { clearTimeout(kontoWarten); kontoWarten = setTimeout(kontenSuchen, 400); });
+  $("#konto-suche").addEventListener("input", () => { kontoAlle = false; clearTimeout(kontoWarten); kontoWarten = setTimeout(kontenSuchen, 400); });
+  $("#konten-alle").addEventListener("click", () => { kontoAlle = true; $("#konto-suche").value = ""; $("#konto-meldung").textContent = "Lädt alle Mitglieder …"; kontenSuchen(); });
 
   const ART = { seite: "Website", dokument: "Dokument", pass: "Gedächtnis-Pass", nachgeschaut: "Nachgeschaut", ortswissen: "Ortswissen" };
 

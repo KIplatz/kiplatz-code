@@ -1,6 +1,6 @@
 {
- "pruefwert": "45ccafde1dbb9232fa9f089c",
+ "pruefwert": "4ff02f4be561c8f090df5cd5",
  "mindest_bau": "2026-10-26k",
- "erneuert": "2026-10-27c",
- "grund": "27c: Vorab-Fragen (app_web._vorab_auftrag, vorab_gegenpruefen mit eigener Suche des Prüfers, Prüfsuche auch in den Phasen vorab und vorab_prueft); Antworten für Mitglieder entstehen wie bisher, ERNEUERT ohne Merkmal"
+ "erneuert": "2026-10-27g",
+ "grund": "27g: nur die Mitgliederliste des Admins (app_web.community_konten_alle), Antwortweg unverändert"
 }

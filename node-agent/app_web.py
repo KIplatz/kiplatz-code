@@ -2527,13 +2527,15 @@ class Api:
                 pr = pruefung.pruefen(a.text or "", [(int(q["nummer"]), str(q.get("text", ""))) for q in quellen if q.get("text")])
 
         def fertig_machen():
+            gegenstand = suchfrage(nachrichten)
+            belegt = wissen.passende_quellen(quellen, gegenstand, a.text or "")
             lieferschein = {
                 "modell": "KIplatz" if fern else (wahl.modell.name if wahl else "KIplatz"), "geraet": geraet,
                 "bau": app_core.APP_BUILD,
                 "fassung": None if fern else self._ki.fassung,
                 "dauer_s": a.dauer_s, "wortstuecke": a.completion_tokens, "gelesen": a.prompt_tokens,
-                "quellen": wissen.quellen_text_de(a.text or "", quellen, im_speicher, auch_nummern={s.quelle for s in pr.saetze if s.farbe == "gruen" and s.quelle}) + (f" {hinweis}" if hinweis else ""),
-                "quellen_liste": wissen.benutzte_quellen(a.text or "", quellen, {s.quelle for s in pr.saetze if s.farbe == "gruen" and s.quelle}),
+                "quellen": wissen.quellen_text_de(a.text or "", belegt, im_speicher, auch_nummern={s.quelle for s in pr.saetze if s.farbe == "gruen" and s.quelle}) + (f" {hinweis}" if hinweis else ""),
+                "quellen_liste": wissen.benutzte_quellen(a.text or "", belegt, {s.quelle for s in pr.saetze if s.farbe == "gruen" and s.quelle}),
                 "gemacht": "live nachgeprüft" if frisch else ("nachgeschaut und geantwortet" if nachgeholt else "geantwortet"), "erfunden": pr.text, "pruefung": pr.kurz(),
             }
             if linkfrage(next((str(n.get("content", "")) for n in reversed(nachrichten) if n.get("role") == "user"), "")) or linkfrage(suchfrage(nachrichten)) or nachschauen._VIDEO_WORT.search(suchfrage(nachrichten)):
@@ -5491,6 +5493,9 @@ class Api:
     def community_konto_suchen(self, q: str) -> dict:
         return self._guarded("community_konto_suchen", lambda: self._community.konto_suchen(str(q)[:60]))
 
+    def community_konten_alle(self) -> dict:
+        return self._guarded("community_konten_alle", lambda: self._community.konto_suchen("", alle=True))
+
     def community_konto_ueberall(self, kid: str, aktion: str, grund: str = "") -> dict:
         texte = {"sperren": "Überall gesperrt.", "entsperren": "Überall freigegeben.", "loeschen": "Überall gelöscht."}
         return self._guarded("community_konto_ueberall", lambda: self._community.konto_ueberall(str(kid)[:20], str(aktion), str(grund)[:300]),
@@ -7343,6 +7348,16 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
     if geprueft != wn:
         geprueft, n_eigen, _ersetzt = eigene_worte(geprueft, belege.fremde_texte(quellen), umschreiben, englisch=pruefung.englisch())
         notizen += n_eigen
+    if geprueft != wn and not _WEISS_NICHT.search(geprueft):
+        name, weitere = belege.namensvettern(frage, geprueft, [str(q.get("text") or "") for q in quellen])
+        if weitere:
+            liste = ", ".join(weitere[:-1]) + (" und " if len(weitere) > 1 else "") + weitere[-1]
+            liste_en = ", ".join(weitere[:-1]) + (" and " if len(weitere) > 1 else "") + weitere[-1]
+            geprueft = geprueft.rstrip() + "\n\n" + (
+                f"Mit dem Namen {name} nennen die Quellen auch {liste}. Meinst du jemand anderen, schreib den Vornamen dazu."
+                if not pruefung.englisch() else
+                f"The sources also mention {liste_en} by the name {name}. If you mean someone else, add the first name.")
+            notizen.append(f"Mehrere Menschen namens {name} in den Quellen; das Programm nennt die anderen dazu.")
     if einspruch_zaehler[1]:
         n = einspruch_zaehler[1]
         notizen.append(f"{n} Sätze wurden nicht gestrichen: laut dem Modell stehen sie in den Quellen." if n > 1

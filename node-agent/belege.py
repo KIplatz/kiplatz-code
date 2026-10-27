@@ -356,6 +356,20 @@ def name_belegt(name: str, staemme: set[str]) -> bool:
     return True
 
 
+_NAMENSENDUNG = ("", "s", "es", "n", "en", "ns", "e", "'s", "’s")
+
+
+def name_genau_belegt(name: str, staemme: set[str]) -> bool:
+    for teil in name.split():
+        t = teil.lower().strip(".,;:")
+        if not t or t in _VERBINDER or t in staemme:
+            continue
+        if not any((s.startswith(t) and s[len(t):] in _NAMENSENDUNG) or (len(s) >= 4 and t.startswith(s) and t[len(s):] in _NAMENSENDUNG)
+                   for s in staemme):
+            return False
+    return True
+
+
 @dataclass(frozen=True)
 class Befund:
     satz: str
@@ -1234,9 +1248,29 @@ def gefragter_name_fehlt(frage: str, antwort: str, quellen_texte: list[str]) -> 
     for i, (w, _p) in enumerate(_tokens(frage)):
         if i == 0 or not w[:1].isupper() or len(w) < 4 or w.lower() in _KEIN_NAME:
             continue
-        if not any(name_belegt(w, st) for st in staemme):
+        if not any(name_genau_belegt(w, st) for st in staemme):
             return w
     return ""
+
+
+_NUR_NAME = re.compile(r"^\s*(?:wer\s+(?:ist|war)|who\s+(?:is|was))\s+([A-ZÄÖÜ][\w'’-]{2,})\s*\??\s*$", re.I)
+
+
+def namensvettern(frage: str, antwort: str, quellen_texte: list[str]) -> tuple[str, list[str]]:
+    m = _NUR_NAME.match(frage or "")
+    if not m or not m.group(1)[:1].isupper():
+        return "", []
+    name = m.group(1)
+    voll = re.compile(rf"(?<![\wÄÖÜäöüß])([A-ZÄÖÜÁ-Ž][\wÀ-ž'’-]+)\s+{re.escape(name)}(?![\wÄÖÜäöüß])")
+    gefunden: list[str] = []
+    for text in quellen_texte:
+        for v in voll.findall(text or ""):
+            if v.lower() in _KEIN_NAME or v.lower() in _VERBINDER:
+                continue
+            ganz = f"{v} {name}"
+            if ganz not in gefunden and ganz not in (antwort or ""):
+                gefunden.append(ganz)
+    return name, gefunden[:3]
 
 
 def vermischt_ausloeser(antwort: str, quellen: list[tuple[str, str]]) -> list[tuple[str, str, str]]:

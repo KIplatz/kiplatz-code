@@ -1331,6 +1331,38 @@ def ohne_doppelte(quellen: list[dict]) -> list[dict]:
     return out
 
 
+def _bezugswoerter(text: str) -> set[str]:
+    return {w for w in woerter(text or "") if len(w) >= 4}
+
+
+def _gleich_genug(a: str, b: str) -> bool:
+    if a == b:
+        return True
+    if len(a) < 5 or len(b) < 5:
+        return False
+    if a[:5] == b[:5]:
+        return True
+    if len(a) == len(b):
+        return sum(x != y for x, y in zip(a, b)) == 1
+    return False
+
+
+def quelle_passt(q: dict, frage: str, antwort: str) -> bool:
+    import urllib.parse
+    adresse = str(q.get("adresse") or "")
+    pfad = urllib.parse.unquote(urllib.parse.urlsplit(adresse).path) if adresse.startswith(("http://", "https://")) else ""
+    titel = _bezugswoerter(str(q.get("titel") or "") + " " + re.sub(r"[/_\-.+]", " ", pfad))
+    if not titel:
+        return True
+    gegenstand = _bezugswoerter(frage) | _bezugswoerter(antwort)
+    return any(_gleich_genug(t, g) for t in titel for g in gegenstand)
+
+
+def passende_quellen(quellen: list[dict], frage: str, antwort: str) -> list[dict]:
+    return [q for q in quellen if q.get("privat") or not str(q.get("adresse") or "").startswith(("http://", "https://"))
+            or quelle_passt(q, frage, antwort)]
+
+
 def benutzte_quellen(antwort: str, quellen: list[dict], auch_nummern: set[int] | None = None) -> list[dict]:
     nummern: set[int] = set(auch_nummern or ())
     for gruppe in re.findall(r"Quellen?\s*((?:\d+\s*(?:,|und|bis|&|\+)?\s*)+)", antwort or ""):
@@ -1353,5 +1385,5 @@ def quellen_text_de(antwort: str, quellen: list[dict], anzahl_im_speicher: int, 
 
 
 __all__ = ["DIRNAME", "Wissensspeicher", "Quelle", "Treffer", "WissenError", "woerter", "abschnitte", "html_zu_text", "seite_holen",
-           "benutzte_quellen", "ohne_doppelte", "quellen_text_de", "treffer_mischen", "treffer_vereinen", "kontext_bauen", "adressen_in_text", "live_lesen",
+           "benutzte_quellen", "passende_quellen", "quelle_passt", "ohne_doppelte", "quellen_text_de", "treffer_mischen", "treffer_vereinen", "kontext_bauen", "adressen_in_text", "live_lesen",
            "kennung_fuer", "quelle_aus", "gueltig_pruefen", "UNGEPRUEFT", "ZURUECKGEHALTEN", "robots_erlaubt", "FACHGEBIETE", "FACH_FAKTOR", "FACH_BREITE", "fachgebiete_pruefen", "fachgebiet_gewichten"]

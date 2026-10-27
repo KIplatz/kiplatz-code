@@ -14,6 +14,16 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-10-27g": [],
+    "2026-10-27f": [
+        "Bist du angemeldet, fragst du jetzt auch auf unserer Website so oft du willst, ohne Probefragen. Beim ersten Mal meldet sich dein Browser einmal mit deinem Konto an, danach steht er in deinem Konto bei den Geräten und lässt sich dort abmelden.",
+    ],
+    "2026-10-27e": [
+        "Unter einer Antwort steht jetzt nur noch eine Quelle, die wirklich vom Gefragten handelt. Vorher konnte bei „Was ist die Hauptstadt von Frankreich?“ die Seite über Bordeaux stehen, weil darin dieselben Wörter vorkamen.",
+    ],
+    "2026-10-27d": [
+        "Fragst du nach einem Namen, zählt eine Seite über jemanden mit ähnlichem Namen nicht mehr als Beleg, etwa „Ambrosi“ für „Ambros“. Heißen mehrere Menschen so, nennt KIplatz die anderen aus den Quellen dazu.",
+    ],
     "2026-10-27c": [
         "Die PCs der Community beantworten jetzt nebenbei Wissensfragen im Voraus, die sich nicht ändern, etwa wer Mozart war oder wie hoch der Großglockner ist, aus aller Welt und auf Deutsch und Englisch. Ein zweiter PC liest die Quellen selbst nach und prüft jede Antwort, erst dann gilt sie für alle. Fragst du so etwas, kommt die Antwort danach sofort.",
         "Ein Update von KIplatz verwirft die gesammelten Antworten nicht mehr alle auf einmal. Neu erarbeitet wird nur, was das Update wirklich betrifft.",

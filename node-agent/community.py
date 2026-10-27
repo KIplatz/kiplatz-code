@@ -506,8 +506,8 @@ class Community:
     def geraet_lebenslang(self, kennung: str, grund: str = "") -> dict:
         return self._anfrage("/geraet-lebenslang", {"kennung": kennung, "grund": grund}, mit_schluessel=True)
 
-    def konto_suchen(self, q: str) -> dict:
-        return self._anfrage("/konto-suchen", {"q": q}, mit_schluessel=True, timeout=20)
+    def konto_suchen(self, q: str, alle: bool = False) -> dict:
+        return self._anfrage("/konto-suchen", {"alle": True} if alle else {"q": q}, mit_schluessel=True, timeout=30 if alle else 20)
 
     def konto_ueberall(self, kid: str, aktion: str, grund: str = "") -> dict:
         return self._anfrage("/konto-ueberall", {"id": kid, "aktion": aktion, "grund": grund}, mit_schluessel=True, timeout=90)

@@ -155,6 +155,10 @@ MERKMALE = frozenset(("alle", "de", "en", "suche", "ohne_suche", "zahl", "quelle
                       "quelle:abgefragt", "quelle:berichtigung", "quelle:wikipedia", "quelle:stelle"))
 ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
     ("2026-10-27c", frozenset(), "Vorab-Fragen der Community: Antworten entstehen auf demselben Weg wie für Mitglieder, nichts zu verwerfen"),
+    ("2026-10-27d", frozenset(), "Namensprüfung ohne Teilwort-Treffer („Ambrosi“ ist nicht „Ambros“), Hinweis auf Namensvettern: gespeicherte "
+     "Antworten bestanden die Prüfung schon, eine über die falsche Person nimmt „Daumen runter“ heraus; nichts zu verwerfen"),
+    ("2026-10-27e", frozenset(), "Eine Quelle steht nur noch unter einer Antwort, wenn ihr Titel oder ihre Adresse den Gegenstand nennt (wissen.quelle_passt); die gespeicherten Antworten stimmten in der Stichprobe in der Sache, sie laufen in 7 bis 30 Tagen ab und die Vorab-Liste erneuert sie, nichts zu verwerfen"),
+    ("2026-10-27g", frozenset(), "nur die Mitgliederliste des Admins in app_web; der Antwortweg ist unverändert, nichts zu verwerfen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())

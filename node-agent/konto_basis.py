@@ -177,5 +177,5 @@ class Anmeldung:
         self.laeuft = False
 
 
-HANDY_ARTEN = ("iPhone", "iPad", "Android-Handy", "Android-Tablet", "Handy", "Tablet", "Mac")
+HANDY_ARTEN = ("iPhone", "iPad", "Android-Handy", "Android-Tablet", "Handy", "Tablet", "Mac", "Browser")
 PC_ARTEN = ("Windows-PC", "Linux-PC", "Mac")
