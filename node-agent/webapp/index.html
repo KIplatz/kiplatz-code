@@ -1345,7 +1345,7 @@ window.addEventListener("unhandledrejection", (e) => __fehlerZeigen(String(e.rea
         const b = document.createElement("button"); b.type = "button"; b.setAttribute("role", "menuitem");
         b.innerHTML = '<span class="ico"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="7" r="3"/><path d="M4 16.5c.6-3 3-4.5 6-4.5s5.4 1.5 6 4.5"/></svg></span><span class="km-text" translate="no"></span>';
         b.querySelector(".km-text").textContent = x.name || "?";
-        b.addEventListener("click", () => { kontoMenuZu(); api().konto_zu(x.sub).then((r2) => nach(r2, () => location.reload())); });
+        b.addEventListener("click", () => { kontoMenuZu(); api().konto_zu(x.sub).then((r2) => nach(r2, () => api().neu_laden())); });
         kl.append(b);
       }
     });
@@ -1399,7 +1399,7 @@ window.addEventListener("unhandledrejection", (e) => __fehlerZeigen(String(e.rea
     else if (tun === "zoom-groesser") zoomen("groesser");
     else if (tun === "zoom-kleiner") zoomen("kleiner");
     else if (tun === "vollbild") api().ansicht_vollbild();
-    else if (tun === "neu-laden") location.reload();
+    else if (tun === "neu-laden") api().neu_laden();
     else if (tun === "dunkel") window.app.dunkelUmschalten();
     else if (tun === "leiste") leisteUmschalten();
     else if (tun === "import") $("#btn-import").click();
@@ -1455,7 +1455,7 @@ window.addEventListener("unhandledrejection", (e) => __fehlerZeigen(String(e.rea
   document.addEventListener("keydown", (e) => {
     const strg = (e.ctrlKey || e.metaKey) && !e.altKey;
     if (e.key === "F11") { e.preventDefault(); api().ansicht_vollbild(); return; }
-    if (e.key === "F5" && !strg) { e.preventDefault(); location.reload(); return; }
+    if (e.key === "F5" && !strg) { e.preventDefault(); api().neu_laden(); return; }
     if (!strg) return;
     const k = e.key.toLowerCase();
     if (k === "+" || k === "=" || e.code === "NumpadAdd") { e.preventDefault(); zoomen("groesser"); }
@@ -3254,7 +3254,7 @@ Erarbeitet von einem PC der KIplatz-Community (kiplatz.at)`; }
   function kontoNachsehen() {
     api().konto_stand().then((r) => { if (!r.ok) return; const s = r.daten; zeichneKonto(s);
       if (s.laeuft) { kontoTimer = setTimeout(kontoNachsehen, 1500); return; }
-      if (s.fertig && s.konto) { sag(`Angemeldet als ${s.konto.name}.`); setTimeout(() => location.reload(), 800); }
+      if (s.fertig && s.konto) { sag(`Angemeldet als ${s.konto.name}.`); setTimeout(() => api().neu_laden(), 800); }
       else if (s.fehler) { sag("Anmeldung nicht geklappt: " + s.fehler, true); } });
   }
 

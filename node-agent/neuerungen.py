@@ -14,6 +14,9 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-10-29a": [
+        "Nach der Anmeldung im Browser holt sich KIplatz jetzt selbst nach vorne, und das Programmfenster bleibt nach dem Neuladen nicht mehr schwarz.",
+    ],
     "2026-10-28d": [
         "Im Programm wechselst du jetzt mit einem Klick zwischen den Konten, die auf diesem PC angemeldet waren. Jedes Konto hat dort seine eigenen Gespräche, Projekte, Skills und sein eigenes Gedächtnis, und der PC arbeitet dabei weiter für die Community.",
         "Nach der Anmeldung im Programm bleibt der Browser auf der Seite „Angemeldet“ stehen und springt nicht mehr ins Platzl.",
@@ -1315,6 +1318,9 @@ ZURUECKGEHALTEN: dict[str, list[str]] = {
 }
 
 KURZ_JE_TAG: dict[str, list[str]] = {
+    "2026-10-29": [
+        "Nach der Anmeldung im Browser kommt KIplatz jetzt von selbst nach vorne",
+    ],
     "2026-10-28": [
         "Sucht KIplatz im Internet, liest es jetzt immer auch den obersten Treffer der Suche",
         "Ein Jahr, das so in der Quelle steht, streicht die Prüfung nicht mehr fälschlich",

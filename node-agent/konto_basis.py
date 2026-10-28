@@ -103,7 +103,7 @@ class Anmeldung:
                     self._seite(400, "Kein Code", "Die Werkstatt hat keinen Anmeldecode mitgeschickt.")
                     lauf.fehler = "die Werkstatt hat keinen Anmeldecode mitgeschickt"
                     return
-                self._seite(200, "Angemeldet", "Du bist mit deinem KIplatz-Konto angemeldet. Im Programm geht es weiter.")
+                self._seite(200, "Angemeldet", "Du bist mit deinem KIplatz-Konto angemeldet. KIplatz holt sich jetzt selbst nach vorne, dort geht es weiter.")
                 lauf._code = code
 
         self._srv = http.server.HTTPServer(("127.0.0.1", 0), Handler)

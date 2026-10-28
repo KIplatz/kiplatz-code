@@ -4747,6 +4747,7 @@ class Api:
             self._ki.einstellung_setzen(konto={"name": str(k["name"])[:60], "sub": str(k.get("sub", ""))[:200]})
         finally:
             self._wechsel_freigeben()
+        self._vordergrund()
         _log(self._core, f"OK konto angemeldet als {k['name']}")
 
     def _konto_anmeldung_starten(self, wechseln: bool = False) -> dict:
@@ -6041,6 +6042,25 @@ class Api:
 
     def _window_vorne(self) -> bool:
         return auswahl.eigenes_fenster_vorne(app_core.APP_NAME) if self._window is not None and not self.versteckt else False
+
+    def neu_laden(self) -> dict:
+        if self._window is not None and getattr(self, "_html", ""):
+            try:
+                self._window.load_html(self._html)
+            except Exception as exc:
+                _log(self._core, f"INFO neu laden: {type(exc).__name__}")
+        return {"ok": True, "text": "", "daten": None}
+
+    def _vordergrund(self) -> None:
+        if self._window is None:
+            return
+        self.fenster_zeigen()
+        try:
+            self._window.on_top = True
+            time.sleep(0.4)
+            self._window.on_top = False
+        except Exception as exc:
+            _log(self._core, f"INFO fenster vorne: {type(exc).__name__}")
 
     def fenster_zeigen(self) -> dict:
         self.versteckt = False
@@ -7773,6 +7793,7 @@ def run_window(core: app_core.AppCore, *, start_minimized: bool = False, registr
         width=breite, height=hoehe, min_size=(960, 600), hidden=start_minimized, background_color=GROUND, text_select=True,
     )
     api._window = window
+    api._html = html
     api.versteckt = bool(start_minimized)
     tray: list = []
 
