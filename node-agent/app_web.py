@@ -8,6 +8,7 @@ import json
 import os
 import platform
 import re
+import secrets
 import shutil
 import urllib.parse
 import webbrowser
@@ -453,6 +454,12 @@ def ki_anzeigename(modellname: str) -> str:
         return "KIplatz"
     return "KIplatz (großes Modell)" if b >= 12 else ("KIplatz (mittleres Modell)" if b >= 6 else "KIplatz (kleines Modell)")
 
+KONTO_EINSTELLUNGEN = frozenset(("konto", "meine_ki", "mein_name", "meine_themen", "einrichtung", "morgen_an", "morgen_ort", "morgen_land", "morgen_zeit",
+                                 "morgen_vorlesen", "morgen_gespraech", "morgen_zuletzt"))
+KONTEN_ORDNER = "konten"
+KONTO_DATEI = "konto.json"
+
+
 class KiSteuerung:
 
     def __init__(self, core: app_core.AppCore, *, server: ki_laufzeit.KiServer | None = None, herunterladen=ki_laufzeit.herunterladen,
@@ -472,6 +479,7 @@ class KiSteuerung:
         self.wahl: ki_laufzeit.Wahl | None = None
         self.verbindung = heimnetz.Verbindung(core.base_dir)
         self._einstellung_pfad = core.base_dir / heimnetz.DIRNAME / "einstellung.json"
+        self.konto_pfad: Path | None = None
         self.fern: dict | None = None
         self.danach = None
         self.nur_prozessor = False
@@ -483,14 +491,36 @@ class KiSteuerung:
 
 
     def einstellung(self) -> dict:
-        return sicher_schreiben.json_laden(self._einstellung_pfad, {})
+        d = sicher_schreiben.json_laden(self._einstellung_pfad, {})
+        if self.konto_pfad is None:
+            return d
+        k = sicher_schreiben.json_laden(self.konto_pfad, {})
+        return {**{s: w for s, w in d.items() if s not in KONTO_EINSTELLUNGEN}, **{s: w for s, w in k.items() if s in KONTO_EINSTELLUNGEN}}
 
     def einstellung_setzen(self, **werte) -> dict:
-        d = self.einstellung()
-        d.update(werte)
-        app_core.ensure_plain_directory(self._einstellung_pfad.parent)
-        sicher_schreiben.json_datei(self._einstellung_pfad, d)
-        return d
+        pc = {s: w for s, w in werte.items() if self.konto_pfad is None or s not in KONTO_EINSTELLUNGEN}
+        if pc:
+            d = sicher_schreiben.json_laden(self._einstellung_pfad, {})
+            d.update(pc)
+            app_core.ensure_plain_directory(self._einstellung_pfad.parent)
+            sicher_schreiben.json_datei(self._einstellung_pfad, d)
+        konto = {s: w for s, w in werte.items() if self.konto_pfad is not None and s in KONTO_EINSTELLUNGEN}
+        if konto:
+            k = sicher_schreiben.json_laden(self.konto_pfad, {})
+            k.update(konto)
+            app_core.ensure_plain_directory(self.konto_pfad.parent)
+            sicher_schreiben.json_datei(self.konto_pfad, k)
+        return self.einstellung()
+
+    def konto_fach_setzen(self, pfad: Path) -> None:
+        if not pfad.exists() and pfad.parent == self._einstellung_pfad.parent.parent:
+            d = sicher_schreiben.json_laden(self._einstellung_pfad, {})
+            mit = {s: w for s, w in d.items() if s in KONTO_EINSTELLUNGEN}
+            app_core.ensure_plain_directory(pfad.parent)
+            sicher_schreiben.json_datei(pfad, mit)
+            if mit:
+                sicher_schreiben.json_datei(self._einstellung_pfad, {s: w for s, w in d.items() if s not in KONTO_EINSTELLUNGEN})
+        self.konto_pfad = pfad
 
     def quelle(self) -> str:
         q = self.einstellung().get("quelle")
@@ -768,6 +798,9 @@ class Api:
         self._community_stand: tuple[float, community.Stand] | None = None
         self._staerkste: tuple[float, float] | None = None
         self._ki_von_hand_aus = False
+        self._eigene_fragen = 0
+        self._wechsel_laeuft = False
+        self._fach_sperre = threading.Lock()
         self._nochmal_vorige: dict[str, str] = {}
         self._beitritt: dict | None = None
         self._konto_anmeldung: konto_basis.Anmeldung | None = None
@@ -843,6 +876,8 @@ class Api:
             self._ki.verbindung.eigen = geraet_name
         self._sprechen = sprechen.Steuerung(sprechen.SprachOrdner(self._ki.ordner), threads=sprechen.threads_wahl(self._kerne()), log=lambda line: _log(core, line))
         self._gedaechtnis = gedaechtnis.Gedaechtnis(core.base_dir)
+        self._fach_basis = core.base_dir
+        self._fach_beim_start()
         self.prep_error: str | None = None
         self.start_meldung = ""
         self._stopp = threading.Event()
@@ -4644,10 +4679,16 @@ class Api:
             return {"text": antwort_text, "lieferschein": lieferschein, "gespraech": g.to_json_dict(), "credits": self._credits_dict()}
 
         def mit_vorrang():
+            with self._fach_sperre:
+                if self._wechsel_laeuft:
+                    raise app_core.AppError("KONTO_WECHSEL", "gerade wechselt das Konto; frag gleich noch einmal")
+                self._eigene_fragen += 1
             self._rechen.vorrang_beginn()
             try:
                 return go()
             finally:
+                with self._fach_sperre:
+                    self._eigene_fragen -= 1
                 self._rechen.vorrang_ende()
         return self._guarded("frage", mit_vorrang)
 
@@ -4696,14 +4737,19 @@ class Api:
         return self._community.ist_admin() and self._konto_dict() is not None
 
     def _konto_fertig(self, id_token: str) -> None:
-        a = self._community.konto_anmelden(id_token)
-        k = a.get("konto") if isinstance(a, dict) else None
-        if not isinstance(k, dict) or not k.get("name"):
-            raise app_core.AppError("KONTO_ANTWORT", "der Community-Server hat das Konto nicht bestätigt")
-        self._ki.einstellung_setzen(konto={"name": str(k["name"])[:60], "sub": str(k.get("sub", ""))[:200]})
+        self._wechsel_reservieren(warten=True)
+        try:
+            a = self._community.konto_anmelden(id_token)
+            k = a.get("konto") if isinstance(a, dict) else None
+            if not isinstance(k, dict) or not k.get("name"):
+                raise app_core.AppError("KONTO_ANTWORT", "der Community-Server hat das Konto nicht bestätigt")
+            self._fach_wechseln(str(k.get("sub", ""))[:200])
+            self._ki.einstellung_setzen(konto={"name": str(k["name"])[:60], "sub": str(k.get("sub", ""))[:200]})
+        finally:
+            self._wechsel_freigeben()
         _log(self._core, f"OK konto angemeldet als {k['name']}")
 
-    def _konto_anmeldung_starten(self, wechseln: bool = False, vorher=None) -> dict:
+    def _konto_anmeldung_starten(self, wechseln: bool = False) -> dict:
         if self._community.geraet() is None:
             raise app_core.AppError("KONTO_GERAET", "zuerst muss dieses Gerät zur Community dazukommen; danach kannst du dein Konto anmelden")
         if self._konto_anmeldung is not None and self._konto_anmeldung.laeuft:
@@ -4716,8 +4762,6 @@ class Api:
         if wechseln:
             def browser(adresse: str) -> None:
                 webbrowser.open(self._platzl_mod.FORUM + "/?abmelden=1&wechseln=1&danach=" + urllib.parse.quote(adresse, safe=""))
-        if vorher is not None:
-            vorher()
         self._konto_anmeldung = konto_basis.Anmeldung(konfig, self._konto_fertig, browser=browser)
         self._konto_anmeldung.start()
         return self._konto_anmeldung.stand()
@@ -4725,12 +4769,125 @@ class Api:
     def konto_anmelden_start(self) -> dict:
         return self._guarded("konto_anmelden_start", self._konto_anmeldung_starten, "Dein Browser öffnet die Anmeldeseite von KIplatz. Melde dich dort an, danach geht es hier weiter.")
 
-    def konto_wechseln(self) -> dict:
+
+    def _fach_zuordnung_pfad(self) -> Path:
+        return self._core.base_dir / KONTEN_ORDNER / "zuordnung.json"
+
+    def _fach_beim_start(self) -> None:
+        sub = str(sicher_schreiben.json_laden(self._ki._einstellung_pfad, {}).get("konto_offen", "") or "")
+        zu = sicher_schreiben.json_laden(self._fach_zuordnung_pfad(), {})
+        if sub and isinstance(zu, dict) and zu.get(sub):
+            self._fach_oeffnen(self._core.base_dir / KONTEN_ORDNER / str(zu[sub]))
+        else:
+            self._ki.konto_fach_setzen(self._core.base_dir / KONTO_DATEI)
+
+    def _fach_oeffnen(self, basis: Path) -> None:
+        self._ki.konto_fach_setzen(basis / KONTO_DATEI)
+        self._ablage = gespraeche.Gespraechsablage(basis)
+        self._kiste = skills.Skillkiste(basis)
+        self._gedaechtnis = gedaechtnis.Gedaechtnis(basis)
+        self._platzl = self._platzl_mod.Platzl(basis, self._community)
+        self._abgleich = abgleich_geraet.AbgleichGeraet(basis, self._community, self._ablage)
+        self._nochmal_vorige.clear()
+        self._letzter_stand = None
+        self._fach_basis = basis
+
+    def _wechsel_reservieren(self, warten: bool = False) -> None:
+        bis = time.monotonic() + 300
+        while True:
+            with self._fach_sperre:
+                if not self._eigene_fragen and not self._wechsel_laeuft:
+                    self._wechsel_laeuft = True
+                    return
+            if not warten or time.monotonic() > bis:
+                raise app_core.AppError("KONTO_FRAGE_LAEUFT", "gerade läuft noch eine Antwort; wechsle, sobald sie da ist")
+            time.sleep(0.5)
+
+    def _wechsel_freigeben(self) -> None:
+        with self._fach_sperre:
+            self._wechsel_laeuft = False
+
+    def _fach_eintragen(self) -> None:
+        offen = str((self._ki.einstellung().get("konto") or {}).get("sub", "") or "")
+        if not offen:
+            return
+        with self._fach_sperre:
+            zu = sicher_schreiben.json_laden(self._fach_zuordnung_pfad(), {})
+            zu = zu if isinstance(zu, dict) else {}
+            if offen in zu:
+                return
+            fach = "" if self._fach_basis == self._core.base_dir else self._fach_basis.name
+            if fach in zu.values():
+                return
+            zu[offen] = fach
+            app_core.ensure_plain_directory(self._fach_zuordnung_pfad().parent)
+            sicher_schreiben.json_datei(self._fach_zuordnung_pfad(), zu)
+
+    def _fach_wechseln(self, sub: str) -> None:
+        sub = str(sub or "")[:200]
+        if not sub:
+            return
+        with self._fach_sperre:
+            zu = sicher_schreiben.json_laden(self._fach_zuordnung_pfad(), {})
+            zu = zu if isinstance(zu, dict) else {}
+            offen = str((self._ki.einstellung().get("konto") or {}).get("sub", "") or "")
+            jetzt = "" if self._fach_basis == self._core.base_dir else self._fach_basis.name
+            if offen and offen not in zu and jetzt not in zu.values():
+                zu[offen] = jetzt
+            if sub not in zu:
+                zu[sub] = "" if "" not in zu.values() else secrets.token_hex(6)
+            app_core.ensure_plain_directory(self._fach_zuordnung_pfad().parent)
+            sicher_schreiben.json_datei(self._fach_zuordnung_pfad(), zu)
+            basis = self._core.base_dir if zu[sub] == "" else self._core.base_dir / KONTEN_ORDNER / zu[sub]
+            if basis != self._fach_basis:
+                app_core.ensure_plain_directory(basis)
+                self._themen.fach_gewechselt()
+                with self._abgleich._sperre:
+                    self._fach_oeffnen(basis)
+                for q, _w in self._wissen.alle(auch_ungeprueft=True):
+                    if q.art in ("thema", "nachgeschaut"):
+                        self._wissen.entfernen(q.kennung)
+            self._ki.einstellung_setzen(konto_offen=sub)
+
+    def konto_konten(self) -> dict:
+        def go():
+            if self._community.geraet() is None:
+                return {"konten": [], "konto": None}
+            d = self._community.konto_liste()
+            return {"konten": [k for k in d.get("konten", []) if isinstance(k, dict)], "konto": self._konto_dict()}
+        return self._guarded("konto_konten", go)
+
+    def konto_zu(self, sub: str) -> dict:
+        def go():
+            self._wechsel_reservieren()
+            try:
+                vorher = str((self._ki.einstellung().get("konto") or {}).get("sub", "") or "")
+                a = self._community.konto_wechseln(str(sub))
+                k = a.get("konto") if isinstance(a, dict) else None
+                if not isinstance(k, dict) or not k.get("sub"):
+                    raise app_core.AppError("KONTO_ANTWORT", "der Community-Server hat den Wechsel nicht bestätigt")
+                try:
+                    self._fach_wechseln(str(k["sub"]))
+                except Exception:
+                    if vorher:
+                        try:
+                            self._community.konto_wechseln(vorher)
+                        except Exception:
+                            pass
+                    raise
+                self._ki.einstellung_setzen(konto={"name": str(k.get("name", ""))[:60], "sub": str(k["sub"])[:200]})
+                _log(self._core, "OK konto gewechselt")
+                return {"konto": self._konto_dict()}
+            finally:
+                self._wechsel_freigeben()
+        return self._guarded("konto_zu", go)
+
+    def konto_hinzufuegen(self) -> dict:
         def go():
             if self._konto_anmeldung is not None and self._konto_anmeldung.laeuft:
                 return self._konto_anmeldung.stand()
-            return self._konto_anmeldung_starten(wechseln=True, vorher=self._konto_weg)
-        return self._guarded("konto_wechseln", go, "Dein Browser meldet dich überall ab und öffnet dann die Anmeldung. Wähl dort das andere Konto, danach geht es hier weiter.")
+            return self._konto_anmeldung_starten(wechseln=True)
+        return self._guarded("konto_hinzufuegen", go, "Dein Browser öffnet die Anmeldung. Wähl dort das andere Konto, danach geht es hier weiter.")
 
     def konto_stand(self) -> dict:
         def go():
@@ -4783,6 +4940,7 @@ class Api:
         return self._guarded("konto_anmelden_abbrechen", go, "Abgebrochen.")
 
     def _konto_weg(self) -> None:
+        self._fach_eintragen()
         try:
             self._community.konto_abmelden()
         except app_core.AppError as exc:

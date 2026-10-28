@@ -36,9 +36,6 @@ def _b64url(daten: bytes) -> str:
 WERKSTATT_HOST = "werkstatt.kiplatz.at"
 
 
-PLATZL_ANMELDEN = "https://forum.kiplatz.at/login"
-
-
 _SEITE_GUT = """<!doctype html><html lang="de"><head><meta charset="utf-8">{kopf}<title>KIplatz: angemeldet</title>
 <style>body{{font-family:system-ui,sans-serif;background:#E6F1ED;color:#1B1F1E;margin:0;display:grid;place-items:center;min-height:100vh}}
 main{{background:#fff;border:1px solid #B9D3C9;border-radius:14px;padding:28px 32px;max-width:32em}}h1{{font-size:1.4rem;margin:0 0 10px;color:#1F3630}}</style></head>
@@ -46,10 +43,6 @@ main{{background:#fff;border:1px solid #B9D3C9;border-radius:14px;padding:28px 3
 
 
 _SCHLIESSEN = '<p style="color:#5C6663">Dieses Fenster kannst du schließen.</p>'
-
-
-_WEITER = ('<p style="color:#5C6663">Du wirst jetzt auch im Platzl angemeldet, dem Treffpunkt der Community. '
-           '<a href="{adresse}">Weiter zum Platzl</a></p>')
 
 
 class Anmeldung:
@@ -82,10 +75,8 @@ class Anmeldung:
             def log_message(self, *a, **k):
                 pass
 
-            def _seite(self, code: int, titel: str, text: str, weiter: str = "") -> None:
-                kopf = f'<meta http-equiv="refresh" content="1;url={escape(weiter)}">' if weiter else ""
-                mehr = _WEITER.format(adresse=escape(weiter)) if weiter else _SCHLIESSEN
-                body = _SEITE_GUT.format(kopf=kopf, titel=escape(titel), text=escape(text), mehr=mehr).encode("utf-8")
+            def _seite(self, code: int, titel: str, text: str) -> None:
+                body = _SEITE_GUT.format(kopf="", titel=escape(titel), text=escape(text), mehr=_SCHLIESSEN).encode("utf-8")
                 self.send_response(code)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Content-Length", str(len(body)))
@@ -112,7 +103,7 @@ class Anmeldung:
                     self._seite(400, "Kein Code", "Die Werkstatt hat keinen Anmeldecode mitgeschickt.")
                     lauf.fehler = "die Werkstatt hat keinen Anmeldecode mitgeschickt"
                     return
-                self._seite(200, "Angemeldet", "Du bist mit deinem KIplatz-Konto angemeldet. Im Programm geht es weiter.", weiter=lauf.platzl_weiter())
+                self._seite(200, "Angemeldet", "Du bist mit deinem KIplatz-Konto angemeldet. Im Programm geht es weiter.")
                 lauf._code = code
 
         self._srv = http.server.HTTPServer(("127.0.0.1", 0), Handler)
@@ -165,10 +156,6 @@ class Anmeldung:
         if token.count(".") != 2:
             raise TokenFehler("KONTO_TOKEN", "die Werkstatt hat keinen Anmeldenachweis geschickt")
         return token
-
-    def platzl_weiter(self) -> str:
-        host = urllib.parse.urlsplit(str(self.konfig.get("authorize", ""))).hostname or ""
-        return PLATZL_ANMELDEN if host == WERKSTATT_HOST else ""
 
     def stand(self) -> dict:
         return {"laeuft": self.laeuft, "fertig": self.fertig, "fehler": self.fehler, "adresse": self.adresse if self.laeuft else ""}

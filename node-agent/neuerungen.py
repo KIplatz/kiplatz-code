@@ -14,6 +14,10 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-10-28d": [
+        "Im Programm wechselst du jetzt mit einem Klick zwischen den Konten, die auf diesem PC angemeldet waren. Jedes Konto hat dort seine eigenen Gespräche, Projekte, Skills und sein eigenes Gedächtnis, und der PC arbeitet dabei weiter für die Community.",
+        "Nach der Anmeldung im Programm bleibt der Browser auf der Seite „Angemeldet“ stehen und springt nicht mehr ins Platzl.",
+    ],
     "2026-10-28c": [
         "Im Kontomenü von Programm, Website, Platzl und Werkstatt steht jetzt „Konto wechseln“. Du wirst überall abgemeldet und wählst gleich danach das andere Konto.",
         "„Abmelden“ auf der Website führt wieder zurück auf kiplatz.at. Vorher konnte es passieren, dass dich die Werkstatt gleich wieder anmelden wollte.",

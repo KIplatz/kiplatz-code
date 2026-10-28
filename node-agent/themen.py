@@ -30,6 +30,11 @@ class Themen:
         self._jetzt = jetzt
         self.zuletzt: float | None = None
         self.gesammelt = 0
+        self._fach = 0
+
+    def fach_gewechselt(self) -> None:
+        self._fach += 1
+        self.zuletzt = None
 
     def liste(self) -> list[str]:
         try:
@@ -52,6 +57,7 @@ class Themen:
         com = self._gemeinschaft() if callable(self._gemeinschaft) else self._gemeinschaft
         neu = 0
         bis = (datetime.now(timezone.utc) + timedelta(days=THEMA_TAGE)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        fach_anfang = self._fach
         for thema in self.liste():
             if not weiter():
                 self.zuletzt = vorher
@@ -74,6 +80,8 @@ class Themen:
                 if self.speicher._pfad(wissen.kennung_fuer(ART, adresse)).is_file():
                     continue
                 try:
+                    if self._fach != fach_anfang:
+                        return neu
                     self.speicher.hinzufuegen(ART, f"{thema}: {q.titel}", adresse, text, gueltig_bis=bis)
                     neu += 1
                 except app_core.AppError:

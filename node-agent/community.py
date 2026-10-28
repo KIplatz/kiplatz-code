@@ -63,6 +63,7 @@ _ZWECKE = {
     "download": "Community-Server: Update holen", "modelle": "Community-Server: Modell holen",
     "konto-anmeldung": "Community-Server: wie die Anmeldung mit dem Konto geht", "konto-anmelden": "Community-Server: Anmeldenachweis des Kontos abgeben",
     "konto-abmelden": "Community-Server: Konto vom Gerät lösen",
+    "konto-liste": "Community-Server: Konten, die auf diesem Gerät angemeldet waren", "konto-wechseln": "Community-Server: zu einem anderen deiner Konten wechseln",
     "konto-start": "Community-Server: mit dem Konto beitreten (Beginn)", "konto-ergebnis": "Community-Server: mit dem Konto beitreten (Zugang abholen)",
     "meine-geraete": "Community-Server: deine Geräte (Konto)", "geraet-abmelden": "Community-Server: ein Gerät deines Kontos abmelden",
     "ueberall-abmelden": "Community-Server: auf allen anderen Geräten abmelden",
@@ -894,6 +895,12 @@ class Community:
 
     def konto_abmelden(self) -> dict:
         return self._anfrage("/konto-abmelden", {}, als_geraet=True)
+
+    def konto_liste(self) -> dict:
+        return self._anfrage("/konto-liste", {}, als_geraet=True)
+
+    def konto_wechseln(self, sub: str) -> dict:
+        return self._anfrage("/konto-wechseln", {"sub": str(sub)[:200]}, als_geraet=True)
 
     def pc_qr_start(self) -> dict:
         return self._anfrage("/pc-qr-start", {}, als_geraet=True)

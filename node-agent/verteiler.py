@@ -46,6 +46,8 @@ NACHKOMMA = 5
 CREDITS_JE_BUENDEL = 1
 UNKLAR_PAUSE_S = 24 * 3600
 QR_BREMSE_S = 24 * 3600
+KONTEN_JE_GERAET = 5
+KONTO_BEKANNT_TAGE = 90
 UNKLAR_ADMIN = 3
 STARK_DA_S = 300
 PRUEF_ART = "hausordnung"
@@ -606,6 +608,8 @@ class Verteiler:
         g = self._geraete()
         n = 0
         for x in g.values():
+            if an and isinstance(x, dict) and x.get("konten_bekannt"):
+                x["konten_bekannt"] = [y for y in x["konten_bekannt"] if not (isinstance(y, dict) and y.get("sub") == sub)]
             if not isinstance(x, dict) or x.get("konto_sub") != sub:
                 continue
             if an and not x.get("gesperrt"):
@@ -646,9 +650,95 @@ class Verteiler:
             e["konto_qr_seit"] = _jetzt()
         else:
             e.pop("konto_qr_seit", None)
+        if self._admin_konto(e["konto_sub"]):
+            e.pop("admin_ruht", None)
+        else:
+            self._bekannt_eintragen(e)
+            if e.get("admin"):
+                e["admin_ruht"] = True
         self._geraete_schreiben(g)
         self._log(f"KONTO {kennung} -> {e['konto_name']}")
         return {"name": e["konto_name"], "sub": e["konto_sub"]}
+
+
+    def _admin_konto(self, sub: str) -> bool:
+        try:
+            return str(sub) in set(self.admin_konten_lesen() or ())
+        except Exception:
+            return True
+
+    @staticmethod
+    def _bekannt_gueltig(e: dict) -> list[dict]:
+        heute = datetime.now(timezone.utc).date()
+        aus = []
+        for x in e.get("konten_bekannt") or []:
+            if not isinstance(x, dict) or not x.get("sub"):
+                continue
+            try:
+                alt = (heute - datetime.strptime(str(x.get("zuletzt", ""))[:10], "%Y-%m-%d").date()).days
+            except ValueError:
+                continue
+            if alt <= KONTO_BEKANNT_TAGE:
+                aus.append(x)
+        return aus
+
+    def _bekannt_eintragen(self, e: dict) -> None:
+        sub = str(e.get("konto_sub", ""))
+        if not sub or self._admin_konto(sub):
+            return
+        neu = {"sub": sub, "name": str(e.get("konto_name", "")), "benutzer": str(e.get("konto_benutzer", "")), "zuletzt": _heute()}
+        liste = [x for x in self._bekannt_gueltig(e) if x["sub"] != sub]
+        e["konten_bekannt"] = ([neu] + liste)[:KONTEN_JE_GERAET]
+
+    def konten_bekannt(self, kennung: str) -> list[dict]:
+        e = self._geraete_lesen().get(str(kennung))
+        if not isinstance(e, dict):
+            return []
+        offen = str(e.get("konto_sub", ""))
+        return [{"sub": x["sub"], "name": str(x.get("name", "")), "benutzer": str(x.get("benutzer", "")), "offen": x["sub"] == offen}
+                for x in self._bekannt_gueltig(e) if not self.konto_ist_gesperrt(x["sub"])]
+
+    @_gesperrt
+    def konto_wechseln(self, kennung: str, sub: str) -> dict:
+        sub = str(sub or "")[:200]
+        g = self._geraete()
+        e = g.get(str(kennung))
+        if not isinstance(e, dict):
+            raise VerteilerError("RECHEN_GERAET", "unbekanntes Gerät")
+        eintrag = next((x for x in self._bekannt_gueltig(e) if x["sub"] == sub), None)
+        if eintrag is None or self._admin_konto(sub):
+            raise VerteilerError("KONTO_UNBEKANNT", "mit diesem Konto war dieses Gerät noch nicht angemeldet; bitte über „Konto hinzufügen“ anmelden")
+        if self.konto_ist_gesperrt(sub):
+            raise VerteilerError("KONTO_GESPERRT", "dieses KIplatz-Konto ist gesperrt, weil es gegen die Platzordnung verstoßen hat")
+        if e.get("konto_sub") != sub:
+            e["konto_seit"] = _jetzt()
+            self._bekannt_eintragen(e)
+        e["konto_sub"], e["konto_name"] = sub, str(eintrag.get("name", "")) or "Mitglied"
+        if re.fullmatch(r"[A-Za-z0-9_.\-]{1,60}", str(eintrag.get("benutzer", ""))):
+            e["konto_benutzer"] = str(eintrag["benutzer"])
+        else:
+            e.pop("konto_benutzer", None)
+        e.pop("konto_qr_seit", None)
+        if e.get("admin"):
+            e["admin_ruht"] = True
+        self._bekannt_eintragen(e)
+        self._geraete_schreiben(g)
+        self._log(f"KONTO {kennung} gewechselt -> {e['konto_name']}")
+        return {"name": e["konto_name"], "sub": sub}
+
+    @_gesperrt
+    def bekannt_entfernen(self, kennung: str, sub: str) -> bool:
+        g = self._geraete()
+        e = g.get(str(kennung))
+        if not isinstance(e, dict):
+            return False
+        vorher = e.get("konten_bekannt") or []
+        nachher = [x for x in vorher if not (isinstance(x, dict) and x.get("sub") == str(sub))]
+        if len(nachher) == len(vorher):
+            return False
+        e["konten_bekannt"] = nachher
+        self._geraete_schreiben(g)
+        return True
 
     def qr_bremse(self, kennung: str) -> bool:
         e = self._geraete_lesen().get(str(kennung))
@@ -667,7 +757,8 @@ class Verteiler:
         e = g.get(str(kennung))
         if not isinstance(e, dict) or not e.get("konto_sub"):
             return False
-        e.pop("konto_sub", None)
+        sub = str(e.pop("konto_sub", None) or "")
+        e["konten_bekannt"] = [x for x in e.get("konten_bekannt") or [] if not (isinstance(x, dict) and x.get("sub") == sub)]
         e.pop("konto_name", None)
         e.pop("konto_seit", None)
         e.pop("konto_qr_seit", None)
@@ -677,11 +768,11 @@ class Verteiler:
         return True
 
 
-    def konto_geraete(self, sub: str) -> list[dict]:
+    def konto_geraete(self, sub: str, mit_bekannt: bool = False) -> list[dict]:
         aus = []
         gr = self.gruendung()
         for k, e in self._geraete().items():
-            if isinstance(e, dict) and sub and e.get("konto_sub") == str(sub):
+            if isinstance(e, dict) and sub and (e.get("konto_sub") == str(sub) or (mit_bekannt and any(x["sub"] == str(sub) for x in self._bekannt_gueltig(e)))):
                 aus.append({"kennung": k, "name": str(e.get("name", "")), "art": str(e.get("art") or ("PC" if e.get("herkunft") != "konto" else "Gerät")),
                             "angemeldet": str(e.get("konto_seit") or e.get("angelegt", "")), "zuletzt": str(e.get("zuletzt", "")),
                             "sitzung": e.get("herkunft") == "konto", "gruendung": gr.get(k, 0)})
@@ -795,7 +886,7 @@ class Verteiler:
 
     def ist_admin(self, kennung: str) -> bool:
         e = self._geraete_lesen().get(str(kennung))
-        return isinstance(e, dict) and bool(e.get("admin")) and not e.get("gesperrt")
+        return isinstance(e, dict) and bool(e.get("admin")) and not e.get("gesperrt") and not e.get("admin_ruht")
 
     @_gesperrt
     def geraet_admin(self, kennung: str, an: bool) -> dict:

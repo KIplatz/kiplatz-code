@@ -165,6 +165,7 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
      "gespeichert wird keine „weiß ich nicht“-Antwort, die gespeicherten bestanden die Belegprüfung, nichts zu verwerfen"),
     ("2026-10-28b", frozenset(), "Jahresprüfung (belege.jahre_anderswo) zählt die Wörter der Frage nicht mit, ein belegtes ganzes Datum gilt; sie streicht weniger, gespeicherte Antworten bestanden die strengere Prüfung, nichts zu verwerfen"),
     ("2026-10-28c", frozenset(), "nur das Konto (Konto wechseln im Programm, app_web.konto_wechseln); am Antwortweg ändert sich nichts, nichts zu verwerfen"),
+    ("2026-10-28d", frozenset(), "Konten am PC mit eigenen Fächern (app_web._fach_wechseln, konto_zu); am Antwortweg ändert sich nichts, nichts zu verwerfen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())
