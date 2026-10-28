@@ -7088,11 +7088,11 @@ def _ohne_vermittler(zusatz: str, quellen: list[dict], adressen: set[str]) -> st
 def _streng(t: str, belegtext: str, zusatz: str, rechnen: bool, pruefer, auszuege: list[tuple[int, str]], *, regel: bool = False,
             beispiele: bool = False, bekannt=None, regelfrage: str = "", richter=None, ableitung: bool = False, einspruch: bool = False,
             einspruch_zaehler: list[int] | None = None, schatten: bool = True, namen_info: dict | None = None,
-            woerter_frei: bool = False) -> tuple[str, list[str], int]:
+            woerter_frei: bool = False, frage: str = "") -> tuple[str, list[str], int]:
     aus_quellen = any(s.farbe == "gruen" for s in pruefung.pruefen(t, auszuege).saetze)
     quelltexte = [x for _n, x in auszuege]
     befunde = belege.streng_pruefen(t, belegtext, zahlen_pruefen=not rechnen, namen_pruefen=None if (aus_quellen or regel) else (lambda s: False),
-                                    regel_frage=regelfrage, regel_quellen=quelltexte, ableitung=ableitung)
+                                    regel_frage=regelfrage, regel_quellen=quelltexte, ableitung=ableitung, frage=frage)
     if (not aus_quellen and not regel) or beispiele:
         befunde = [dataclasses.replace(b, zahlen=()) if b.zahlen and belege.alltag_ohne_widerspruch(b.satz, belegtext) else b
                    for b in befunde]
@@ -7156,7 +7156,7 @@ def _streng(t: str, belegtext: str, zusatz: str, rechnen: bool, pruefer, auszueg
         for b in befunde:
             if b.satz not in weg or b.regel or b.satz in gerettet:
                 continue
-            if b.zahlen and belege.jahre_anderswo(b.satz, quellsaetze):
+            if b.zahlen and belege.jahre_anderswo(b.satz, quellsaetze, belege.gegenstand_staemme(frage)):
                 continue
             if b.satz in urteile:
                 r = urteile[b.satz]
@@ -7194,7 +7194,7 @@ def _streng(t: str, belegtext: str, zusatz: str, rechnen: bool, pruefer, auszueg
         if len(teile) < 2:
             continue
         gut = [x for x in teile if not any(b.sicher_falsch for b in belege.streng_pruefen(
-            x + ".", belegtext, zahlen_pruefen=not rechnen, namen_pruefen=lambda _s: False, regel_frage=regelfrage, regel_quellen=quelltexte))]
+            x + ".", belegtext, zahlen_pruefen=not rechnen, namen_pruefen=lambda _s: False, regel_frage=regelfrage, regel_quellen=quelltexte, frage=frage))]
         if gut and len(gut) < len(teile) and any(re.search(r"\d", x) for x in gut):
             teilweise[s] = (" and " if pruefung.englisch() else " und ").join(gut) + "."
     for s, neu in teilweise.items():
@@ -7268,7 +7268,7 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
     namen1: dict = {}
     geprueft, raus, vom_pruefer = _streng(t, belegtext, zusatz, rechnen, pruefer, auszuege, regel=regel, beispiele=beispiele, bekannt=bekannt, ableitung=ableitung, woerter_frei=woerter_frei,
                                           regelfrage=regelfrage, richter=richter, einspruch=einspruch, einspruch_zaehler=einspruch_zaehler,
-                                          namen_info=namen1)
+                                          namen_info=namen1, frage=frage)
     alltag = not (belege.preisfrage(frage) or belege.regelfrage(frage) or belege.zahlenfrage(frage) or rechnen
                   or _NAMENSFRAGE.search(" ".join(str(frage or "").split())))
     namen_fall = alltag and nur_namen_fiel(namen1, raus)
@@ -7304,7 +7304,7 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
             geprueft2, raus2, vom2 = _streng(neu, belegtext, zusatz, rechnen, pruefer, auszuege, regel=regel, beispiele=beispiele, bekannt=bekannt, ableitung=ableitung, woerter_frei=woerter_frei,
                                              regelfrage=regelfrage, richter=richter if einspruch else None, einspruch=einspruch,
                                              einspruch_zaehler=einspruch_zaehler, schatten=False,
-                                             namen_info=namen2)
+                                             namen_info=namen2, frage=frage)
             namen_rest2 = namen_fall and namen_ausnahme(frage, namen2, raus2, geprueft2)
             quell_z = belege.zahlenwerte(belegtext + "\n" + "\n".join(x for _n, x in auszuege))
             erste_rest = geprueft == wn or nur_rest(basis, geprueft, raus)

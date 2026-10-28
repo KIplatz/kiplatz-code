@@ -386,18 +386,23 @@ class Befund:
 _JAHR_IM_TEXT = re.compile(r"(?<!\d)(1[0-9]{3}|20[0-9]{2})(?!\d)")
 _FUELLWORT = set("""dass sich wird wurde wurden worden haben hatte hatten sein sind waren eine einer einem einen eines dieser diese dieses
 nicht auch noch schon nach über unter durch gegen ohne wieder sowie oder aber denn weil wenn als wie dann damit dabei dazu davon heute jahr jahre
-jahren erst mehr sehr""".split())
+jahren erst mehr sehr seit gibt""".split())
 
 
 def _inhaltsstaemme(text: str) -> set[str]:
     return {w.lower()[:6] for w, _ in _tokens(text) if len(w) >= 4 and w.lower() not in _FUELLWORT and w.lower() not in _KEIN_NAME}
 
 
-def jahre_anderswo(satz: str, quellsaetze: list[str]) -> list[str]:
+def gegenstand_staemme(frage: str) -> set[str]:
+    return {w.lower()[:6] for w, _ in _tokens(frage or "") if len(w) >= 4 and w[:1].isupper() and w.lower() not in _FUELLWORT
+            and w.lower() not in _KEIN_NAME}
+
+
+def jahre_anderswo(satz: str, quellsaetze: list[str], gegenstand: set[str] | frozenset = frozenset()) -> list[str]:
     jahre = set(_JAHR_IM_TEXT.findall(satz))
     if not jahre:
         return []
-    w = _inhaltsstaemme(_JAHR_IM_TEXT.sub(" ", satz))
+    w = _inhaltsstaemme(_JAHR_IM_TEXT.sub(" ", satz)) - set(gegenstand)
     bewertet = [(len(w & _inhaltsstaemme(q)), set(_JAHR_IM_TEXT.findall(q))) for q in quellsaetze]
     out = []
     for j in sorted(jahre):
@@ -441,7 +446,7 @@ def adressen_in(satz: str) -> list[str]:
 
 
 def streng_pruefen(antwort: str, belege: str, *, zahlen_pruefen: bool = True, namen_pruefen=None, regel_frage: str = "",
-                   regel_quellen: list[str] | None = None, ableitung: bool = False) -> list[Befund]:
+                   regel_quellen: list[str] | None = None, ableitung: bool = False, frage: str = "") -> list[Befund]:
     regel_raus = dict(regel_ungestuetzt(antwort, regel_frage, list(regel_quellen or []))) if regel_frage else {}
     belege_klein = (belege or "").lower()
     belegt_d = daten(belege)
@@ -455,6 +460,7 @@ def streng_pruefen(antwort: str, belege: str, *, zahlen_pruefen: bool = True, na
         c = laender_in(name)
         return bool(c) and c <= quell_laender
     quellsaetze = [q for zeile in (belege or "").split("\n") for q in _saetze(zeile)] if zahlen_pruefen else []
+    gegenstand = gegenstand_staemme(frage)
     out: list[Befund] = []
     for absatz in (antwort or "").split("\n"):
         for s in _saetze(absatz):
@@ -464,7 +470,8 @@ def streng_pruefen(antwort: str, belege: str, *, zahlen_pruefen: bool = True, na
             if zahlen_pruefen:
                 ohne_daten = _ohne_daten(s)
                 z += unbelegte_zahlen(ohne_daten, belegt_z, ableitung, belegt_e)
-                z += [j for j in jahre_anderswo(s, quellsaetze) if j not in z]
+                gedeckt = {str(d[2]) for d in daten(s) if d[2] and _gedeckt_datum(d, belegt_d)}
+                z += [j for j in jahre_anderswo(s, quellsaetze, gegenstand) if j not in z and j not in gedeckt]
             pruefe_namen = namen_pruefen is None or namen_pruefen(s)
             sicher, lauf = namen(s) if pruefe_namen else ([], [])
             n = [x for x in sicher if not name_belegt(x, staemme) and not land_belegt(x)]
