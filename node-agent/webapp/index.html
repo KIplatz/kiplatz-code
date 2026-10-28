@@ -626,6 +626,8 @@
           <button type="button" data-page="ueber">Über KIplatz</button><button type="button" data-km-link="datenschutz">Datenschutz <span class="km-pfeil">↗</span></button>
         </div>
         <hr>
+        
+        <button type="button" data-tun="konto-wechseln" id="km-wechseln" hidden><span class="ico"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h11l-3-3"/><path d="M16 13H5l3 3"/></svg></span><span class="km-text">Konto wechseln</span></button>
         <button type="button" data-tun="konto-abmelden" id="km-abmelden" hidden><span class="ico"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3.5H4.5v13H8"/><path d="M12.5 6.5 16 10l-3.5 3.5M16 10H7.5"/></svg></span><span class="km-text">Abmelden</span></button>
         <button type="button" data-tun="konto-anmelden" id="km-anmelden" hidden><span class="ico"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5h3.5v13H12"/><path d="M8.5 6.5 12 10l-3.5 3.5M12 10H3.5"/></svg></span><span class="km-text">Anmelden</span></button>
         <button type="button" data-tun="beenden"><span class="ico"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2.8v6.4"/><path d="M6 5.3a6 6 0 1 0 8 0"/></svg></span><span class="km-text">KIplatz beenden</span><kbd>Strg+Q</kbd></button>
@@ -1321,6 +1323,7 @@ window.addEventListener("unhandledrejection", (e) => __fehlerZeigen(String(e.rea
     else if (b.dataset.kmLink) api().link_oeffnen(KM_LINKS[b.dataset.kmLink][kiplatzSprache.aktiv() === "en" ? 1 : 0]).then((r) => { if (!r.ok) nach(r); });
     else if (b.dataset.tun === "konto-abmelden") $("#btn-konto-abmelden").click();
     else if (b.dataset.tun === "konto-anmelden") anmeldenStarten();
+    else if (b.dataset.tun === "konto-wechseln") api().konto_wechseln().then((r) => nach(r, (s) => { zeichneKonto(s); api().community().then((r2) => nach(r2, zeichneCommunity)); if (kontoTimer) clearTimeout(kontoTimer); kontoTimer = setTimeout(kontoNachsehen, 1500); }));
     else if (b.dataset.tun === "beenden") api().beenden();
     else if (b.dataset.tun) { const m = document.querySelector(`#menubar .items button[data-tun="${b.dataset.tun}"]`); if (m) m.click(); }
   }));
@@ -1331,7 +1334,7 @@ window.addEventListener("unhandledrejection", (e) => __fehlerZeigen(String(e.rea
     document.querySelectorAll("#konto-menu [data-km-auf]").forEach((x) => x.setAttribute("aria-expanded", "false"));
     wer.innerHTML = k ? '<span>Angemeldet als</span> <b translate="no"></b>' : "<span>Nicht angemeldet</span>";
     if (k) wer.querySelector("b").textContent = k.name;
-    $("#km-abmelden").hidden = !k; $("#km-anmelden").hidden = !!k;
+    $("#km-abmelden").hidden = !k; $("#km-wechseln").hidden = !k; $("#km-anmelden").hidden = !!k;
     const s = kiplatzSprache.gewaehlt();
     document.querySelectorAll("[data-km-sprache]").forEach((x) => { x.setAttribute("role", "menuitemradio"); x.setAttribute("aria-checked", String(x.dataset.kmSprache === s)); });
   }

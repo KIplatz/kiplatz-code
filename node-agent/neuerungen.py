@@ -14,6 +14,10 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-10-28c": [
+        "Im Kontomenü von Programm, Website, Platzl und Werkstatt steht jetzt „Konto wechseln“. Du wirst überall abgemeldet und wählst gleich danach das andere Konto.",
+        "„Abmelden“ auf der Website führt wieder zurück auf kiplatz.at. Vorher konnte es passieren, dass dich die Werkstatt gleich wieder anmelden wollte.",
+    ],
     "2026-10-28b": [
         "Steht ein Jahr so in der gefundenen Quelle, streicht die Prüfung es nicht mehr, nur weil derselbe Ort auch in einem Satz mit einem anderen Jahr vorkommt. Ein erfundenes Jahr fällt weiter.",
     ],
@@ -1310,6 +1314,7 @@ KURZ_JE_TAG: dict[str, list[str]] = {
     "2026-10-28": [
         "Sucht KIplatz im Internet, liest es jetzt immer auch den obersten Treffer der Suche",
         "Ein Jahr, das so in der Quelle steht, streicht die Prüfung nicht mehr fälschlich",
+        "Im Kontomenü kannst du jetzt überall das Konto wechseln und gleich das andere wählen",
     ],
     "2026-10-27": [
         "Die PCs der Community beantworten Wissensfragen jetzt im Voraus, ein zweiter PC prüft jede Antwort",

@@ -9,6 +9,7 @@ import os
 import platform
 import re
 import shutil
+import urllib.parse
 import webbrowser
 import subprocess
 import sys
@@ -4702,20 +4703,34 @@ class Api:
         self._ki.einstellung_setzen(konto={"name": str(k["name"])[:60], "sub": str(k.get("sub", ""))[:200]})
         _log(self._core, f"OK konto angemeldet als {k['name']}")
 
+    def _konto_anmeldung_starten(self, wechseln: bool = False, vorher=None) -> dict:
+        if self._community.geraet() is None:
+            raise app_core.AppError("KONTO_GERAET", "zuerst muss dieses Gerät zur Community dazukommen; danach kannst du dein Konto anmelden")
+        if self._konto_anmeldung is not None and self._konto_anmeldung.laeuft:
+            return self._konto_anmeldung.stand()
+        konfig = self._community.konto_anmeldung()
+        for feld in ("authorize", "token"):
+            if not str(konfig.get(feld, "")).startswith(KONTO_ISSUER.rstrip("/") + "/"):
+                raise app_core.AppError("KONTO_ISSUER", f"die Anmeldestelle {str(konfig.get(feld, ''))[:60]} ist nicht die Werkstatt von KIplatz; Anmeldung abgebrochen")
+        browser = None
+        if wechseln:
+            def browser(adresse: str) -> None:
+                webbrowser.open(self._platzl_mod.FORUM + "/?abmelden=1&wechseln=1&danach=" + urllib.parse.quote(adresse, safe=""))
+        if vorher is not None:
+            vorher()
+        self._konto_anmeldung = konto_basis.Anmeldung(konfig, self._konto_fertig, browser=browser)
+        self._konto_anmeldung.start()
+        return self._konto_anmeldung.stand()
+
     def konto_anmelden_start(self) -> dict:
+        return self._guarded("konto_anmelden_start", self._konto_anmeldung_starten, "Dein Browser öffnet die Anmeldeseite von KIplatz. Melde dich dort an, danach geht es hier weiter.")
+
+    def konto_wechseln(self) -> dict:
         def go():
-            if self._community.geraet() is None:
-                raise app_core.AppError("KONTO_GERAET", "zuerst muss dieses Gerät zur Community dazukommen; danach kannst du dein Konto anmelden")
             if self._konto_anmeldung is not None and self._konto_anmeldung.laeuft:
                 return self._konto_anmeldung.stand()
-            konfig = self._community.konto_anmeldung()
-            for feld in ("authorize", "token"):
-                if not str(konfig.get(feld, "")).startswith(KONTO_ISSUER.rstrip("/") + "/"):
-                    raise app_core.AppError("KONTO_ISSUER", f"die Anmeldestelle {str(konfig.get(feld, ''))[:60]} ist nicht die Werkstatt von KIplatz; Anmeldung abgebrochen")
-            self._konto_anmeldung = konto_basis.Anmeldung(konfig, self._konto_fertig)
-            self._konto_anmeldung.start()
-            return self._konto_anmeldung.stand()
-        return self._guarded("konto_anmelden_start", go, "Dein Browser öffnet die Anmeldeseite von KIplatz. Melde dich dort an, danach geht es hier weiter.")
+            return self._konto_anmeldung_starten(wechseln=True, vorher=self._konto_weg)
+        return self._guarded("konto_wechseln", go, "Dein Browser meldet dich überall ab und öffnet dann die Anmeldung. Wähl dort das andere Konto, danach geht es hier weiter.")
 
     def konto_stand(self) -> dict:
         def go():
@@ -4767,15 +4782,18 @@ class Api:
             return {"laeuft": False}
         return self._guarded("konto_anmelden_abbrechen", go, "Abgebrochen.")
 
+    def _konto_weg(self) -> None:
+        try:
+            self._community.konto_abmelden()
+        except app_core.AppError as exc:
+            if exc.code != "COMMUNITY_GERAET":
+                raise
+        self._ki.einstellung_setzen(konto=None)
+        self._platzl.trennen()
+
     def konto_abmelden(self, browser: bool = True) -> dict:
         def go():
-            try:
-                self._community.konto_abmelden()
-            except app_core.AppError as exc:
-                if exc.code != "COMMUNITY_GERAET":
-                    raise
-            self._ki.einstellung_setzen(konto=None)
-            self._platzl.trennen()
+            self._konto_weg()
             if browser:
                 try:
                     webbrowser.open(self._platzl_mod.FORUM + "/?abmelden=1")
