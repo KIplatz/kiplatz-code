@@ -748,13 +748,15 @@ class Nachschauer:
                 sperren(t["adresse"])
                 return t, None
 
+        erste = ({tr[0]["adresse"] for tr, _w in listen if tr} if not r and tuple(ziel) == (None, None) and not belege.regelfrage(frage) else set())
+        vorn = sorted(reihe, key=lambda t: t["adresse"] not in erste)
         fertig: list = []
         versucht: set[str] = set()
         ende = time.monotonic() + warten_s * 1.5
         for _ in range(2):
             hosts: set[str] = set()
             lesen = []
-            for t in reihe:
+            for t in vorn:
                 if t["adresse"] in versucht or gesperrt(t["adresse"]) or _host(t["adresse"]) in hosts:
                     continue
                 hosts.add(_host(t["adresse"]))
@@ -769,15 +771,16 @@ class Nachschauer:
                 futures = [pool.submit(eine, t) for t in lesen]
                 bis = time.monotonic() + max(1.0, min(warten_s, ende - time.monotonic()))
                 offen, genug_seit = set(futures), None
+                pflicht = {f for f, t in zip(futures, lesen) if t["adresse"] in erste}
                 while offen:
                     rest = bis - time.monotonic()
-                    if genug_seit is not None:
+                    if genug_seit is not None and not (pflicht & offen):
                         rest = min(rest, genug_seit + RUNDE_NACHLAUF_S - time.monotonic())
                     if rest <= 0:
                         break
                     _fertig, offen = wait(offen, timeout=rest, return_when=FIRST_COMPLETED)
                     lesbar = sum(1 for f in futures if f.done() and not f.exception() and f.result()[1] is not None)
-                    if lesbar >= seiten_max:
+                    if lesbar >= seiten_max and not (pflicht & offen):
                         break
                     if lesbar >= 2 and genug_seit is None:
                         genug_seit = time.monotonic()
@@ -910,6 +913,9 @@ def _heute_frager():
         return _d.today()
 
 
+_SEIT_WANN = re.compile(r"(?i)\bseit\s+wann\b|\bsince\s+when\b|\bdepuis\s+quand\b|\bda\s+quando\b|\bdesde\s+cu[aá]ndo\b|\bsinds\s+wanneer\b")
+
+
 def richtung(frage: str) -> str:
     f = frage or ""
     g = _mit_original(f)
@@ -919,7 +925,7 @@ def richtung(frage: str) -> str:
         if any(j < (_heute_frager() - timedelta(days=45)).year for j in kalender_tage.jahre(f)):
             return ""
         return "letzt"
-    if _NAECHST.search(f):
+    if _NAECHST.search(_SEIT_WANN.sub(" ", f)):
         import kalender_tage
         if kalender_tage.jahre(f) and not re.search(r"n[äa]chste|kommende|als n[äa]chstes|demn[äa]chst", f, re.I):
             return ""
@@ -1259,7 +1265,7 @@ def videos_aus_quellen(quellen: list[dict], themenfrage: str, *, hoechstens: int
 
 
 def treffer_reihen(treffer: list[dict], frage: str, *, heute, r: str = "", ziel: tuple = (None, None), ausser=frozenset()) -> list[dict]:
-    fw = set(wissen.woerter(frage))
+    fw = set(wissen.woerter(wissen.ohne_fragewendung(frage)))
     gesehen: set[str] = set()
     bewertet = []
     regel = belege.regelfrage(frage)

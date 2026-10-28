@@ -96,6 +96,8 @@ RUNDE_FRAGEN = 100
 PROBELAUF_FRAGEN = 24
 DURCHGANG_RUNDEN = 3
 RUNDEN_DATEI = "pruefrunden.json"
+BAU_VOLL = 90
+SCHLECHTER_AB = 3
 SUCHE_AUS_MERKMAL = "Suche im Internet ist gerade nicht durchgekommen"
 NOTIZ_MAX = 600
 _NOTIZ = re.compile(r"[^.]*(?:neu geantwortet|gestrichen|nicht ausgegeben|ausgelassen|nachübersetzt|Zeit je Schritt)[^.]*\.(?:[^.]*\d s[^.]*\.)?")
@@ -619,7 +621,53 @@ class Pruefstand:
             mails.append(self.runden_mail(self.runden_stand(geraet, rotation=offen.get("rotation")), "rotation"))
         elif voll:
             mails.append(self.runden_mail(self.runden_stand(geraet, durchgang=dg["id"]), "durchgang"))
+        bau = str(meta.get("bau") or "")
+        if bau and bau not in (d.get("bau_verglichen") or []):
+            v = self.bau_vergleich(bau)
+            if v is not None:
+                d["bau_verglichen"] = (list(d.get("bau_verglichen") or []) + [bau])[-50:]
+                self._runden_speichern(d)
+                if v["schlechter"] - v["besser"] >= SCHLECHTER_AB:
+                    mails.append(self.bau_mail(v))
         return {**{k: v for k, v in neu.items() if k != "fragen"}, "mails": mails}
+
+    def bau_vergleich(self, bau: str) -> dict | None:
+        neu: dict[str, dict] = {}
+        alt: dict[str, dict] = {}
+        for x in self._messreihe_berichte():
+            b = str(x.get("bau") or "")
+            if not x.get("runde") or x.get("modell") or not b or b > bau:
+                continue
+            ziel = neu if b == bau else alt
+            for f in x.get("fragen") or []:
+                if isinstance(f, dict) and f.get("kennung") and not ohne_antwort(f.get("antwort")):
+                    ziel[str(f["kennung"])] = {**f, "bau": b}
+        gemeinsam = [k for k in neu if k in alt]
+        if len(neu) < BAU_VOLL or len(gemeinsam) < BAU_VOLL // 2:
+            return None
+        je: dict[str, dict] = {}
+        for k in gemeinsam:
+            a = je.setdefault(str(neu[k].get("art") or "?"), {"gesamt": 0, "alt": 0, "neu": 0})
+            a["gesamt"] += 1
+            a["alt"] += 1 if alt[k].get("richtig") else 0
+            a["neu"] += 1 if neu[k].get("richtig") else 0
+        return {"bau": bau, "vorher": sorted({alt[k]["bau"] for k in gemeinsam}), "gesamt": len(gemeinsam),
+                "alt": sum(a["alt"] for a in je.values()), "neu": sum(a["neu"] for a in je.values()),
+                "schlechter": sum(1 for k in gemeinsam if alt[k].get("richtig") and not neu[k].get("richtig")),
+                "besser": sum(1 for k in gemeinsam if neu[k].get("richtig") and not alt[k].get("richtig")), "je_art": je}
+
+    @staticmethod
+    def bau_mail(v: dict) -> tuple[str, str]:
+        namen = dict(ARTEN_NAMEN)
+        betreff = f"KIplatz Prüfung: Bau {v['bau']} antwortet schlechter als davor"
+        zeilen = [f"Bau {v['bau']} hat seine erste volle Prüfrunde hinter sich. Bei denselben {v['gesamt']} Fragen waren mit den Bauten davor "
+                  f"({', '.join(v['vorher'])}) {v['alt']} richtig, jetzt {v['neu']}.",
+                  f"Schlechter geworden: {v['schlechter']} Fragen, besser geworden: {v['besser']}.", ""]
+        for art, a in sorted(v["je_art"].items(), key=lambda x: x[1]["neu"] - x[1]["alt"]):
+            if a["neu"] != a["alt"]:
+                zeilen.append(f"{namen.get(art, art)}: vorher {a['alt']} von {a['gesamt']}, jetzt {a['neu']}")
+        zeilen += ["", "Der Bau ist schon ausgerollt. Soll er zurück auf den Bau davor, sag es einem Chat; dort siehst du auch die Fragen."]
+        return betreff, "\n".join(zeilen)
 
     def runden_stand(self, geraet: str, *, durchgang: str | None = None, rotation: int | None = None) -> dict:
         je: dict[str, dict] = {}

@@ -14,6 +14,9 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-10-28a": [
+        "Sucht KIplatz im Internet, liest es jetzt immer auch die Seite, die die Suche ganz oben zeigt. Fragen wie „Seit wann gibt es den Europark in Salzburg?“ bekommen so eine Antwort statt „weiß ich nicht“.",
+    ],
     "2026-10-27k": [
         "„Abmelden“ im Programm meldet dich jetzt auch im Browser ab, auf der Website, im Platzl und in der Werkstatt. Die Admin-Bereiche zeigt das Programm nur, solange du mit deinem Konto angemeldet bist.",
     ],
@@ -1301,6 +1304,9 @@ ZURUECKGEHALTEN: dict[str, list[str]] = {
 }
 
 KURZ_JE_TAG: dict[str, list[str]] = {
+    "2026-10-28": [
+        "Sucht KIplatz im Internet, liest es jetzt immer auch den obersten Treffer der Suche",
+    ],
     "2026-10-27": [
         "Die PCs der Community beantworten Wissensfragen jetzt im Voraus, ein zweiter PC prüft jede Antwort",
         "„Meine Fragen helfen beim Lernen“ ist ab Werk aus, nur wer den Haken selbst setzt, hilft mit",
@@ -1423,6 +1429,10 @@ KURZ_JE_TAG: dict[str, list[str]] = {
 
 
 GESCHICHTE_JE_TAG: dict[str, dict[str, str]] = {
+    "2026-10-28": {
+        "haken": "Frag KIplatz ab heute „Seit wann gibt es den Europark in Salzburg?“, und du bekommst das Jahr der Eröffnung.",
+        "text": "Bisher las KIplatz manchmal nur Seiten, die zur Frage passend klangen, und übersah den obersten Treffer der Suche. Jetzt ist er immer dabei.",
+    },
     "2026-10-27": {
         "haken": "Frag KIplatz „Wer war Hulk Hogan?“, und die Antwort kommt sofort, sobald die PCs der Community sie im Voraus erarbeitet haben.",
         "text": "Das machen sie nebenbei, für fast 3 000 Fragen aus aller Welt, die sich nicht ändern. Ein zweiter PC liest die Quellen selbst nach, bevor eine Antwort für alle gilt. Und ein Update wirft die gesammelten Antworten nicht mehr weg.",

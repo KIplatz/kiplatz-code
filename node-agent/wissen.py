@@ -138,6 +138,16 @@ def woerter(text: str) -> list[str]:
     return out
 
 
+_FRAGEWENDUNG = re.compile(r"(?i)\b(?:seit|bis|ab|von)\s+wann(?:\s+an)?\b|\b(?:since|until|till|from)\s+when\b|\bdepuis\s+quand\b|\bjusqu.\s*(?:à|a)\s+quand\b|"
+                           r"\bda\s+quando\b|\bfino\s+a\s+quando\b|\bdesde\s+cu[aá]ndo\b|\bhasta\s+cu[aá]ndo\b|\bsinds\s+wanneer\b|\btot\s+wanneer\b|"
+                           r"\b(?:seit|ab|bis)\s+welche[mnr]?\s+(?:jahr|zeitpunkt|datum|monat|tag)\b|\b(?:since|from|until)\s+what\s+(?:year|date|time)\b|"
+                           r"\bdepuis\s+quelle\s+(?:année|annee|date)\b|\bda\s+quale\s+anno\b|\bdesde\s+qu[eé]\s+a[nñ]o\b")
+
+
+def ohne_fragewendung(frage: str) -> str:
+    return _FRAGEWENDUNG.sub(" ", frage or "")
+
+
 _ZAHL = r"\d[\d.,]*\s*"
 _MASSE = (
     (r"\bwie\s+lang\b|\bwie\s+weit\b|\bl(?:ä|ae)nge\b|\bentfernung\b|\bdistanz\b|\bstrecke\b",
@@ -1168,7 +1178,7 @@ def live_lesen(adresse: str, frage: str, *, n: int = TREFFER, oeffner=None, extr
         block, _, rest = rest.partition("\n\n")
         teile.append(block)
     teile += abschnitte(rest)
-    fw = set(woerter(frage))
+    fw = set(woerter(ohne_fragewendung(frage)))
     mass = mass_punkte(frage) if extra is None else None
     zusatz = [(float(extra(t)) if extra is not None else 0.0) + (mass(t) if mass is not None else 0.0) for t in teile]
     nach_wort = sorted(range(len(teile)), key=lambda i: -(len(fw & set(woerter(teile[i]))) + 2.0 * zusatz[i]))
