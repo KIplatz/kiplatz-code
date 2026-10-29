@@ -143,6 +143,7 @@ PRUEFSTAND_HOCHLADEN_WARTE_S = 60.0
 PRUEFSTAND_ANHALTEN_S = 120.0
 PRUEFEN_PAUSIERT_TEXT = "Prüfen und Training sind am Server pausiert, bis die Community genug freie Rechner hat."
 MESS_SUCHE_ABSTAND_S = 40.0
+_MESS_WARTE_RIEGEL = threading.Lock()
 MESS_SUCHEN_NACHT_MAX = 400
 PRUEFSTAND_AB_B = 8.0
 WARTEN_UNGENOMMEN_S = 25
@@ -838,6 +839,7 @@ class Api:
                                                             vorwaermen=self._vorwaermen_lauf,
                                                             pruefstand=self._pruefstand_lauf,
                                                             vorab=self._vorab_auftrag, vorab_frei=self._vorab_frei,
+                                                            uebersetzen=self._chatzeile_uebersetzen,
                                                             karte_vergeben=lambda: self._ki.gesperrt if self._kurztest_laeuft() else "",
                                                             modell_name=lambda: self._ki.wahl.modell.name if (self._ki.wahl and self._ki.quelle() == "lokal"
                                                                                                               and self._ki.ordner.modell_da(self._ki.wahl.modell)) else "",
@@ -1129,9 +1131,15 @@ class Api:
         listen = (not selbst and not frisch and not ohne_wiki and not rechen and nachschauen.listenfrage(frage) and suche_denkbar(frage)
                   and not _frueher_gefragt(nachrichten))
         namen = [] if (selbst or live or ergaenzend or orte or frisch or ohne_wiki or rechen) else self._unbekannte_namen(frage)
-        if (frisch or ohne_wiki or namen or listen) and not live and not selbst and self.nachschauen_an() and frage.strip():
+        unsicher = [] if (namen or selbst or live or ergaenzend or orte or frisch or ohne_wiki or rechen) else self._unsichere_namen(frage)
+        if (frisch or ohne_wiki or namen or unsicher or listen) and not live and not selbst and self.nachschauen_an() and frage.strip():
             if namen:
                 _log(self._core, f"OK unbekannter name: {len(namen)} Name(n) kennt keine Wortliste, die Suche läuft gleich mit")
+            elif unsicher:
+                _log(self._core, f"OK unsicherer name: {len(unsicher)} Name(n) echt oder erfunden, die Suche läuft gleich mit")
+                lauf_jetzt = getattr(_SUCHLAUF, "stand", None)
+                if lauf_jetzt is not None:
+                    lauf_jetzt["unsicherer_name"] = True
             elif listen:
                 _log(self._core, "OK listenfrage: eine Frage nach mehreren Dingen mit Zahlen, die Suche läuft gleich mit")
             vorab = self._nachschauen_vorab(frage, server + lokal, nachrichten, frisch=frisch, modell=bool(listen))
@@ -1785,7 +1793,11 @@ class Api:
                 self._mess_schlafen(min(0.5, ziel - jetzt))
                 jetzt = self._mess_uhr()
         finally:
-            self._mess_gewartet = getattr(self, "_mess_gewartet", 0.0) + (time.monotonic() - beginn)
+            ende = time.monotonic()
+            with _MESS_WARTE_RIEGEL:
+                bisher = getattr(self, "_mess_warte_ende", 0.0)
+                self._mess_gewartet = getattr(self, "_mess_gewartet", 0.0) + max(0.0, ende - max(beginn, bisher))
+                self._mess_warte_ende = max(bisher, ende)
         self._mess_suche_zuletzt, self._mess_suchen = jetzt, self._mess_suchen + 1
 
 
@@ -2547,7 +2559,9 @@ class Api:
             quellen, im_speicher = list(getattr(a, "quellen", ()) or ()), int(getattr(a, "im_speicher", 0) or 0)
         self._schritt("prüft die Antwort gegen die Quellen …")
         pr = pruefung.pruefen(a.text or "", [(int(q["nummer"]), str(q.get("text", ""))) for q in quellen if q.get("text")])
-        if klein and not getattr(a, "abgebrochen", False) and pr.gruen == 0 and not _WEISS_NICHT.search(ohne_markdown(a.text or "")):
+        nur_mit_beleg = klein or bool(lauf and lauf.get("unsicherer_name") and schrift is None and not fern
+                                      and any(q.get("art") == "nachgeschaut" for q in quellen))
+        if nur_mit_beleg and not getattr(a, "abgebrochen", False) and pr.gruen == 0 and not _WEISS_NICHT.search(ohne_markdown(a.text or "")):
             a = dataclasses.replace(a, text=_satz(_GESUCHT_NICHTS_SATZ, _GESUCHT_NICHTS_SATZ_EN))
             pr = pruefung.pruefen(a.text, [])
             strom.neu()
@@ -2767,6 +2781,15 @@ class Api:
         finally:
             if time.time() - t > 2.0:
                 _log(self._core, f"LANGSAM unbekannte namen: {time.time() - t:.1f} s")
+
+    def _unsichere_namen(self, frage: str) -> list[str]:
+        if not frage or _dateifrage(frage) or not suche_denkbar(frage) or not wissensfrage(frage):
+            return []
+        try:
+            return list(self._wortliste.unsichere_namen(frage) or [])
+        except Exception as exc:
+            _log(self._core, f"FEHLER unsichere namen: {type(exc).__name__}")
+            return []
 
     def _kann_fuer_andere_antworten(self) -> bool:
         return self._ki.quelle() == "lokal" and not self._schwach() and self._ki.eingerichtet()
@@ -5642,6 +5665,11 @@ class Api:
             return "falsch", ("die Zusammenfassung" if 0 in raus else "keine Antwort") + " steht so im Abschnitt", sorted(raus)
         return "ok", "", sorted(raus)
 
+    def _chatzeile_uebersetzen(self, text: str, ziel: str) -> str:
+        if not (self._ki.quelle() == "lokal" and self._ki.bereit()):
+            return ""
+        return antwortsprache.chatzeile_uebersetzen(self._hintergrund_frage, text, ziel)
+
     def _hintergrund_frage(self, nachrichten: list[dict], **extra):
         a = self._ki.server.frage(nachrichten, abbruch=self._rechen.vorrang, platz=ki_laufzeit.SLOT_HINTERGRUND, **extra)
         if getattr(a, "abgebrochen", False):
@@ -6435,6 +6463,10 @@ _RAT_ODER_ZEIT = re.compile(r"\b(w(?:ä|ae)ren?|k(?:ö|oe)nnte\w*|w(?:ü|ue)rde\
 def klein_wissensfrage(modellname: str, frage: str) -> bool:
     if not modellname or modell_stufe(modellname) >= KLEIN_NUR_MIT_BELEG_UNTER_B:
         return False
+    return wissensfrage(frage)
+
+
+def wissensfrage(frage: str) -> bool:
     f = " ".join(str(frage or "").split())
     if not _FAKTENFRAGE_ANFANG.match(f) or _AN_DIE_KI.search(f) or schriftstueck._PERSOENLICH.search(f) or _RAT_ODER_ZEIT.search(f):
         return False
@@ -7304,7 +7336,8 @@ def _streng(t: str, belegtext: str, zusatz: str, rechnen: bool, pruefer, auszueg
             befunde = [dataclasses.replace(b, namen=tuple(n for n in b.namen if n not in echt), verdacht=tuple(v for v in b.verdacht if v not in echt))
                        if belege.beispiel(b.satz) else b for b in befunde]
         befunde = [b for b in befunde if b.zahlen or b.namen or b.verdacht or b.regel]
-    einzeln = sorted({w for b in befunde for w in b.verdacht if " " not in w}) if woerter_frei else []
+    einzeln = sorted({w for b in befunde for w in b.verdacht if " " not in w
+                      and not (regel and any(c.isupper() or c.isdigit() for c in w[1:]))}) if woerter_frei else []
     try:
         gewoehnlich = set(bekannt(einzeln)) if bekannt is not None and einzeln else set()
     except Exception:
@@ -7457,7 +7490,7 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
     rechnen = belege.rechnet(frage)
     ableitung = belege.ableitungsfrage(frage)
     regel = not schreiben and belege.regelfrage(frage) and not belege.preisfrage(frage)
-    woerter_frei = not regel and not nachschauen.richtung(frage)
+    woerter_frei = not nachschauen.richtung(frage)
     regelfrage = frage if (not schreiben and belege.regelfrage(frage)) else ""
     auszuege = [(int(q.get("nummer") or 0), str(q.get("text") or "")) for q in beleg_quellen if q.get("text")]
     beispiele = not (rechnen or regel or belege.zahlenfrage(frage) or belege.preisfrage(frage))
@@ -7471,7 +7504,8 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
     namen_jetzt = namen1
     regel_saetze = {s for s, _g in belege.regel_ungestuetzt(t, regelfrage, [x for _n, x in auszuege])} if regelfrage else set()
     basis = t
-    ausloeser = belege.vermischt_ausloeser(geprueft, [(str(q.get("titel") or ""), str(q.get("text") or "")) for q in quellen if q.get("text")])
+    ausloeser = belege.vermischt_ausloeser(geprueft, [(str(q.get("titel") or ""), str(q.get("text") or "")) for q in quellen if q.get("text")],
+                                           frage if _NAMENSFRAGE.search(" ".join(str(frage or "").split())) else "")
     misch = [s for s, _n, _w in ausloeser]
     if misch:
         if isinstance(getattr(_VERMISCHT, "liste", None), list):

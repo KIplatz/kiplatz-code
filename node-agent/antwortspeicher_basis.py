@@ -167,6 +167,10 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
     ("2026-10-28c", frozenset(), "nur das Konto (Konto wechseln im Programm, app_web.konto_wechseln); am Antwortweg ändert sich nichts, nichts zu verwerfen"),
     ("2026-10-28d", frozenset(), "Konten am PC mit eigenen Fächern (app_web._fach_wechseln, konto_zu); am Antwortweg ändert sich nichts, nichts zu verwerfen"),
     ("2026-10-29a", frozenset(), "nur das Fenster (neu_laden statt location.reload) und die Rückkehr nach der Anmeldung; am Antwortweg ändert sich nichts, nichts zu verwerfen"),
+    ("2026-10-29b", frozenset(), "nur Chat-Zeilen der Welt übersetzen (antwortsprache.chatzeile_uebersetzen, app_web._chatzeile_uebersetzen); am Antwortweg ändert sich nichts, nichts zu verwerfen"),
+    ("2026-10-29c", frozenset({"ohne_suche"}), "Namen, die nur über einen gekürzten Stamm bekannt sind („Glanegger Spitze“) oder sich nicht zerlegen "
+     "lassen („Zelmkogel“), holen die Suche (namenpruefung); Antworten ohne Suche können solche Namen erfunden haben, sie gehen; der Blauwal-Satz "
+     "und Regelantworten mit gewöhnlichen Hauptwörtern fallen nicht mehr, das macht keine gespeicherte Antwort falsch"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())

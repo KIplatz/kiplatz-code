@@ -1280,10 +1280,12 @@ def namensvettern(frage: str, antwort: str, quellen_texte: list[str]) -> tuple[s
     return name, gefunden[:3]
 
 
-def vermischt_ausloeser(antwort: str, quellen: list[tuple[str, str]]) -> list[tuple[str, str, str]]:
+def vermischt_ausloeser(antwort: str, quellen: list[tuple[str, str]], frage: str = "") -> list[tuple[str, str, str]]:
     alle = [_wortstaemme(text) for _t, text in quellen]
+    thema = gegenstand_staemme(frage)
     benannt = [(n, alle[i]) for i, (titel, _text) in enumerate(quellen)
-               if (n := quellen_name(titel)) and not any(name_belegt(n, st) for j, st in enumerate(alle) if j != i)]
+               if (n := quellen_name(titel)) and not any(name_belegt(n, st) for j, st in enumerate(alle) if j != i)
+               and not (thema and (teile := [t for t in n.split() if len(t) >= 4]) and all(t.lower()[:6] in thema for t in teile))]
     if len(alle) < 2 or not benannt:
         return []
     out: list[tuple[str, str, str]] = []

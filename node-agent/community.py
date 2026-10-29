@@ -638,6 +638,8 @@ class Community:
                 werte = {"warm": "1" if leistung.get("warm") else "0", "tempo": f"{float(leistung.get('tempo') or 0):.2f}", "skills": "1", **werte}
                 if leistung.get("kopie"):
                     werte["kopie"] = "1"
+                if leistung.get("uebersetzen") and not nur_fragen:
+                    werte["uebersetzen"] = "1"
             flags.append(urllib.parse.urlencode(werte))
         if speicher:
             flags.append(urllib.parse.urlencode({"speicher_mb": int(speicher.get("limit_mb", 0) or 0), "frei_mb": int(speicher.get("frei_mb", 0) or 0)}))
@@ -660,6 +662,10 @@ class Community:
                     pass
             return None
         return a if a.get("auftrag") else None
+
+    def uebersetzt_melden(self, auftrag: str, text: str) -> bool:
+        a = self._anfrage("/uebersetzt", {"auftrag": str(auftrag)[:32], "text": str(text or "")[:600]}, als_geraet=True)
+        return bool(a.get("ok"))
 
 
     def _geraet_kopf(self) -> dict:

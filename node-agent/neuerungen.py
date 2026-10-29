@@ -14,6 +14,13 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-10-29c": [
+        "Fragst du nach einem Ort, einem Buch oder einem Menschen, den es vielleicht gar nicht gibt, schaut KIplatz jetzt zuerst im Internet nach. Findet es nichts, sagt es das ehrlich, statt eine Antwort zu erfinden.",
+        "Richtige Antworten fallen seltener der Prüfung zum Opfer: „Der Blauwal ist das größte Säugetier“ bleibt stehen, und bei Verkehrsregeln gelten gewöhnliche Wörter wie „Motorräder“ nicht mehr als unbekannter Name.",
+    ],
+    "2026-10-29b": [
+        "Allgemeine Optimierungen wurden durchgeführt.",
+    ],
     "2026-10-29a": [
         "Nach der Anmeldung im Browser holt sich KIplatz jetzt selbst nach vorne, und das Programmfenster bleibt nach dem Neuladen nicht mehr schwarz.",
     ],
@@ -1320,6 +1327,7 @@ ZURUECKGEHALTEN: dict[str, list[str]] = {
 KURZ_JE_TAG: dict[str, list[str]] = {
     "2026-10-29": [
         "Nach der Anmeldung im Browser kommt KIplatz jetzt von selbst nach vorne",
+        "Bei Namen, die es vielleicht nicht gibt, schaut KIplatz zuerst nach und erfindet nichts",
     ],
     "2026-10-28": [
         "Sucht KIplatz im Internet, liest es jetzt immer auch den obersten Treffer der Suche",
@@ -1448,6 +1456,10 @@ KURZ_JE_TAG: dict[str, list[str]] = {
 
 
 GESCHICHTE_JE_TAG: dict[str, dict[str, str]] = {
+    "2026-10-29": {
+        "haken": "Frag KIplatz ab heute „Wie tief ist die Edlwanger Klamm?“, und es erfindet dir keine Tiefe, denn diese Klamm gibt es nicht.",
+        "text": "Bei einem Namen, den es vielleicht gar nicht gibt, schaut es zuerst im Internet nach. Steht dort nichts, sagt es das ehrlich.",
+    },
     "2026-10-28": {
         "haken": "Frag KIplatz ab heute „Seit wann gibt es den Europark in Salzburg?“, und du bekommst das Jahr der Eröffnung.",
         "text": "Bisher las KIplatz manchmal nur Seiten, die zur Frage passend klangen, und übersah den obersten Treffer der Suche. Jetzt ist er immer dabei.",

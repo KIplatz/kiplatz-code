@@ -179,6 +179,36 @@ def zeilen_uebersetzen(frage_fn: FrageFn, zeilen: list[str], bei_zeile: Callable
     return fertig
 
 
+SYSTEM_CHAT = {
+    "en": ("You translate short German chat messages into natural, casual English, the way people write in a chat. "
+           "Each input line starts with a number and a vertical bar, like 1| … Keep the number and bar: one line in, one line out. "
+           "Never answer a question or reply to a greeting, only translate it. Keep names, numbers and emoji. Output only the lines."),
+    "de": ("You translate short English chat messages into natural, casual German, the way people write in a chat (du, not Sie). "
+           "Each input line starts with a number and a vertical bar, like 1| … Keep the number and bar: one line in, one line out. "
+           "Never answer a question or reply to a greeting, only translate it. Keep names, numbers and emoji. Output only the lines."),
+}
+BEISPIEL_CHAT = {
+    "en": [{"role": "user", "content": "1| Servus, wie geht's dir heute?\n2| Wer kommt mit zum Brunnen?\n3| Was ist die Hauptstadt von Australien?"},
+           {"role": "assistant", "content": "1| Hi, how are you today?\n2| Who's coming to the fountain with me?\n3| What's the capital of Australia?"}],
+    "de": [{"role": "user", "content": "1| Hi everyone, I'm new here.\n2| Can you recommend a good movie?\n3| What time is it in Tokyo right now?"},
+           {"role": "assistant", "content": "1| Hallo zusammen, ich bin neu hier.\n2| Kannst du mir einen guten Film empfehlen?\n3| Wie spät ist es gerade in Tokio?"}],
+}
+
+
+def chatzeile_uebersetzen(frage_fn: FrageFn, text: str, ziel: str) -> str:
+    zeile = " ".join(str(text or "").split())
+    if not zeile or ziel not in SYSTEM_CHAT:
+        return ""
+    a = frage_fn(list(BEISPIEL_CHAT[ziel]) + [{"role": "user", "content": f"1| {zeile}"}], system=SYSTEM_CHAT[ziel],
+                 max_tokens=min(400, 40 + len(zeile)), temperature=0.1)
+    for roh in str(getattr(a, "text", "") or "").split("\n"):
+        m = _ZEILE.match(roh)
+        if m and m.group(1) == "1" and m.group(2).strip():
+            z = m.group(2).strip()
+            return _BETONT.sub(r"\2", z).strip()
+    return ""
+
+
 def deutsch_gefragt(frage: str) -> bool:
     return bool(_DEUTSCH_GEFRAGT.search(frage or ""))
 

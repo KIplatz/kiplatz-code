@@ -125,7 +125,8 @@ class Rechenarbeit:
                  leerlauf_s=None, schlafen=None, protokoll=None, urteil=None, urteil_bereit=None,
                  antworten=None, ki_starten=None, ki_stoppen=None, antworten_moeglich=None, fragen_immer=None, am_strom=None,
                  vertiefen=None, vertiefen_pruefen=None, vorwaermen=None, pruefstand=None, server_geteilt=None, jetzt=None, halter=None, themen=None, hitze_messen=None, ram_messen=None,
-                 modell_name=None, stand=None, kartenteiler=None, kopie=None, speicher_freigeben=None, karte_vergeben=None, vorab=None, vorab_frei=None) -> None:
+                 modell_name=None, stand=None, kartenteiler=None, kopie=None, speicher_freigeben=None, karte_vergeben=None, vorab=None, vorab_frei=None,
+                 uebersetzen=None) -> None:
         self._core = core
         self._gemeinschaft = gemeinschaft if callable(gemeinschaft) else (lambda: gemeinschaft)
         self._urteil = urteil
@@ -133,6 +134,7 @@ class Rechenarbeit:
         self._ergebnis_ok = True
         self._urteil_bereit = urteil_bereit or (lambda: False)
         self._antworten = antworten
+        self._uebersetzen = uebersetzen
         self._ki_starten = ki_starten
         self._ki_stoppen = ki_stoppen
         self._antworten_moeglich = antworten_moeglich or (lambda: True)
@@ -458,6 +460,27 @@ class Rechenarbeit:
         except Exception as exc:
             self._log(f"FEHLER frage zurück: {type(exc).__name__}")
 
+    def _zeile_uebersetzen(self, auftrag: dict) -> None:
+        t0 = time.monotonic()
+        text = ""
+        if self._uebersetzen is not None:
+            try:
+                text = str(self._uebersetzen(str(auftrag.get("text", "")), str(auftrag.get("ziel", ""))) or "")
+            except Exception as exc:
+                self._log(f"INFO zeile übersetzen: {type(exc).__name__}")
+        try:
+            self._community.uebersetzt_melden(str(auftrag.get("auftrag", "")), text)
+        except Exception as exc:
+            self._log(f"FEHLER zeile übersetzen melden: {type(exc).__name__}")
+            return
+        self._log(f"OK rechenarbeit zeile übersetzt in {time.monotonic() - t0:.1f} s" if text else "INFO zeile nicht übersetzt, ein anderer PC übernimmt")
+
+    def _zeile_zurueck(self, auftrag: dict) -> None:
+        try:
+            self._community.uebersetzt_melden(str(auftrag.get("auftrag", "")), "")
+        except Exception as exc:
+            self._log(f"FEHLER zeile zurück: {type(exc).__name__}")
+
     def fragen_abgeben(self, grund: str) -> None:
         self._wache_ende()
         t = self._wache
@@ -559,6 +582,11 @@ class Rechenarbeit:
         if self._halt.is_set():
             if auftrag is not None and auftrag.get("art") == vermittlung_basis.ART:
                 self._frage_zurueck(auftrag, "das Gerät wurde gerade angehalten")
+            if auftrag is not None and auftrag.get("art") == vermittlung_basis.UEBERSETZ_ART:
+                self._zeile_zurueck(auftrag)
+            return
+        if auftrag is not None and auftrag.get("art") == vermittlung_basis.UEBERSETZ_ART:
+            self._zeile_uebersetzen(auftrag)
             return
         if auftrag is not None and auftrag.get("art") == vermittlung_basis.ART:
             meldung = self.meldung
@@ -771,6 +799,8 @@ class Rechenarbeit:
         if self._halt.is_set():
             if auftrag is not None and auftrag.get("art") == vermittlung_basis.ART:
                 self._frage_zurueck(auftrag, "das Gerät wurde gerade angehalten")
+            if auftrag is not None and auftrag.get("art") == vermittlung_basis.UEBERSETZ_ART:
+                self._zeile_zurueck(auftrag)
             return
         ziel = auftrag_ziel(auftrag)
         if ziel is not None:
@@ -816,6 +846,9 @@ class Rechenarbeit:
     def _auftrag_ausfuehren(self, auftrag: dict | None, *, vorrang: bool, kann_antworten: bool) -> None:
         if auftrag is not None and auftrag.get("art") == vermittlung_basis.ART:
             self._antwort_geben(auftrag)
+            return
+        if auftrag is not None and auftrag.get("art") == vermittlung_basis.UEBERSETZ_ART:
+            self._zeile_uebersetzen(auftrag)
             return
         if kann_antworten and hintergrund(auftrag):
             self._wache_starten()
@@ -1100,7 +1133,8 @@ class Rechenarbeit:
             return False
 
     def _leistung(self) -> dict:
-        return {"warm": bool(self._urteil_bereit()), "tempo": self._tempo(), "modell": self._modell(), "kopie": bool(self._kopie())}
+        return {"warm": bool(self._urteil_bereit()), "tempo": self._tempo(), "modell": self._modell(), "kopie": bool(self._kopie()),
+                "uebersetzen": self._uebersetzen is not None}
 
     def _tempo(self) -> float:
         try:

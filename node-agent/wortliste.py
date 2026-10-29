@@ -99,6 +99,15 @@ class _Zusammen(namenpruefung.Namenspruefung):
     def artikel_zu(self, titel: str) -> int | None:
         return next((1 for liste in self._listen if liste.artikel_zu(titel) is not None), None)
 
+    def _ganz_bekannt(self, wort: str) -> bool:
+        w = str(wort or "").lower()
+        for liste in self._listen:
+            stamm = liste._woerter(w)
+            if stamm == [w.translate(wissen._UMLAUT)] or stamm == [w]:
+                if liste._df(stamm[0]) > 0:
+                    return True
+        return False
+
 
 class Wortlisten:
 
@@ -203,6 +212,9 @@ class Wortlisten:
 
     def unbekannte_namen(self, text: str) -> list[str]:
         return self._zusammen().unbekannte_namen(text)
+
+    def unsichere_namen(self, text: str) -> list[str]:
+        return self._zusammen().unsichere_namen(text)
 
     def zustand(self) -> dict:
         return {"phase": self.phase, "meldung": self.meldung, "sprachen": sorted(self._listen),

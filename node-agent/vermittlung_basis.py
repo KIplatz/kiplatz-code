@@ -7,6 +7,11 @@ import re
 ART = "antwort"
 
 
+UEBERSETZ_ART = "uebersetzen"
+UEBERSETZ_MAX_TEXT = 300
+UEBERSETZ_SPRACHEN = ("de", "en")
+
+
 MAX_NACHRICHTEN = 12
 
 
