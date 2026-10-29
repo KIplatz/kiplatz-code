@@ -987,8 +987,7 @@ class Rechenarbeit:
             if self._ki_starten is None:
                 raise app_core.AppError("ANTWORT_KI", "KIplatz läuft nicht")
             self.phase = "laden"
-            self._ki_starten()
-            self._ki_von_uns = True
+            self._ki_von_uns = self._ki_starten() is not False
             self.phase = "antwortet"
             laden_s = time.time() - t0
         nachrichten = [n for n in auftrag.get("nachrichten", []) if isinstance(n, dict)]
@@ -1078,8 +1077,7 @@ class Rechenarbeit:
             return
         if self._ki_starten is None:
             raise app_core.AppError("ANTWORT_KI", "KIplatz läuft nicht")
-        self._ki_starten()
-        self._ki_von_uns = True
+        self._ki_von_uns = self._ki_starten() is not False
 
     def _vertiefen_auftrag(self, auftrag: dict) -> None:
         art = str(auftrag.get("art"))

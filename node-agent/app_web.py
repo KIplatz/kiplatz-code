@@ -120,7 +120,9 @@ GROUND = "#f4f6f5"
 KI_WARTEN_S = 180
 WARTEN_TAKT_S = 0.7
 ABHOLEN_WARTEN_S = 10.0
-UPDATE_PRUEFRUNDE_HOECHSTENS_S = 30 * 60
+UPDATE_PRUEFRUNDE_HOECHSTENS_S = 2 * 3600
+UPDATE_ORTE_HOECHSTENS_S = 90 * 60
+UPDATE_PRUEFFRAGE_HOECHSTENS_S = 20 * 60
 PRUEFRUNDE_NACH_FEHLER_S = 10 * 60
 UPDATE_ANTWORT_HOECHSTENS_S = 600
 ABHOLEN_FEHLVERSUCHE = 2
@@ -143,6 +145,7 @@ PRUEFSTAND_HOCHLADEN_WARTE_S = 60.0
 PRUEFSTAND_ANHALTEN_S = 120.0
 PRUEFEN_PAUSIERT_TEXT = "Prüfen und Training sind am Server pausiert, bis die Community genug freie Rechner hat."
 MESS_SUCHE_ABSTAND_S = 40.0
+_MESS_SUCHE_RIEGEL = threading.Lock()
 _MESS_WARTE_RIEGEL = threading.Lock()
 MESS_SUCHEN_NACHT_MAX = 400
 PRUEFSTAND_AB_B = 8.0
@@ -702,6 +705,7 @@ class KiSteuerung:
     def ausschalten(self) -> None:
         self.server.stop()
         self.phase, self.meldung = "aus", ""
+        self._geduld_genutzt = False
         self.fortschritt = {"was": "", "done": 0, "gesamt": 0}
 
     def auf_prozessor_wechseln(self) -> bool:
@@ -903,16 +907,17 @@ class Api:
     def herunterfahren(self) -> None:
         self.schliessen_angefordert = True
         for teil, name in (("_sprechen", "beenden"),
-                           ("_schnittstelle", "stop"), ("_dienst", "stop"),
+                           ("_dienst", "stop"), ("_schnittstelle", "stop"),
                            ("_warmhalter", "stop"),
                            ("_rechen", "stop"),
                            ("_bedeutung", "ausschalten"), ("_bewertung", "ausschalten"),
-                           ("_ki", "ausschalten")):
+                           ("_ki", "ausschalten"),
+                           ("_osm", "stop"), ("_wiki", "stop"), ("_wiki_en", "stop")):
             schritt = getattr(getattr(self, teil, None), name, None)
             if schritt is None:
                 continue
             try:
-                schritt()
+                schritt(timeout_s=60) if teil in ("_osm", "_wiki", "_wiki_en") else schritt()
             except Exception as exc:
                 _log(self._core, f"FEHLER herunterfahren {teil}.{name}: {type(exc).__name__}")
 
@@ -1779,29 +1784,33 @@ class Api:
         return self._community.websuche(frage, 8, **kw)
 
     def _mess_suche_budget(self, vorrang) -> None:
-        if self._mess_suchen >= MESS_SUCHEN_NACHT_MAX:
-            self._mess_geschont = True
-            if not self._mess_suche_gemeldet:
-                self._mess_suche_gemeldet = True
-                _log(self._core, f"INFO pruefstand: {MESS_SUCHEN_NACHT_MAX} Internet-Suchen in dieser Runde erreicht, weitere Prüffragen laufen ohne Suche")
-            raise app_core.AppError("SUCHE_GESCHONT", "Die Prüfrunde schont die Suchmaschinen; diese Prüffrage läuft ohne Suche.")
-        jetzt = self._mess_uhr()
-        ziel = self._mess_suche_zuletzt + MESS_SUCHE_ABSTAND_S if self._mess_suche_zuletzt else jetzt
         beginn = time.monotonic()
-        try:
-            while jetzt < ziel:
+        with _MESS_SUCHE_RIEGEL:
+            try:
+                if self._mess_suchen >= MESS_SUCHEN_NACHT_MAX:
+                    self._mess_geschont = True
+                    if not self._mess_suche_gemeldet:
+                        self._mess_suche_gemeldet = True
+                        _log(self._core, f"INFO pruefstand: {MESS_SUCHEN_NACHT_MAX} Internet-Suchen in dieser Runde erreicht, weitere Prüffragen laufen ohne Suche")
+                    raise app_core.AppError("SUCHE_GESCHONT", "Die Prüfrunde schont die Suchmaschinen; diese Prüffrage läuft ohne Suche.")
                 if isinstance(vorrang, threading.Event) and vorrang.is_set():
                     self._mess_geschont = True
                     raise app_core.AppError("SUCHE_GESCHONT", "Jemand fragt gerade selbst; diese Prüffrage läuft ohne Suche.")
-                self._mess_schlafen(min(0.5, ziel - jetzt))
                 jetzt = self._mess_uhr()
-        finally:
-            ende = time.monotonic()
-            with _MESS_WARTE_RIEGEL:
-                bisher = getattr(self, "_mess_warte_ende", 0.0)
-                self._mess_gewartet = getattr(self, "_mess_gewartet", 0.0) + max(0.0, ende - max(beginn, bisher))
-                self._mess_warte_ende = max(bisher, ende)
-        self._mess_suche_zuletzt, self._mess_suchen = jetzt, self._mess_suchen + 1
+                ziel = self._mess_suche_zuletzt + MESS_SUCHE_ABSTAND_S if self._mess_suche_zuletzt else jetzt
+                while jetzt < ziel:
+                    if isinstance(vorrang, threading.Event) and vorrang.is_set():
+                        self._mess_geschont = True
+                        raise app_core.AppError("SUCHE_GESCHONT", "Jemand fragt gerade selbst; diese Prüffrage läuft ohne Suche.")
+                    self._mess_schlafen(min(0.5, ziel - jetzt))
+                    jetzt = self._mess_uhr()
+            finally:
+                ende = time.monotonic()
+                with _MESS_WARTE_RIEGEL:
+                    bisher = getattr(self, "_mess_warte_ende", 0.0)
+                    self._mess_gewartet = getattr(self, "_mess_gewartet", 0.0) + max(0.0, ende - max(beginn, bisher))
+                    self._mess_warte_ende = max(bisher, ende)
+            self._mess_suche_zuletzt, self._mess_suchen = jetzt, self._mess_suchen + 1
 
 
     def _pruefen_pausiert(self, *, frisch: bool = False) -> bool:
@@ -1966,12 +1975,11 @@ class Api:
                 t0 = time.time()
                 self._mess_gewartet = 0.0
                 self._mess_geschont = False
-                _SCHATTEN.zeit = 0.0
                 schein: dict = {}
                 vorrang = getattr(self._rechen, "vorrang", None)
                 _VERMISCHT.liste = []
                 _GESTRICHEN.liste = []
-                _SCHATTEN.liste = []
+                _PRUEFRUNDE.an = True
                 _MESSWEG.d = {}
                 ablauf: list[tuple[float, str]] = []
                 ki_aus = False
@@ -1988,7 +1996,7 @@ class Api:
                 finally:
                     vermischt_liste, _VERMISCHT.liste = list(getattr(_VERMISCHT, "liste", None) or []), None
                     gestrichen_liste, _GESTRICHEN.liste = list(getattr(_GESTRICHEN, "liste", None) or []), None
-                    schatten_liste, _SCHATTEN.liste = list(getattr(_SCHATTEN, "liste", None) or []), None
+                    _PRUEFRUNDE.an = False
                     weg, _MESSWEG.d = getattr(_MESSWEG, "d", None), None
                     anfragen = ki_laufzeit.mitschnitt_ende()
                 if ki_aus:
@@ -2015,14 +2023,12 @@ class Api:
                 continue
             pr = schein.get("pruefung") if isinstance(schein.get("pruefung"), dict) else {}
             gewartet = getattr(self, "_mess_gewartet", 0.0)
-            richter_s = float(getattr(_SCHATTEN, "zeit", 0.0) or 0.0)
             if isinstance(weg, dict):
-                weg["schritte"] = ohne_suchbremse(ohne_suchbremse(schritte_summe(ablauf, time.time() - t0), gewartet), richter_s,
-                                                  name="Probe: Richter", zuerst=())
-            eintrag = {"kennung": kennung, "antwort": text, "dauer_s": round(max(0.0, time.time() - t0 - gewartet - richter_s), 1),
+                weg["schritte"] = ohne_suchbremse(schritte_summe(ablauf, time.time() - t0), gewartet)
+            eintrag = {"kennung": kennung, "antwort": text, "dauer_s": round(max(0.0, time.time() - t0 - gewartet), 1),
                        "pruefung": {k: pr.get(k, 0) for k in ("gruen", "gelb", "rot")}, "belege": list(schein.get("belege") or [])[:5],
                        "quellen": str(schein.get("quellen", ""))[:600],
-                       "notiz": notiz_zusammen(vermischt_notiz(vermischt_liste) + schatten_notiz(schatten_liste) + gestrichen_notiz(gestrichen_liste),
+                       "notiz": notiz_zusammen(vermischt_notiz(vermischt_liste) + gestrichen_notiz(gestrichen_liste),
                                                pruefstand.notiz_aus(schein.get("quellen", ""))),
                        "weg": mess_weg(schein, weg)}
             zs.anhaengen(kennung, str(f.get("frage", "")), eintrag)
@@ -2044,8 +2050,9 @@ class Api:
         if not antworten:
             self._pruefrunde_fehlschlag("keine Prüffrage bewertbar")
             return None
+        tages = not rid or len(fragen) > int(runde.get("messfragen") or 0)
         wege = {}
-        for name in self.PRUEFSTAND_WEGE:
+        for name in (self.PRUEFSTAND_WEGE if tages else ()):
             try:
                 r = getattr(self, name)()
                 wege[name] = bool(isinstance(r, dict) and r.get("ok", True))
@@ -2062,11 +2069,15 @@ class Api:
                 self._mess_schlafen(PRUEFSTAND_HOCHLADEN_WARTE_S)
         zs.gemeldet()
         r = b.get("runde") if isinstance(b.get("runde"), dict) else None
-        _log(self._core, f"OK pruefstand {b.get('richtig')} von {b.get('gesamt')} richtig, Wege {sum(1 for v in wege.values() if v)} von {len(wege)}"
-                         + (f"; Runde {r.get('nummer')} von {runde.get('von')}, Messreihe {r.get('richtig')} von {r.get('gesamt')}" if r else ""))
+        if tages:
+            _log(self._core, f"OK pruefstand {b.get('richtig')} von {b.get('gesamt')} richtig, Wege {sum(1 for v in wege.values() if v)} von {len(wege)}"
+                             + (f"; Runde {r.get('nummer')} von {runde.get('von')}, Messreihe {r.get('richtig')} von {r.get('gesamt')}" if r else ""))
+        else:
+            _log(self._core, f"OK pruefstand Runde {(r or {}).get('nummer')} von {runde.get('von')}: {(r or b).get('richtig')} von {(r or b).get('gesamt')} richtig")
         try:
-            self._ki.einstellung_setzen(pruefstand_nacht={"tag": str(b.get("tag", ""))[:10], "richtig": int(b.get("richtig", 0) or 0),
-                                                          "gesamt": int(b.get("gesamt", 0) or 0), "hinten": bool(b.get("hinten"))})
+            if tages:
+                self._ki.einstellung_setzen(pruefstand_nacht={"tag": str(b.get("tag", ""))[:10], "richtig": int(b.get("richtig", 0) or 0),
+                                                              "gesamt": int(b.get("gesamt", 0) or 0), "hinten": bool(b.get("hinten"))})
             if r:
                 self._ki.einstellung_setzen(pruefrunde_letzte={"zeit": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                                                                "richtig": int(r.get("richtig", 0) or 0), "gesamt": int(r.get("gesamt", 0) or 0),
@@ -2079,6 +2090,7 @@ class Api:
         p = getattr(self, "_pruefrunde", None)
         if isinstance(p, dict):
             p["n"] = n
+            self._pruefung_fortschritt = time.monotonic()
 
     def pruefstand_stand(self) -> dict:
         def go():
@@ -2157,7 +2169,7 @@ class Api:
             self._pruefstand_thread.start()
             return {"gestartet": True}
         return self._guarded("pruefstand_jetzt", go, "Der Probelauf läuft: 24 Fragen, rund 5 Minuten. Ist noch eine Prüfrunde offen, geht zuerst sie zu Ende." if probelauf
-                             else "Die Prüfrunde läuft: 100 Fragen, rund 20 Minuten. Du kannst den PC dabei weiter benutzen.")
+                             else "Die Prüfrunde läuft: rund 100 Fragen, die erste des Tages etwa 130, je nach PC 20 bis 45 Minuten. Du kannst den PC dabei weiter benutzen.")
 
     def vorwaermen_setzen(self, an: bool) -> dict:
         return self._guarded("vorwaermen_setzen", lambda: self._ki.einstellung_setzen(vorwaermen=bool(an)) or {"vorwaermen": bool(an)},
@@ -2742,20 +2754,15 @@ class Api:
             return pruefer(z, saetze)
         bekannt = getattr(getattr(self, "_wortliste", None), "namen_bekannt", None)
 
-        def richter(satz: str, texte: list[str], *, einspruch: bool = False) -> float | None:
+        def richter(satz: str, texte: list[str]) -> float | None:
             vorrang = getattr(getattr(self, "_rechen", None), "vorrang", None)
             vorrang = vorrang if isinstance(vorrang, threading.Event) else None
-            if not isinstance(getattr(_SCHATTEN, "liste", None), list):
+            if not getattr(_PRUEFRUNDE, "an", False):
                 vorrang = None
             if pruefer is None or not texte or (vorrang is not None and vorrang.is_set()):
                 return None
-            t0 = time.monotonic()
-            try:
-                a = self._ki.server.frage([{"role": "user", "content": belege.RICHTER_AUFTRAG + " " + " ".join(satz.split())[:600]}], zusatz=zusatz,
-                                          max_tokens=4, temperature=0.0, art="richter", abbruch=vorrang)
-            finally:
-                if not einspruch:
-                    _SCHATTEN.zeit = float(getattr(_SCHATTEN, "zeit", 0.0) or 0.0) + time.monotonic() - t0
+            a = self._ki.server.frage([{"role": "user", "content": belege.RICHTER_AUFTRAG + " " + " ".join(satz.split())[:600]}], zusatz=zusatz,
+                                      max_tokens=4, temperature=0.0, art="richter", abbruch=vorrang)
             return None if getattr(a, "abgebrochen", False) else belege.richter_wert(a.text)
         _FREMD.texte = belege.fremde_texte(quellen)
         neu_text, notizen = belege_anwenden(text, frage, zusatz, quellen, nochmal=neu if nochmal is not None else None,
@@ -2805,10 +2812,12 @@ class Api:
             return False
         return getattr(self._rechen, "phase", "") not in ("aus", "akku", "hitze", "laden", "startet", "fehler", "nicht_angemeldet", "ruht", "antwortet", "trainiert")
 
-    def _ki_starten_blockierend(self) -> None:
+    def _ki_starten_blockierend(self) -> bool:
         if self._ki.quelle() != "lokal":
             raise app_core.AppError("KI_QUELLE", "dieses Gerät fragt selbst ein anderes Gerät; es kann nicht für andere antworten")
+        war_aus = self._ki.phase in ("aus", "fehler")
         self._ki_bereit_machen(einschalten=True)
+        return war_aus
 
     def _ki_ende_grund(self) -> str:
         try:
@@ -5894,11 +5903,7 @@ class Api:
             befehl = [str(ordner / app_install.START_NAME), "-"]
         else:
             befehl = app_install.start_command(ordner) if starter else [str(ordner / app_install.EXE_NAME)]
-        for schritt in (self._dienst.stop, self._schnittstelle.stop, self._warmhalter.stop, self._rechen.stop, self._ki.ausschalten, self._bedeutung.ausschalten, self._bewertung.ausschalten):
-            try:
-                schritt()
-            except Exception:
-                pass
+        self.herunterfahren()
         if self.versteckt:
             befehl = befehl + ["--autostart"]
         einmal.freigeben()
@@ -5989,8 +5994,16 @@ class Api:
             _log(self._core, f"HINWEIS update: dieses Gerät antwortet seit über {UPDATE_ANTWORT_HOECHSTENS_S // 60} Minuten, das hängt; das Update geht vor")
             return False
         seit = getattr(self, "_pruefung_seit", 0.0)
-        if seit and time.monotonic() - seit < UPDATE_PRUEFRUNDE_HOECHSTENS_S:
+        jetzt = time.monotonic()
+        if seit and jetzt - seit < UPDATE_PRUEFRUNDE_HOECHSTENS_S and jetzt - max(seit, getattr(self, "_pruefung_fortschritt", 0.0)) < UPDATE_PRUEFFRAGE_HOECHSTENS_S:
             return True
+        if getattr(getattr(self, "_osm", None), "phase", "") == "liest":
+            beginn = getattr(self, "_update_orte_seit", 0.0) or jetzt
+            self._update_orte_seit = beginn
+            if jetzt - beginn < UPDATE_ORTE_HOECHSTENS_S:
+                return True
+        else:
+            self._update_orte_seit = 0.0
         vorrang = bool(getattr(getattr(r, "vorrang", None), "is_set", lambda: False)()) and set(getattr(r, "_vorrang_wer", set()) or ()) != {"karte"}
         return frage or vorrang
 
@@ -6153,8 +6166,8 @@ _VERMISCHT = threading.local()
 
 _GESTRICHEN = threading.local()
 
-_SCHATTEN = threading.local()
-SCHATTEN_HOECHSTENS = 6
+_PRUEFRUNDE = threading.local()
+EINSPRUCH_HOECHSTENS = 6
 
 _MESSWEG = threading.local()
 
@@ -6174,7 +6187,7 @@ def schritte_summe(ablauf: list[tuple[float, str]], gesamt_s: float) -> dict[str
     return {n: int(round(v)) for n, v in sorted(s.items(), key=lambda x: -x[1])[:8]}
 
 
-WARTE_SCHRITTE = ("wartet auf die Suchbremse", "Probe: Richter")
+WARTE_SCHRITTE = ("wartet auf die Suchbremse",)
 
 
 def ohne_suchbremse(schritte: dict[str, int], gewartet_s: float, *, name: str = "wartet auf die Suchbremse",
@@ -6189,20 +6202,6 @@ def ohne_suchbremse(schritte: dict[str, int], gewartet_s: float, *, name: str = 
             break
     s[name] = g
     return dict(sorted(s.items(), key=lambda x: -x[1])[:8])
-
-
-def schatten_notiz(liste) -> str:
-    def wert(r) -> str:
-        return "-" if r is None else f"{float(r):.2f}".replace(".", ",")
-    teile = []
-    for e in list(liste or [])[:SCHATTEN_HOECHSTENS]:
-        gegen = f"/{wert(e.get('rg'))}" if "rg" in e else ""
-        teile.append(f"Z{int(bool(e.get('z')))} W{int(e.get('w') or 0)} N{int(bool(e.get('n')))} G{int(bool(e.get('g')))} R{wert(e.get('r'))}{gegen}")
-    return f"Richter: {'; '.join(teile)}. " if teile else ""
-
-
-def gegenprobe_satz(satz: str) -> str:
-    return re.sub(r"\d+", lambda m: str((int(m.group(0)[0]) + 3) % 10 or 1) + m.group(0)[1:], satz)
 
 
 def notiz_zusammen(vorne: str, hinten: str) -> str:
@@ -7318,7 +7317,7 @@ def _ohne_vermittler(zusatz: str, quellen: list[dict], adressen: set[str]) -> st
 
 def _streng(t: str, belegtext: str, zusatz: str, rechnen: bool, pruefer, auszuege: list[tuple[int, str]], *, regel: bool = False,
             beispiele: bool = False, bekannt=None, regelfrage: str = "", richter=None, ableitung: bool = False, einspruch: bool = False,
-            einspruch_zaehler: list[int] | None = None, schatten: bool = True, namen_info: dict | None = None,
+            einspruch_zaehler: list[int] | None = None, namen_info: dict | None = None,
             woerter_frei: bool = False, frage: str = "") -> tuple[str, list[str], int]:
     aus_quellen = any(s.farbe == "gruen" for s in pruefung.pruefen(t, auszuege).saetze)
     quelltexte = [x for _n, x in auszuege]
@@ -7353,7 +7352,6 @@ def _streng(t: str, belegtext: str, zusatz: str, rechnen: bool, pruefer, auszueg
     fraglich = [b.satz for b in fraglich_b]
     vom_pruefer = 0
     vom_pruefer_weg: set[str] = set()
-    urteile: dict[str, float | None] = {}
     als_name: set = set()
     if fraglich and pruefer is not None:
         try:
@@ -7364,23 +7362,6 @@ def _streng(t: str, belegtext: str, zusatz: str, rechnen: bool, pruefer, auszueg
         vom_pruefer_weg = {b.satz for b in fraglich_b if als_name & set(b.verdacht)}
         vom_pruefer = len(vom_pruefer_weg)
         weg |= vom_pruefer_weg
-    if schatten and richter is not None and isinstance(getattr(_SCHATTEN, "liste", None), list):
-        for b in befunde:
-            if b.regel:
-                continue
-            if len(_SCHATTEN.liste) >= SCHATTEN_HOECHSTENS:
-                break
-            eintrag = {"z": bool(b.zahlen), "w": len(b.namen) + len(b.verdacht), "n": bool(als_name & set(b.verdacht)), "g": b.satz in weg}
-            for feld, satz in (("r", b.satz), ("rg", gegenprobe_satz(b.satz))):
-                if feld == "rg" and satz == b.satz:
-                    break
-                try:
-                    eintrag[feld] = (richter(satz, quelltexte, einspruch=True) if einspruch and feld == "r" and b.satz in weg
-                                     else richter(satz, quelltexte))
-                except Exception:
-                    eintrag[feld] = None
-            urteile[b.satz] = eintrag.get("r")
-            _SCHATTEN.liste.append(eintrag)
     if einspruch and richter is not None and weg:
         gerettet: set[str] = set()
         quellsaetze = [q for zeile in (belegtext or "").split(chr(10)) for q in belege._saetze(zeile)]
@@ -7390,14 +7371,12 @@ def _streng(t: str, belegtext: str, zusatz: str, rechnen: bool, pruefer, auszueg
                 continue
             if b.zahlen and belege.jahre_anderswo(b.satz, quellsaetze, belege.gegenstand_staemme(frage)):
                 continue
-            if b.satz in urteile:
-                r = urteile[b.satz]
-            elif zaehler[0] >= SCHATTEN_HOECHSTENS:
+            if zaehler[0] >= EINSPRUCH_HOECHSTENS:
                 continue
             else:
                 zaehler[0] += 1
                 try:
-                    r = richter(b.satz, quelltexte, einspruch=True)
+                    r = richter(b.satz, quelltexte)
                 except Exception:
                     r = None
             if r == 1.0 or (r == 0.5 and not b.zahlen and not b.namen and not (als_name & set(b.verdacht))):
@@ -7536,7 +7515,7 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
             namen2: dict = {}
             geprueft2, raus2, vom2 = _streng(neu, belegtext, zusatz, rechnen, pruefer, auszuege, regel=regel, beispiele=beispiele, bekannt=bekannt, ableitung=ableitung, woerter_frei=woerter_frei,
                                              regelfrage=regelfrage, richter=richter if einspruch else None, einspruch=einspruch,
-                                             einspruch_zaehler=einspruch_zaehler, schatten=False,
+                                             einspruch_zaehler=einspruch_zaehler,
                                              namen_info=namen2, frage=frage)
             namen_rest2 = namen_fall and namen_ausnahme(frage, namen2, raus2, geprueft2)
             quell_z = belege.zahlenwerte(belegtext + "\n" + "\n".join(x for _n, x in auszuege))

@@ -152,7 +152,7 @@ _NICHT_WISSEN = re.compile(r"wei(?:ß|ss) ich (?:\w+ )*nicht|kenne ich (?:\w+ )*
                            r"|existiert (?:\w+ )?nicht|nicht (?:sicher )?sagen|nichts (?:verlässliches|bekannt)", re.I)
 _VERNEINT = re.compile(r"\b(?:hat|besitzt|gibt es)\s+(?:gar\s+)?(?:keinen?|keine)\b|\bist\s+kein(?:e|en)?\s+(?:Bundesland|Land|Staat|Hauptstadt)\b")
 _NICHT_WISSEN_EN = re.compile(r"I (?:don't|do not|can't|cannot|couldn't|could not|am unable to|'m unable to) (?:know|say|tell|find|confirm|verify|answer)"
-                              r"|not (?:entirely |completely |quite |really )?sure|no (?:reliable |verified |specific |further |such )?(?:information|data|details|answer|record)"
+                              r"|(?:I'm|I am|I’m) not (?:entirely |completely |quite |really )?sure|^\W*not (?:entirely |completely |quite |really )?sure|no (?:reliable |verified |specific |further |such )?(?:information|data|details|answer|record)"
                               r"|(?:doesn't|does not|didn't|did not) (?:seem to )?exist|(?:nothing|no results?) (?:reliable )?(?:was |were )?found"
                               r"|unknown to me|I have no (?:information|idea|data|knowledge)|not (?:known|aware)", re.I)
 
@@ -202,7 +202,7 @@ def _weg(w) -> dict:
     schritte = {}
     for s, n in list((w.get("schritte") if isinstance(w.get("schritte"), dict) else {}).items())[:8]:
         try:
-            schritte[_norm(s)[:40]] = max(0, min(int(n or 0), 3600))
+            schritte[_norm(s)[:60]] = max(0, min(int(n or 0), 3600))
         except (TypeError, ValueError):
             continue
     return {"gemacht": _norm(w.get("gemacht"))[:60], "stellen": zahl("stellen"),
@@ -232,11 +232,27 @@ def _pflicht_ok(text: str, pflicht) -> bool:
     for gruppe in pflicht or []:
         teile = [w for w in str(gruppe).split("|") if w]
         fassungen = (_ohne_tausender(text).lower(), _ohne_tausender(_TAUSENDER_EN.sub("", text or "")).lower())
-        if not any((w in text) if (w.isupper() and len(w) > 1) else any(_ohne_tausender(w).lower() in t for t in fassungen) for w in teile):
+        if not any((w in text) if (w.isupper() and len(w) > 1) else _teil_in(_ohne_tausender(w).lower(), fassungen) for w in teile):
             return False
     return True
 
 
+def _teil_in(w: str, fassungen) -> bool:
+    if w.isdigit():
+        muster = re.compile(rf"(?<!\d){w}(?!\d)")
+        return any(muster.search(t) for t in fassungen)
+    bereich = _BEREICH.fullmatch(w)
+    if bereich:
+        lo, hi = float(bereich.group(1)), float(bereich.group(2))
+        return any(lo <= float(z.replace(",", ".")) <= hi for t in fassungen for z in _ZAHL_IM_TEXT.findall(t))
+    return any(w in t for t in fassungen)
+
+
+_BEREICH = re.compile(r"#(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)")
+_ZAHL_IM_TEXT = re.compile(r"(?<![\d.,:])\d+(?:[.,]\d+)?(?![.,:/]\d)")
+
+
+URTEIL_AB_FRAGEN = 20
 _TAUSENDER_EN = re.compile(r"(?<=\d),(?=\d{3}(?!\d))")
 
 
@@ -749,16 +765,14 @@ class Pruefstand:
             betreff = f"KIplatz Prüfung: Zwischenstand nach {neu.get('runden')} Runden, {neu.get('richtig')} von {neu.get('gesamt')} richtig"
             zeilen = [f"Zwischenstand von {wer} (Bau {bauten}) nach {neu.get('runden')} Runden: {neu.get('richtig')} von {neu.get('gesamt')} Fragen richtig. "
                       "Die Grenzen „gut genug“ gelten erst, wenn alle Fragen einmal dran waren.", ""]
-        aussage = ("wissen", "alltag", "alltag_en", "erfunden")
         for a, name, feld in [(a, n, "je_art") for a, n in ARTEN_NAMEN] + [(k, n, "je_klasse") for k, n in KLASSEN_NAMEN]:
             x = (neu.get(feld) or {}).get(a)
             if not x:
                 continue
-            klein = not rotation and (feld == "je_klasse" or a not in aussage)
+            klein = not rotation and int(x.get("gesamt") or 0) < URTEIL_AB_FRAGEN
             zeilen.append(f"{name}: {x.get('richtig')} von {x.get('gesamt')}" + (" (zu wenige Fragen für ein Urteil)" if klein else ""))
         ohne = sum(1 for f in fr if suche_aus(f.get("antwort")))
         neu_geschrieben = sum(1 for f in fr if "neu geantwortet" in str(f.get("notiz") or ""))
-        mit_notiz = sum(1 for f in fr if f.get("notiz"))
         d = sorted(float(f.get("dauer_s") or 0) for f in fr)
         leer = sum(1 for f in fr if ohne_antwort(f.get("antwort")))
         if leer > max(5, OHNE_ANTWORT_ANTEIL * len(fr)):
@@ -773,8 +787,8 @@ class Pruefstand:
             laengen = sorted(int(f.get("laenge") or 0) for f in fr if f.get("art") in ("alltag", "alltag_en"))
             if laengen:
                 zeilen.append(f"Länge der Alltagsantworten: Mitte {laengen[len(laengen) // 2]} Zeichen")
-        if mit_notiz:
-            zeilen.append(f"Neu geschrieben: {neu_geschrieben} von {mit_notiz} Antworten mit Notiz")
+        if fr:
+            zeilen.append(f"Neu geschrieben, weil die erste Fassung nicht zu den Quellen passte: {neu_geschrieben} von {len(fr)} Antworten")
         if d:
             zeilen.append(f"Antwortzeit: die Hälfte unter {statistics.median(d):.1f} s, 9 von 10 unter {d[int(len(d) * 0.9)]:.1f} s".replace(".", ","))
         schritte: dict[str, int] = {}
@@ -783,7 +797,8 @@ class Pruefstand:
                 schritte[s] = schritte.get(s, 0) + int(n or 0)
         if schritte:
             zeilen.append("Zeit je Schritt, zusammen: " + ", ".join(f"{s} {n // 60} min" for s, n in sorted(schritte.items(), key=lambda x: -x[1])[:6]))
-        zeilen += ["", "Ausgerollt wird damit nichts." + (" Die genaue Auswertung: werkzeuge/messnacht_vergleich.py." if rotation else "")]
+        zeilen += ["", "Der gemessene Bau ist schon ausgerollt. Antwortet ein Bau schlechter als die Bauten davor, kommt eine eigene Mail."
+                   + (" Die genaue Auswertung: werkzeuge/messnacht_vergleich.py." if rotation else "")]
         return betreff, "\n".join(zeilen)
 
     @staticmethod

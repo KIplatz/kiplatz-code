@@ -1,6 +1,6 @@
 {
- "pruefwert": "58896b112f2b976f17430108",
+ "pruefwert": "6851c3b91ac3b9d3b467234f",
  "mindest_bau": "2026-10-26k",
- "erneuert": "2026-10-29d",
- "grund": "2026-10-29d: Maßfragen auch englisch mit Temperatur und Alter, Stelle mit Zahl bleibt beim Modell, Dreisatz aus der Frage"
+ "erneuert": "2026-10-29e",
+ "grund": "2026-10-29e: Prüfrunde bereinigt, Schattenrichter heraus, KI-Start nach Update, Suchbremse je Faden"
 }
