@@ -1,6 +1,6 @@
 {
- "pruefwert": "6851c3b91ac3b9d3b467234f",
+ "pruefwert": "5c1ef530bd12cb38a96f5e35",
  "mindest_bau": "2026-10-26k",
- "erneuert": "2026-10-29e",
- "grund": "2026-10-29e: Prüfrunde bereinigt, Schattenrichter heraus, KI-Start nach Update, Suchbremse je Faden"
+ "erneuert": "2026-10-29f",
+ "grund": "2026-10-29f: nur der Start der ersten Prüfrunde nach dem Update, am Antwortweg ändert sich nichts"
 }

@@ -37,7 +37,7 @@ def test_jeder_admin_aufruf_steht_in_der_liste_und_prueft_unter_seinem_namen():
 
 
 def test_jede_geraete_admin_stelle_ist_bewusst_eingeordnet():
-    am_geraet = {"__init__", "_pruefstand_lauf", "_vorab_frei", "_schnittstelle_antwort", "frage", "_admin_fenster"}
+    am_geraet = {"__init__", "_pruefstand_lauf", "_neuer_bau_faellig", "_vorab_frei", "_schnittstelle_antwort", "frage", "_admin_fenster"}
     text, baum = _quelle("app_web.py")
     gefunden = set()
     for k in baum.body:

@@ -14,6 +14,7 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-10-29f": [],
     "2026-10-29e": [
         "Nach einem Update startet KIplatz die KI wieder mit dem großen Modell auf der Grafikkarte. Vorher konnte es passieren, dass der PC bis zum nächsten Neustart mit dem kleineren Modell auf dem Prozessor lief.",
         "Ein Update wartet jetzt, bis die laufende Arbeit am PC fertig ist, auch wenn die Karte für deine Gegend gerade eingelesen wird. Sie muss dann nicht von vorn beginnen.",

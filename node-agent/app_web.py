@@ -143,6 +143,10 @@ PRUEFSTAND_VERSUCHE = 3
 PRUEFSTAND_HOCHLADEN_VERSUCHE = 3
 PRUEFSTAND_HOCHLADEN_WARTE_S = 60.0
 PRUEFSTAND_ANHALTEN_S = 120.0
+NEUER_BAU_ERSTER_VERSUCH_S = 180.0
+NEUER_BAU_WIEDER_S = 300.0
+NEUER_BAU_HOECHSTENS_S = 6 * 3600.0
+_PRUEFSTAND_START_RIEGEL = threading.Lock()
 PRUEFEN_PAUSIERT_TEXT = "Prüfen und Training sind am Server pausiert, bis die Community genug freie Rechner hat."
 MESS_SUCHE_ABSTAND_S = 40.0
 _MESS_SUCHE_RIEGEL = threading.Lock()
@@ -1690,8 +1694,43 @@ class Api:
         if b is None and self._runde_ruht_grund == "die KI ist ausgefallen":
             self._pruefrunde_fehlschlag(self._runde_ruht_grund)
         if b is not None and admin:
-            self._ki.einstellung_setzen(pruefrunden={"tag": datetime.now().strftime("%Y-%m-%d"), "n": self._pruefrunden_heute() + 1})
+            self._ki.einstellung_setzen(pruefrunden={"tag": datetime.now().strftime("%Y-%m-%d"), "n": self._pruefrunden_heute() + 1},
+                                        **({} if probelauf else {"pruefrunde_bau": app_core.APP_BUILD}))
         return b
+
+    def _neuer_bau_faellig(self) -> bool:
+        if self.spielwiese or not self._community.ist_admin() or not self.pruefstand_an() or self._pruefen_pausiert():
+            return False
+        steht_an = getattr(self, "_update_steht_an", "")
+        if steht_an and steht_an > app_core.APP_BUILD:
+            return False
+        return str(self._ki.einstellung().get("pruefrunde_bau", "")) != app_core.APP_BUILD
+
+    def _neuer_bau_pruefen(self) -> None:
+        def lauf():
+            bis = time.monotonic() + NEUER_BAU_HOECHSTENS_S
+            warte, gemeldet = NEUER_BAU_ERSTER_VERSUCH_S, ""
+            while time.monotonic() < bis and not self._stopp.wait(warte):
+                warte = NEUER_BAU_WIEDER_S
+                try:
+                    if not self._neuer_bau_faellig():
+                        return
+                    t = self._pruefstand_thread
+                    if (t and t.is_alive()) or getattr(self, "_pruefung_seit", 0.0):
+                        continue
+                    if time.monotonic() < getattr(self, "_pruefrunde_pause_bis", 0.0):
+                        continue
+                    self._pruefstand_jetzt_starten()
+                    _log(self._core, f"OK pruefstand: neuer Bau {app_core.APP_BUILD}, die erste Prüfrunde startet gleich")
+                    gemeldet = ""
+                except app_core.AppError as exc:
+                    if exc.code != gemeldet:
+                        gemeldet = exc.code
+                        _log(self._core, f"INFO pruefstand: neuer Bau, die erste Prüfrunde wartet ({exc.code}: {exc.detail}); "
+                                         f"in {int(NEUER_BAU_WIEDER_S // 60)} Minuten noch einmal")
+                except Exception as exc:
+                    _log(self._core, f"FEHLER pruefstand neuer bau: {type(exc).__name__}: {str(exc)[:100]}")
+        threading.Thread(target=lauf, name="neuer-bau-pruefen", daemon=True).start()
 
 
     def _vorab_frei(self) -> bool:
@@ -2124,52 +2163,58 @@ class Api:
         return self._guarded("pruefstand_setzen", go, "Gespeichert.")
 
     def pruefstand_jetzt(self, probelauf: bool = False) -> dict:
-        def go():
-            if (self._pruefstand_thread and self._pruefstand_thread.is_alive()) or getattr(self, "_pruefung_seit", 0.0):
-                raise app_core.AppError("PRUEFSTAND_LAEUFT", "eine Prüfrunde läuft schon")
-            if self._kurztest_laeuft():
-                raise app_core.AppError("KURZTEST_LAEUFT", "Gerade läuft schon ein Test oder ein Training.")
-            if self._pruefen_pausiert(frisch=True):
-                raise app_core.AppError("PRUEFEN_PAUSIERT", PRUEFEN_PAUSIERT_TEXT)
-            fremd = self._karte_fremd()
-            if fremd:
-                _log(self._core, f"ABGELEHNT pruefstand_jetzt: {fremd}")
-                raise app_core.AppError("KARTE_BELEGT", "die Grafikkarte wird gerade von einem anderen Programm gebraucht, zum Beispiel von einem Spiel oder Video"
-                                        if "nicht messbar" not in fremd else "am PC wird gerade gearbeitet, und die Last auf der Grafikkarte ist nicht messbar")
-
-            def lauf():
-                gehalten = False
-                try:
-                    gehalten = self._rechen.anhalten(hoechstens_s=PRUEFSTAND_ANHALTEN_S)
-                    self._knopf_wartet = False
-                    if not gehalten:
-                        self._knopf_meldung = (f"Die Rechenarbeit war {int(PRUEFSTAND_ANHALTEN_S // 60)} Minuten lang mitten in einem Auftrag; "
-                                               "bitte noch einmal drücken.")
-                        _log(self._core, "ABGELEHNT pruefstand_lauf: die Rechenarbeit kam nicht zwischen zwei Aufträge")
-                        return
-                    with self._rechen.wache_halten():
-                        r = self._guarded("pruefstand_lauf", lambda: self._pruefstand_lauf(erzwingen=True, probelauf=bool(probelauf)))
-                    b = r.get("daten") if r.get("ok") else None
-                    rd = b.get("runde") if isinstance(b, dict) and isinstance(b.get("runde"), dict) else {}
-                    if not r.get("ok"):
-                        self._knopf_meldung = str(r.get("text", ""))
-                    elif rd:
-                        self._knopf_meldung = f"Fertig: {rd.get('richtig', 0)} von {rd.get('gesamt', 0)} Fragen richtig, der Bericht ist beim Server."
-                    elif isinstance(b, dict):
-                        self._knopf_meldung = f"Fertig: {b.get('richtig', 0)} von {b.get('gesamt', 0)} Prüffragen richtig, der Bericht ist beim Server."
-                    else:
-                        grund = self._runde_ruht_grund or "sie wurde unterbrochen"
-                        self._knopf_meldung = f"Die Runde wartet ({grund}); beim nächsten Mal geht es dort weiter."
-                finally:
-                    self._knopf_wartet = False
-                    if gehalten:
-                        self._rechen.weiter()
-            self._knopf_wartet, self._knopf_meldung = True, ""
-            self._pruefstand_thread = threading.Thread(target=lauf, name="pruefstand", daemon=True)
-            self._pruefstand_thread.start()
-            return {"gestartet": True}
-        return self._guarded("pruefstand_jetzt", go, "Der Probelauf läuft: 24 Fragen, rund 5 Minuten. Ist noch eine Prüfrunde offen, geht zuerst sie zu Ende." if probelauf
+        return self._guarded("pruefstand_jetzt", lambda: self._pruefstand_jetzt_starten(probelauf),
+                             "Der Probelauf läuft: 24 Fragen, rund 5 Minuten. Ist noch eine Prüfrunde offen, geht zuerst sie zu Ende." if probelauf
                              else "Die Prüfrunde läuft: rund 100 Fragen, die erste des Tages etwa 130, je nach PC 20 bis 45 Minuten. Du kannst den PC dabei weiter benutzen.")
+
+    def _pruefstand_jetzt_starten(self, probelauf: bool = False) -> dict:
+        with _PRUEFSTAND_START_RIEGEL:
+            return self._pruefstand_jetzt_starten_gesperrt(probelauf)
+
+    def _pruefstand_jetzt_starten_gesperrt(self, probelauf: bool) -> dict:
+        if (self._pruefstand_thread and self._pruefstand_thread.is_alive()) or getattr(self, "_pruefung_seit", 0.0):
+            raise app_core.AppError("PRUEFSTAND_LAEUFT", "eine Prüfrunde läuft schon")
+        if self._kurztest_laeuft():
+            raise app_core.AppError("KURZTEST_LAEUFT", "Gerade läuft schon ein Test oder ein Training.")
+        if self._pruefen_pausiert(frisch=True):
+            raise app_core.AppError("PRUEFEN_PAUSIERT", PRUEFEN_PAUSIERT_TEXT)
+        fremd = self._karte_fremd()
+        if fremd:
+            _log(self._core, f"ABGELEHNT pruefstand_jetzt: {fremd}")
+            raise app_core.AppError("KARTE_BELEGT", "die Grafikkarte wird gerade von einem anderen Programm gebraucht, zum Beispiel von einem Spiel oder Video"
+                                    if "nicht messbar" not in fremd else "am PC wird gerade gearbeitet, und die Last auf der Grafikkarte ist nicht messbar")
+
+        def lauf():
+            gehalten = False
+            try:
+                gehalten = self._rechen.anhalten(hoechstens_s=PRUEFSTAND_ANHALTEN_S)
+                self._knopf_wartet = False
+                if not gehalten:
+                    self._knopf_meldung = (f"Die Rechenarbeit war {int(PRUEFSTAND_ANHALTEN_S // 60)} Minuten lang mitten in einem Auftrag; "
+                                           "bitte noch einmal drücken.")
+                    _log(self._core, "ABGELEHNT pruefstand_lauf: die Rechenarbeit kam nicht zwischen zwei Aufträge")
+                    return
+                with self._rechen.wache_halten():
+                    r = self._guarded("pruefstand_lauf", lambda: self._pruefstand_lauf(erzwingen=True, probelauf=bool(probelauf)))
+                b = r.get("daten") if r.get("ok") else None
+                rd = b.get("runde") if isinstance(b, dict) and isinstance(b.get("runde"), dict) else {}
+                if not r.get("ok"):
+                    self._knopf_meldung = str(r.get("text", ""))
+                elif rd:
+                    self._knopf_meldung = f"Fertig: {rd.get('richtig', 0)} von {rd.get('gesamt', 0)} Fragen richtig, der Bericht ist beim Server."
+                elif isinstance(b, dict):
+                    self._knopf_meldung = f"Fertig: {b.get('richtig', 0)} von {b.get('gesamt', 0)} Prüffragen richtig, der Bericht ist beim Server."
+                else:
+                    grund = self._runde_ruht_grund or "sie wurde unterbrochen"
+                    self._knopf_meldung = f"Die Runde wartet ({grund}); beim nächsten Mal geht es dort weiter."
+            finally:
+                self._knopf_wartet = False
+                if gehalten:
+                    self._rechen.weiter()
+        self._knopf_wartet, self._knopf_meldung = True, ""
+        self._pruefstand_thread = threading.Thread(target=lauf, name="pruefstand", daemon=True)
+        self._pruefstand_thread.start()
+        return {"gestartet": True}
 
     def vorwaermen_setzen(self, an: bool) -> dict:
         return self._guarded("vorwaermen_setzen", lambda: self._ki.einstellung_setzen(vorwaermen=bool(an)) or {"vorwaermen": bool(an)},
@@ -3159,6 +3204,7 @@ class Api:
         if app_install.running_exe() is not None or portable is not None:
             self._update_im_hintergrund()
             self._gemeinschaft_im_hintergrund()
+            self._neuer_bau_pruefen()
         if portable is not None:
             r = self._guarded("self_setup", lambda: app_install.ensure_installed_portable(portable, self._install_dir, bau=app_core.APP_BUILD))
         else:

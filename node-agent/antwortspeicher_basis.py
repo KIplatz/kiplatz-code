@@ -175,6 +175,8 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
      "gilt (wissen._MASSE, belege.dreisatz_werte); dadurch fallen weniger richtige Zahlen, gespeichert ist keine „weiß ich nicht“-Antwort, nichts zu verwerfen"),
     ("2026-10-29e", frozenset(), "Prüfrunde bereinigt (Schattenrichter heraus, Suchbremse je Faden, Update wartet auf Arbeit, KI-Start nach dem Update); "
      "der Einspruch und damit jede Antwort für Mitglieder bleibt gleich, nichts zu verwerfen"),
+    ("2026-10-29f", frozenset(), "nur der Start der ersten Prüfrunde nach dem Update (app_web._neuer_bau_pruefen); am Antwortweg ändert sich nichts, "
+     "nichts zu verwerfen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())
