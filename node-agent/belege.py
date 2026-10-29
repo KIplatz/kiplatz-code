@@ -246,6 +246,34 @@ def einheiten_werte(text: str) -> dict[str, set[float]]:
     return out
 
 
+def dreisatz_werte(frage: str, belege: str) -> dict[str, set[float]]:
+    gefragt: dict[str, set[float]] = {}
+    for m in _ZAHL.finditer(frage or ""):
+        e = _einheit(frage, m.end())
+        if e:
+            gefragt.setdefault(e[0], set()).update(round(w * e[1], 3) for w in _werte(m.group(0)))
+    if not gefragt:
+        return {}
+    sache = {w.lower()[:6] for w, _ in _tokens(frage) if len(w) >= 4 and not w[:1].isdigit() and w.lower() not in _FUELLWORT}
+    out: dict[str, set[float]] = {}
+    saetze = [s for zeile in (belege or "").split("\n") for s in _saetze(zeile)
+              if sache & {w.lower()[:6] for w, _ in _tokens(s) if len(w) >= 4}][:50]
+    for s in saetze:
+        e = einheiten_werte(s)
+        if len(e) < 2 or any(len(w) != 1 for w in e.values()):
+            continue
+        for art_q, qs in gefragt.items():
+            a = next(iter(e.get(art_q, set())), None)
+            if not a:
+                continue
+            for art_b, bs in e.items():
+                if art_b == art_q:
+                    continue
+                b = next(iter(bs))
+                out.setdefault(art_b, set()).update(round(q / a * b, 3) for q in qs)
+    return out
+
+
 def _einheit_belegt(m: re.Match, satz: str, e: tuple[str, float], quell: dict[str, set[float]]) -> bool:
     werte = {round(w * e[1], 3) for w in _werte(m.group(0))}
     belegt = quell.get(e[0], set())
@@ -452,6 +480,9 @@ def streng_pruefen(antwort: str, belege: str, *, zahlen_pruefen: bool = True, na
     belegt_d = daten(belege)
     belegt_z = zahlenwerte(belege)
     belegt_e = einheiten_werte(belege)
+    if zahlen_pruefen and frage:
+        for art, werte in dreisatz_werte(frage, belege).items():
+            belegt_e.setdefault(art, set()).update(werte)
     staemme = _wortstaemme(belege)
     quell_laender = laender_in(belege)
     quell_links = {link_norm(u) for u in links_in(belege)}

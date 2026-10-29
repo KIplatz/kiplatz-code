@@ -171,6 +171,8 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
     ("2026-10-29c", frozenset({"ohne_suche"}), "Namen, die nur über einen gekürzten Stamm bekannt sind („Glanegger Spitze“) oder sich nicht zerlegen "
      "lassen („Zelmkogel“), holen die Suche (namenpruefung); Antworten ohne Suche können solche Namen erfunden haben, sie gehen; der Blauwal-Satz "
      "und Regelantworten mit gewöhnlichen Hauptwörtern fallen nicht mehr, das macht keine gespeicherte Antwort falsch"),
+    ("2026-10-29d", frozenset(), "Maßfragen auch englisch, mit Temperatur und Alter, die Stelle mit der Zahl bleibt beim Modell, Dreisatz aus der Frage "
+     "gilt (wissen._MASSE, belege.dreisatz_werte); dadurch fallen weniger richtige Zahlen, gespeichert ist keine „weiß ich nicht“-Antwort, nichts zu verwerfen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())

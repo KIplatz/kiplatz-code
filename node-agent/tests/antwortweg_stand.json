@@ -1,6 +1,6 @@
 {
- "pruefwert": "6b3b1c7d44f6a4f9876ba858",
+ "pruefwert": "58896b112f2b976f17430108",
  "mindest_bau": "2026-10-26k",
- "erneuert": "2026-10-29c",
- "grund": "2026-10-29c: unsichere und unzerlegbare Namen holen die Suche, Titel aus Namensfragen kein Verweis, Regelfragen mit gewöhnlichen Hauptwörtern, Suchbremse als Uhrzeit"
+ "erneuert": "2026-10-29d",
+ "grund": "2026-10-29d: Maßfragen auch englisch mit Temperatur und Alter, Stelle mit Zahl bleibt beim Modell, Dreisatz aus der Frage"
 }

@@ -14,6 +14,10 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-10-29d": [
+        "Fragst du nach einer Dauer, einer Temperatur, einem Alter oder einem Betrag, liest KIplatz jetzt gezielt die Stelle mit der Zahl, auch bei englischen Fragen. So kommt bei „Wie lange dauert ein Fußballspiel?“ oder „What core temperature does chicken need?“ die Antwort statt „weiß ich nicht“.",
+        "Rechnet KIplatz mit einer Faustregel aus dem Internet, zählt das Ergebnis jetzt als belegt: Kommt der Donner 6 Sekunden nach dem Blitz, ist das Gewitter etwa 2 Kilometer entfernt.",
+    ],
     "2026-10-29c": [
         "Fragst du nach einem Ort, einem Buch oder einem Menschen, den es vielleicht gar nicht gibt, schaut KIplatz jetzt zuerst im Internet nach. Findet es nichts, sagt es das ehrlich, statt eine Antwort zu erfinden.",
         "Richtige Antworten fallen seltener der Prüfung zum Opfer: „Der Blauwal ist das größte Säugetier“ bleibt stehen, und bei Verkehrsregeln gelten gewöhnliche Wörter wie „Motorräder“ nicht mehr als unbekannter Name.",
@@ -1328,6 +1332,7 @@ KURZ_JE_TAG: dict[str, list[str]] = {
     "2026-10-29": [
         "Nach der Anmeldung im Browser kommt KIplatz jetzt von selbst nach vorne",
         "Bei Namen, die es vielleicht nicht gibt, schaut KIplatz zuerst nach und erfindet nichts",
+        "Bei Fragen nach Dauer, Temperatur oder Alter liest KIplatz jetzt gezielt die Stelle mit der Zahl",
     ],
     "2026-10-28": [
         "Sucht KIplatz im Internet, liest es jetzt immer auch den obersten Treffer der Suche",

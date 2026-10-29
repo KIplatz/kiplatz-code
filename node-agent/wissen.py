@@ -150,24 +150,38 @@ def ohne_fragewendung(frage: str) -> str:
 
 _ZAHL = r"\d[\d.,]*\s*"
 _MASSE = (
-    (r"\bwie\s+lang\b|\bwie\s+weit\b|\bl(?:ä|ae)nge\b|\bentfernung\b|\bdistanz\b|\bstrecke\b",
-     _ZAHL + r"(?:km|kilometer\w*|meter\w*|m|cm|mm|meilen)\b", r"l[äa]nge|entfern|strecke|distanz|kilometer"),
-    (r"\bwie\s+lange\b|\bdauer(?:t|n)?\b|\bwie\s+viel\s+zeit\b",
-     _ZAHL + r"(?:sekunden?|minuten?|min|stunden?|std|h|tage?n?|wochen?|monate?n?|jahre?n?)\b", r"dauer|stunden|minuten|tage\b"),
-    (r"\bwie\s+(?:hoch|tief)\b|\bh[öo]he\b|\btiefe\b|\bseeh[öo]he\b",
-     _ZAHL + r"(?:m|meter\w*|km|ft|fu(?:ß|ss))\b", r"h[öo]he|tiefe|meter"),
-    (r"\bwie\s+gro(?:ß|ss)\b|\bfl[äa]che\b",
-     _ZAHL + r"(?:km²|km2|m²|m2|quadratkilometer\w*|quadratmeter\w*|hektar|ha)\b|" + _ZAHL + r"(?:km²|m²)", r"fl[äa]che|quadrat|hektar"),
-    (r"\bwie\s+schwer\b|\bgewicht\b|\bwiegt\b",
-     _ZAHL + r"(?:kg|kilogramm|g|gramm|t|tonnen?)\b", r"gewicht|wiegt|kilogramm|tonnen"),
-    (r"\bwie\s+(?:viel|teuer)\b.{0,40}\b(?:kost|preis|euro|geld)|\bwas\s+kostet\b|\bpreis(?:e|es)?\b|\bkosten\b",
-     _ZAHL + r"(?:€|euro\b|eur\b|cent\b|dollar\b|\$|franken\b|chf\b)|(?:€|eur\b|\$)\s*\d", r"preis|kostet|kosten|euro\b"),
-    (r"\bwie\s+viele?\b|\banzahl\b|\beinwohner\w*\b",
-     r"\b\d{1,3}(?:[.,]\d{3})+\b|\b\d{5,}\b|\b\d+(?:[.,]\d+)?\s*(?:millionen|mio\b|tausend|milliarden)|"
-     r"\b\d[\d.,]*\s*(?:einwohner\w*|menschen|personen|mitglieder\w*|stück|prozent|%)", r"anzahl|einwohner|insgesamt"),
-    (r"\bwann\b|\bseit\s+wann\b|\bin\s+welchem\s+jahr\b|\bwie\s+alt\b|\bdatum\b",
-     r"\b(?:1[0-9]{3}|20[0-9]{2})\b|\b\d{1,2}\.\s*(?:januar|jänner|februar|feber|märz|april|mai|juni|juli|august|september|oktober|november|dezember|\d{1,2}\.)",
-     r"gegründet|seit|eröffnet|geboren|jahr"),
+    (r"\bwie\s+lang\b|\bwie\s+weit\b|\bl(?:ä|ae)nge\b|\bentfernung\b|\bdistanz\b|\bstrecke\b|\bhow\s+(?:long\s+is|far)\b|\blength\b|\bdistance\b",
+     _ZAHL + r"(?:km|kilometer\w*|kilometre\w*|meter\w*|metre\w*|m|cm|mm|meilen|miles?|mi|yards?|feet|ft)\b",
+     r"l[äa]nge|entfern|strecke|distanz|kilometer|length|distance|miles"),
+    (r"\bwie\s+lange\b|\bdauer(?:t|n)?\b|\bwie\s+viel\s+zeit\b|\bhow\s+long\b|\bhow\s+much\s+time\b|\bduration\b",
+     _ZAHL + r"(?:sekunden?|minuten?|min|stunden?|std|h|tage?n?|wochen?|monate?n?|jahre?n?|seconds?|minutes?|mins?|hours?|hrs?|days?|weeks?|months?|years?)\b",
+     r"dauer|stunden|minuten|tage\b|duration|minutes|hours"),
+    (r"\bwie\s+(?:hoch|tief)\b|\bh[öo]he\b|\btiefe\b|\bseeh[öo]he\b|\bhow\s+(?:high|tall|deep)\b|\bheight\b|\bdepth\b|\belevation\b",
+     _ZAHL + r"(?:m|meter\w*|metre\w*|km|ft|feet|fu(?:ß|ss))\b", r"h[öo]he|tiefe|meter|height|depth|elevation"),
+    (r"\bwie\s+gro(?:ß|ss)\b|\bfl[äa]che\b|\bhow\s+(?:big|large)\b|\barea\b",
+     _ZAHL + r"(?:km²|km2|m²|m2|quadratkilometer\w*|quadratmeter\w*|hektar|ha|square\s+\w+|acres?)\b|" + _ZAHL + r"(?:km²|m²)",
+     r"fl[äa]che|quadrat|hektar|area|square"),
+    (r"\bwie\s+schwer\b|\bgewicht\b|\bwiegt\b|\bhow\s+heavy\b|\bweigh\w*\b",
+     _ZAHL + r"(?:kg|kilogramm|kilograms?|g|gramm|grams?|t|tonnen?|tonnes?|tons?|pounds?|lbs?)\b", r"gewicht|wiegt|kilogramm|tonnen|weight|weighs"),
+    (r"\bwie\s+(?:viel|teuer)\b.{0,40}\b(?:kost|preis|euro|geld|bargeld)|\bwas\s+kostet\b|\bpreis(?:e|es)?\b|\bkosten\b|"
+     r"\bhow\s+much\b.{0,40}\b(?:cost|price|euros?|money|cash|pay)|\bwhat\s+does\b.{0,40}\bcost\b|\bprice\b|\bcosts?\b",
+     _ZAHL + r"(?:€|euros?\b|eur\b|cent\b|dollars?\b|\$|£|pounds?\b|franken\b|chf\b|yen\b|¥)|(?:€|eur\b|\$|£|¥)\s*\d",
+     r"preis|kostet|kosten|euro|price|cost"),
+    (r"\bwie\s+viele?\b|\banzahl\b|\beinwohner\w*\b|\bhow\s+many\b|\bnumber\s+of\b|\bpopulation\b",
+     r"\b\d{1,3}(?:[.,]\d{3})+\b|\b\d{5,}\b|\b\d+(?:[.,]\d+)?\s*(?:millionen|mio\b|tausend|milliarden|million|billion|thousand)|"
+     r"\b\d[\d.,]*\s*(?:einwohner\w*|menschen|personen|mitglieder\w*|stück|prozent|%|inhabitants|people|residents|members|percent)",
+     r"anzahl|einwohner|insgesamt|population|number|total"),
+    (r"\bwann\b|\bseit\s+wann\b|\bin\s+welchem\s+jahr\b|\bwie\s+alt\b|\bdatum\b|^\W*when\b|\band\s+when\b|\bsince\s+when\b|\bwhat\s+year\b|\bhow\s+old\b|\bdate\b",
+     r"\b(?:1[0-9]{3}|20[0-9]{2})\b|\b\d{1,2}\.\s*(?:januar|jänner|februar|feber|märz|april|mai|juni|juli|august|september|oktober|november|dezember|\d{1,2}\.)|"
+     r"\b\d{1,2}(?:st|nd|rd|th)?\s+(?:of\s+)?(?:january|february|march|april|may|june|july|august|september|october|november|december)\b|"
+     r"\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2}\b",
+     r"gegründet|seit|eröffnet|geboren|jahr|founded|since|opened|born|year"),
+    (r"\btemperatur\w*|\bwie\s+(?:warm|heiß|heiss|kalt)\b|\bgrad\b|\btemperature\b|\bhow\s+(?:hot|warm|cold)\b|\bdegrees\b",
+     _ZAHL + r"(?:°\s*[cf]?|grad\b|degrees?\b)", r"temperatur|\bgrad\b|temperature|degrees"),
+    (r"\b(?:ab|bis\s+zu)\s+welchem\s+alter\b|\bmit\s+wie\s+viel(?:en)?\s+jahren\b|\bmindestalter\b|\baltersgrenze\b|"
+     r"\bhow\s+old\s+(?:do|must|should|does)\b|\bwhat\s+age\b|\bminimum\s+age\b|\bage\s+limit\b",
+     r"\b(?:ab|from|at\s+the\s+age\s+of|aged?)\s+\d{1,2}\b(?!\s*(?:uhr|h\b|€|%|prozent|personen|[ap]m\b|[.:]\d))|\b\d{1,2}\s*(?:jahren?|jährig\w*|years?(?:\s+old)?)\b",
+     r"alter|jahre|\bage\b|years"),
 )
 _MASSE_RE = tuple((re.compile(f, re.I), re.compile(z, re.I), re.compile(w, re.I)) for f, z, w in _MASSE)
 
@@ -175,7 +189,8 @@ _MASSE_RE = tuple((re.compile(f, re.I), re.compile(z, re.I), re.compile(w, re.I)
 _SATZ_ENDE = re.compile(r"(?<=[.!?])\s+(?=[A-ZÄÖÜ„\"(])|\n+")
 
 
-_MASS_FRAGEWOERTER = frozenset(woerter("lang lange weit hoch tief groß gross schwer viel viele teuer alt wann kostet kosten dauert dauer"))
+_MASS_FRAGEWOERTER = frozenset(woerter("lang lange weit hoch tief groß gross schwer viel viele teuer alt wann kostet kosten dauert dauer alter "
+                                           "long far high tall deep big large heavy much many old when cost costs price age"))
 
 
 def mass_punkte(frage: str, pflicht: str | None = None):

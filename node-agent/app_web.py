@@ -1213,6 +1213,9 @@ class Api:
             if belege.vergleichsfrage(frage):
                 grenze = LIVE_STELLEN_VERGLEICH
                 gesucht.sort(key=lambda t: -nachschauen.preis_punkte(t.text))
+            elif len(gesucht) > grenze and (mass := wissen.mass_punkte(frage)) is not None:
+                mit_zahl = sorted((t for t in gesucht if mass(t.text) >= 1.0), key=lambda t: -mass(t.text))[:2]
+                gesucht = mit_zahl + [t for t in gesucht if all(t is not m for m in mit_zahl)]
             if len(gesucht) > grenze:
                 weg = {id(t) for t in gesucht[grenze:]}
                 live = [t for t in live if id(t) not in weg]
