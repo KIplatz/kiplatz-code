@@ -69,7 +69,7 @@ def test_eine_reisefrage_ueberspringt_die_wikipedia_und_sucht_gleich(tmp_path, m
     monkeypatch.setattr(api, "_nachschauen", nachschauen_)
     monkeypatch.setattr(api, "nachschauen_an", lambda: True)
     _z, _q, _n, hinweis = api._mit_wissen([{"role": "user", "content": "Wie lange brauche ich mit dem Zug von Linz nach Graz?"}])
-    assert wiki.gesucht == 0 and gesucht == [(None, True)] and "steht in keinem Lexikon, darum gleich im Internet gesucht" in hinweis
+    assert wiki.gesucht == 0 and gesucht == [(False, True)]
     gesucht.clear()
     _z, _q, _n, hinweis = api._mit_wissen([{"role": "user", "content": "Wann wurde der Stephansdom gebaut?"}])
     assert wiki.gesucht == 0 and "Wikipedia-Kopie" not in hinweis

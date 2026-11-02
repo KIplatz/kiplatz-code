@@ -46,7 +46,7 @@ def test_a_question_about_ai_providers_gets_the_fact_sheet_not_all_texts(tmp_pat
     assert "Läuft am eigenen Gerät: ja" in selbstauskunft.STECKBRIEF
     api = _api(tmp_path)[0]
     zusatz, quellen, _n, hinweis = api._mit_wissen([{"role": "user", "content": "Welche alternativen KI Agenten gibt es"}])
-    assert hinweis.startswith("Steckbrief von KIplatz als Quelle")
+    assert "Steckbrief von KIplatz als Quelle" in hinweis
     assert selbstauskunft.ANWEISUNG_ANBIETER in zusatz and selbstauskunft.STECKBRIEF in zusatz
     assert quellen[0]["titel"] == "Steckbrief KIplatz" and selbstauskunft.TEXTE["kosten"] not in zusatz
 

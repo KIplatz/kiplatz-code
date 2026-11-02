@@ -1135,36 +1135,28 @@ class Api:
                 hinweis = ("In den Orten aus OpenStreetMap auf diesem Gerät nachgeschlagen. " if privat_erlaubt is True
                            else "In den Orten aus OpenStreetMap auf dem PC, der geantwortet hat, nachgeschlagen. ") + hinweis
         vorab = None
-        ohne_wiki = not selbst and not frisch and nachschauen.nicht_im_lexikon(frage)
         rechen = not selbst and not frisch and belege.rechenaufgabe(frage)
-        listen = (not selbst and not frisch and not ohne_wiki and not rechen and nachschauen.listenfrage(frage) and suche_denkbar(frage)
-                  and not _frueher_gefragt(nachrichten))
-        namen = [] if (selbst or live or ergaenzend or orte or frisch or ohne_wiki or rechen) else self._unbekannte_namen(frage)
-        unsicher = [] if (namen or selbst or live or ergaenzend or orte or frisch or ohne_wiki or rechen) else self._unsichere_namen(frage)
-        if (frisch or ohne_wiki or namen or unsicher or listen) and not live and not selbst and self.nachschauen_an() and frage.strip():
+        namen = [] if (selbst or live or frisch or rechen) else self._unbekannte_namen(frage)
+        unsicher = [] if (namen or selbst or live or frisch or rechen) else self._unsichere_namen(frage)
+        if unsicher:
+            lauf_jetzt = getattr(_SUCHLAUF, "stand", None)
+            if lauf_jetzt is not None:
+                lauf_jetzt["unsicherer_name"] = True
+        auftrag_art = nachschauen.erkennen(frage)
+        erdung = (not selbst and not frisch and not rechen and not live and self.nachschauen_an() and bool(frage.strip())
+                  and (auftrag_art is None or auftrag_art.art == "suche") and (erdung_noetig(frage, nachrichten) or bool(namen)))
+        if frisch and not live and not selbst and self.nachschauen_an() and frage.strip():
+            vorab = self._nachschauen_vorab(frage, server + lokal, nachrichten)
+        elif (erdung and not nachschauen.richtung(frage)
+              and (bool(namen) or nachschauen.nicht_im_lexikon(frage) or not self._deckt_ab(frage, ergaenzend + orte + server + lokal))):
             if namen:
                 _log(self._core, f"OK unbekannter name: {len(namen)} Name(n) kennt keine Wortliste, die Suche läuft gleich mit")
-            elif unsicher:
-                _log(self._core, f"OK unsicherer name: {len(unsicher)} Name(n) echt oder erfunden, die Suche läuft gleich mit")
-                lauf_jetzt = getattr(_SUCHLAUF, "stand", None)
-                if lauf_jetzt is not None:
-                    lauf_jetzt["unsicherer_name"] = True
-            elif listen:
-                _log(self._core, "OK listenfrage: eine Frage nach mehreren Dingen mit Zahlen, die Suche läuft gleich mit")
-            vorab = self._nachschauen_vorab(frage, server + lokal, nachrichten, frisch=frisch, modell=bool(listen))
-        if (vorab is None and not frisch and not live and not ergaenzend and not orte and not selbst and self.nachschauen_an() and frage.strip()
-                and massfrage(frage) and nachschauen.erkennen(frage) is None and not _frueher_gefragt(nachrichten)
-                and not nachschauen.richtung(frage)):
-            self._suche_nebenher(frage, nachrichten)
+            self._suche_nebenher(frage, nachrichten, modell=nachschauen.listenfrage(frage) and not _frueher_gefragt(nachrichten))
         zeitgebunden = ziel != (None, None)
         art = nachschauen.erkennen(frage)
         bewerten = self._bewertung.bereit()
-        if ohne_wiki and vorab is not None:
-            hinweis = "So etwas steht in keinem Lexikon, darum gleich im Internet gesucht. " + hinweis
-        elif rechen:
+        if rechen:
             hinweis = "Eine Rechenaufgabe mit den Zahlen der Frage: gerechnet, nicht im Internet gesucht. " + hinweis
-        elif listen and vorab is not None:
-            hinweis = "Eine Frage nach mehreren Dingen mit Zahlen: die Suche im Internet lief gleich mit. " + hinweis
         sortiert: bewertung.Sortierung | None = None
         live_sortiert = False
         if bewerten and not selbst:
@@ -1174,11 +1166,9 @@ class Api:
                 sortiert = self._bewertung.sortieren(frage, kandidaten)
         if not live and self.nachschauen_an():
             alles = ergaenzend + orte + server + lokal
-            vorhanden = sortiert.treffer if sortiert is not None else alles
-            zahl = (vorab is None and not frisch and not selbst and bool(vorhanden) and zahl_wissensfrage(frage)
-                    and not (sortiert.deckt_ab if sortiert is not None else self._deckt_ab(frage, alles)))
-            nach, satz = vorab() if vorab is not None else self._nachschauen(frage, alles, frisch=frisch, suchen=zahl, nachrichten=nachrichten,
-                                                                             abgedeckt=sortiert.deckt_ab if sortiert is not None else None)
+            nach, satz = vorab() if vorab is not None else self._nachschauen(
+                frage, alles, frisch=frisch, nachrichten=nachrichten, abgedeckt=sortiert.deckt_ab if sortiert is not None else None,
+                suchen=erdung and (bool(namen) or nachschauen.nicht_im_lexikon(frage)), erden=erdung)
             if nach and sortiert is not None and (art is None or art.art == "suche"):
                 s2 = self._bewertung.sortieren(frage, nach)
                 if s2 is not None:
@@ -1252,7 +1242,7 @@ class Api:
             except Exception:
                 pass
 
-    def _suchwoerter(self, nachrichten: list[dict] | None, frage: str, *, entscheiden: bool = False, bisher: list[str] | None = None,
+    def _suchwoerter(self, nachrichten: list[dict] | None, frage: str, *, bisher: list[str] | None = None,
                      ohne_modell: bool = False) -> list[str] | None:
         verlauf = [n for n in (nachrichten or []) if n.get("role") in ("user", "assistant") and isinstance(n.get("content"), str)][-5:]
         if not verlauf:
@@ -1267,7 +1257,6 @@ class Api:
             verlauf = [n for i, n in enumerate(verlauf) if n.get("role") == "user"
                        and not (i > 0 and verlauf[i - 1].get("role") == "assistant"
                                 and str(verlauf[i - 1].get("content", "")).startswith(schriftstueck.VORSPANN))][:-1] + [{"role": "user", "content": sache}]
-            entscheiden = False
         frueher = next((str(n["content"]) for n in reversed(verlauf[:-1]) if n.get("role") == "user"), "")
         bisher = [b for b in (bisher or []) if b]
         if not ohne_modell and self._ki.quelle() == "lokal" and self._ki.bereit():
@@ -1277,8 +1266,6 @@ class Api:
             auftrag = ((leit + chr(10) + chr(10)) if leit else "") + "Gespräch:" + chr(10) + gespraech + chr(10) + chr(10)
             if bisher:
                 auftrag += SUCHWORT_ANDERS.format(bisher="; ".join(f"„{b}“" for b in bisher)) + chr(10) + chr(10)
-            if entscheiden:
-                auftrag += SUCHWORT_ENTSCHEIDEN + chr(10) + chr(10)
             if such_sprache(frage) == "en":
                 auftrag += SUCHWORT_ENGLISCH + chr(10) + chr(10)
             original = ki_laufzeit.original()
@@ -1287,8 +1274,6 @@ class Api:
             try:
                 a = self._ki.server.frage([{"role": "user", "content": wissen.zeit_zeile() + chr(10) + auftrag + "Suchanfragen für die letzte Frage:"}],
                                          system=SUCHWORT_SYSTEM, max_tokens=48, temperature=0.0)
-                if entscheiden and re.match(r"\s*[„\"']?keine\b", a.text or "", re.I):
-                    return None
                 liste = suchwoerter_liste(a.text)
                 if ist_auftrag:
                     liste = [ohne_auftragswoerter(q, frage) for q in liste]
@@ -1301,8 +1286,6 @@ class Api:
                     return z
             except app_core.AppError as exc:
                 _log(self._core, f"INFO suchwoerter vom Modell: {exc.code}")
-        if entscheiden:
-            return None
         if sache:
             regel = suchwoerter_ordnen([sache if len(sache.split()) <= 8 else (nachschauen.suchbegriffe_regel(sache, "") or sache)], frage, "") or [sache]
         elif such_sprache(frage) == "en":
@@ -1317,8 +1300,7 @@ class Api:
             return [q for q in anders if q.lower() not in {b.lower() for b in bisher}] or None
         return regel
 
-    def _nachschauen_vorab(self, frage: str, treffer: list[wissen.Treffer], nachrichten: list[dict] | None, *, frisch: bool = True,
-                           modell: bool = False):
+    def _nachschauen_vorab(self, frage: str, treffer: list[wissen.Treffer], nachrichten: list[dict] | None):
         fn, lauf, mess = getattr(_SCHRITT, "fn", None), getattr(_SUCHLAUF, "stand", None), ki_laufzeit.messung_liste()
         eigen = getattr(_EIGEN, "an", True)
         original = ki_laufzeit.original()
@@ -1333,8 +1315,7 @@ class Api:
             pruefung.sprache_setzen(englisch)
             ki_laufzeit.messung_teilen(mess)
             try:
-                erg["r"] = self._nachschauen(frage, treffer, frisch=True, nachrichten=nachrichten) if frisch else \
-                    self._nachschauen(frage, treffer, suchen=True, nachrichten=nachrichten, modell_woerter=modell)
+                erg["r"] = self._nachschauen(frage, treffer, frisch=True, nachrichten=nachrichten)
             except BaseException as exc:
                 erg["e"] = exc
             finally:
@@ -1350,41 +1331,56 @@ class Api:
             return erg["r"]
         return ergebnis
 
-    def _suche_nebenher(self, frage: str, nachrichten: list[dict] | None) -> None:
+    def _suche_nebenher(self, frage: str, nachrichten: list[dict] | None, *, modell: bool = False) -> None:
         lauf = getattr(_SUCHLAUF, "stand", None)
         if lauf is None or lauf["runde"] or lauf["gesucht"] or "nebenher" in lauf or not hasattr(self._nachschauer, "suche_runde"):
             return
         if nachrichten and absicht.ohne_suche(absicht.letzte(nachrichten)):
             return
-        anfragen = je_anhang(nachschauen.anfragen_aufteilen(self._suchwoerter(nachrichten, frage, ohne_modell=True) or [frage], frage), nachrichten or [])
-        anfragen = einkauf_anfragen(frage, nachrichten or [], anfragen)
-        anfragen, mehr = vergleich_runde(frage, anfragen)
-        richtung = nachschauen.richtung(frage)
         erg: dict = {}
-
-        sprache = mehr.pop("sprache", "") or such_sprache(frage)
+        vorab: list = []
+        neben: dict = {"anfragen": [], "regel": not modell}
         original, zone = ki_laufzeit.original(), ki_laufzeit.zone()
+        such_sprache_frage = such_sprache(frage)
+
+        def anfragen_fuer() -> tuple[list[str], dict]:
+            anfragen = je_anhang(nachschauen.anfragen_aufteilen(self._suchwoerter(nachrichten, frage, ohne_modell=not modell) or [frage], frage),
+                                 nachrichten or [])
+            anfragen = einkauf_anfragen(frage, nachrichten or [], anfragen)
+            anfragen, mehr = vergleich_runde(frage, anfragen)
+            if modell and not belege.vergleichsfrage(frage) and not any(nachschauen.treu(q, frage) for q in anfragen):
+                regel = nachschauen.suchbegriffe_regel(frage)
+                if regel and len(nachschauen.anfragen_aufteilen([regel], frage)) == 1 and regel not in anfragen:
+                    anfragen = anfragen + [regel]
+            return anfragen, mehr
 
         def suchen() -> None:
             ki_laufzeit.original_setzen(original)
             ki_laufzeit.zone_setzen(zone)
             try:
+                anfragen, mehr = vorab[0] if vorab else anfragen_fuer()
+                neben["anfragen"] = anfragen
+                if any(nachschauen.treu(q, frage) for q in anfragen):
+                    lauf["treu_gesucht"] = True
+                sprache = mehr.pop("sprache", "") or such_sprache_frage
                 erg["r"] = self._nachschauer.suche_runde(anfragen, frage, sprache=sprache, zeit=nachschauen.zeitraum(frage),
                                                           ausser=frozenset(), ziel=zeitziel(frage), merk=lauf, **mehr)
             except BaseException as exc:
                 erg["e"] = exc
 
         t = threading.Thread(target=suchen, name="suche-nebenher", daemon=True)
-        t.start()
 
         def holen():
             t.join()
             if "e" in erg:
                 raise erg["e"]
             return erg["r"]
-        lauf["nebenher"] = {"anfragen": anfragen, "holen": holen}
-        if any(nachschauen.treu(q, frage) for q in anfragen):
-            lauf["treu_gesucht"] = True
+        neben["holen"] = holen
+        lauf["nebenher"] = neben
+        if not modell:
+            vorab.append(anfragen_fuer())
+            neben["anfragen"] = vorab[0][0]
+        t.start()
 
     def nachschauen_an(self) -> bool:
         if getattr(_FENSTERFRAGE, "an", False):
@@ -1401,7 +1397,7 @@ class Api:
             return None
 
     def _nachschauen(self, frage: str, treffer: list[wissen.Treffer], *, frisch: bool = False, nachrichten: list[dict] | None = None,
-                     abgedeckt: bool | None = None, suchen: bool = False, modell_woerter: bool = False) -> tuple[list[wissen.Treffer], str]:
+                     abgedeckt: bool | None = None, suchen: bool = False, erden: bool = False) -> tuple[list[wissen.Treffer], str]:
         if _dateifrage(frage):
             return [], ""
         deckt_ab = (lambda: abgedeckt) if abgedeckt is not None else (lambda: self._deckt_ab(frage, treffer))
@@ -1411,11 +1407,11 @@ class Api:
         if a is None and (frisch or suchen) and frage.strip():
             a = nachschauen.Auftrag("suche", " ".join(frage.split()))
         alle: list[str] | None = None
-        if a is None and suche_denkbar(frage) and not deckt_ab():
-            self._schritt("überlegt, ob und wonach es suchen soll …")
-            alle = self._suchwoerter(nachrichten, frage, entscheiden=True)
-            if alle:
-                a = nachschauen.Auftrag("suche", " ".join(frage.split()))
+        if a is None and erden and not deckt_ab():
+            a = nachschauen.Auftrag("suche", " ".join(frage.split()))
+            if nachschauen.richtung(frage):
+                self._schritt("überlegt, wonach es suchen soll …")
+                alle = self._suchwoerter(nachrichten, frage)
         if a is None or a.rueckfrage:
             return [], ""
         if a.art == "suche" and not frisch and not suchen and alle is None and deckt_ab():
@@ -1429,16 +1425,18 @@ class Api:
                 brauchbar = False
             if brauchbar:
                 alle = list(neben["anfragen"])
+                lauf["nur_regel"] = bool(neben.get("regel", True))
             else:
                 lauf["nebenher_leer"] = lauf.pop("nebenher", None)
+        leer_gesucht = list((lauf.get("nebenher_leer") or {}).get("anfragen") or []) if lauf else []
         if a.art == "suche":
-            if alle is None and not spaeter and not _frueher_gefragt(nachrichten) and not modell_woerter:
+            if alle is None and not spaeter and not _frueher_gefragt(nachrichten) and not leer_gesucht:
                 alle = self._suchwoerter(nachrichten, frage, ohne_modell=True)
                 if lauf is not None and alle:
                     lauf["nur_regel"] = True
             if alle is None:
                 self._schritt("überlegt, wonach es suchen soll …" if not spaeter else "sucht noch einmal mit anderen Wörtern …")
-                alle = self._suchwoerter(nachrichten, frage, bisher=lauf["gesucht"] if spaeter else None)
+                alle = self._suchwoerter(nachrichten, frage, bisher=lauf["gesucht"] if spaeter else (leer_gesucht or None))
                 if lauf is not None:
                     lauf["nur_regel"] = False
             if not alle:
@@ -2564,10 +2562,8 @@ class Api:
             _suchrunden_aufbrauchen()
         else:
             klein = not frisch and not fern and self.nachschauen_an() and klein_wissensfrage(wahl.modell.name if wahl else "", suchfrage(nachrichten))
-            zusatz, quellen, im_speicher, hinweis = ("", [], 0, "") if fern else self._mit_wissen(nachrichten, privat_erlaubt=privat, frisch=frisch or klein, knapp=knapp)
+            zusatz, quellen, im_speicher, hinweis = ("", [], 0, "") if fern else self._mit_wissen(nachrichten, privat_erlaubt=privat, frisch=frisch, knapp=knapp)
             quellen_stand = None if fern else self._letzter_stand
-            if klein:
-                hinweis = (KLEIN_HINWEIS + " " + hinweis).strip()
             if knopf and not fern and quellen_stand is None and "live gelesen" not in hinweis:
                 grund = next((s for s in hinweis.split(". ") if "nicht geklappt" in s or "ließ sich nicht" in s), "").strip().rstrip(".")
                 raise app_core.AppError("NACHPRUEFEN_LEER", (grund or "im Netz war zu dieser Frage nichts zu finden") + "; die Antwort oben bleibt")
@@ -2635,6 +2631,9 @@ class Api:
         pr = pruefung.pruefen(a.text or "", [(int(q["nummer"]), str(q.get("text", ""))) for q in quellen if q.get("text")])
         nur_mit_beleg = klein or bool(lauf and lauf.get("unsicherer_name") and schrift is None and not fern
                                       and any(q.get("art") == "nachgeschaut" for q in quellen))
+        nur_mit_beleg = nur_mit_beleg or bool(lauf and lauf.get("gesucht") and schrift is None and not fern
+                                              and not quellen and not vorspann and erdung_noetig(suchfrage(nachrichten), nachrichten)
+                                              and (massfrage(suchfrage(nachrichten)) or belege.zahlenfrage(suchfrage(nachrichten))))
         if nur_mit_beleg and not getattr(a, "abgebrochen", False) and pr.gruen == 0 and not _WEISS_NICHT.search(ohne_markdown(a.text or "")):
             a = dataclasses.replace(a, text=_satz(_GESUCHT_NICHTS_SATZ, _GESUCHT_NICHTS_SATZ_EN))
             pr = pruefung.pruefen(a.text, [])
@@ -6514,9 +6513,10 @@ def erfunden_verdacht(pr, quellen: list[dict], schrift, frage: str = "") -> bool
 
 KLEIN_NUR_MIT_BELEG_UNTER_B = 8.0
 GEKUERZT_HINWEIS = "Frage, Gespräch und Fundstellen waren zusammen länger, als das Modell auf einmal lesen kann; ein Teil wurde dafür gekürzt."
-KLEIN_HINWEIS = "Ein kleines Modell beantwortet Wissensfragen nur mit frischen Quellen, darum wurde gleich im Internet nachgeschaut."
 _FAKTENFRAGE_ANFANG = re.compile(r"^\s*(?:wer|wem|wen|wessen|was|wann|wo|woher|wohin|wie|wieso|weshalb|warum|welche\w*|wieviel\w*|ist|sind|war|waren|"
                                  r"hat|haben|hatte|gibt|gab|liegt|liegen|stimmt|who|what|when|where|which|how|why|is|are|was|were|does|did)\b", re.I)
+_FRAGEZEICHEN = re.compile(r"[?¿？؟]")
+_AUFTRAG_DOPPELPUNKT = re.compile(r"(?<!\d):(?!\d)")
 _AN_DIE_KI = re.compile(r"\b(du|dir|dich|dein\w*|kiplatz|you|your)\b", re.I)
 _RAT_ODER_ZEIT = re.compile(r"\b(w(?:ä|ae)ren?|k(?:ö|oe)nnte\w*|w(?:ü|ue)rde\w*|soll(?:te)? ich|kann ich|reimt\w*|idee\w*|vorschl\w*|empf[ie]hl\w*|empfehl\w*|tipps?|"
                             r"uhrzeit|wie sp[äa]t|datum|wochentag|kalenderwoche|welche[rsn]? tag|what time|which day|what day|date)\b", re.I)
@@ -6528,13 +6528,11 @@ def klein_wissensfrage(modellname: str, frage: str) -> bool:
     return wissensfrage(frage)
 
 
-def zahl_wissensfrage(frage: str) -> bool:
-    return wissensfrage(frage) and (massfrage(frage) or belege.zahlenfrage(frage)) and not nachschauen.richtung(frage)
-
-
-def wissensfrage(frage: str) -> bool:
+def wissensfrage(frage: str, *, frage_zeichen: bool = False) -> bool:
     f = " ".join(str(frage or "").split())
-    if not _FAKTENFRAGE_ANFANG.match(f) or _AN_DIE_KI.search(f) or schriftstueck._PERSOENLICH.search(f) or _RAT_ODER_ZEIT.search(f):
+    if not (_FAKTENFRAGE_ANFANG.match(f) or (frage_zeichen and _FRAGEZEICHEN.search(f) and not _AUFTRAG_DOPPELPUNKT.search(f))):
+        return False
+    if _AN_DIE_KI.search(f) or schriftstueck._PERSOENLICH.search(f) or _RAT_ODER_ZEIT.search(f):
         return False
     if (nachschauen._RECHNEN.search(f) and re.search(r"\d", f)) or len(re.findall(r"\d+(?:[.,]\d+)?", f)) >= 2:
         return False
@@ -6576,10 +6574,6 @@ SUCHWORT_SYSTEM = (
     + "Antworte nur mit den zwei Zeilen."
 )
 SUCHEN_HOECHSTENS = 2
-SUCHWORT_ENTSCHEIDEN = ("Braucht die letzte Frage keine Suche, weil sie allgemeines Wissen ist, das sich nicht ändert (eine Erklärung, eine Rechnung, "
-                        "ein Text zum Schreiben, ein Rat), dann antworte nur mit dem Wort KEINE. Im Zweifel suchen: Personen in Ämtern, Termine, "
-                        "Preise, Öffnungszeiten, Ergebnisse, Regeln von Firmen und Behörden, alles zu einem bestimmten Ort und alles, was sich ändern kann, "
-                        "braucht eine Suche.")
 SUCHWORT_ANDERS = ("Diese Suchen wurden schon gemacht und haben die Antwort nicht gebracht: {bisher}. Schreib zwei neue Suchanfragen mit anderen Wörtern, "
                    "zum Beispiel mit dem Namen der Seite oder Stelle, die es sicher weiß, oder mit dem Begriff, den diese Stelle dafür verwendet.")
 VERGLEICH_LESEN = 10
@@ -6831,7 +6825,7 @@ def massfrage(frage: str) -> bool:
     return bool(_MASSFRAGE.search(str(frage or "")))
 
 
-ERSTE_FASSUNG_STRENG = False
+ERSTE_FASSUNG_STRENG = True
 ZAHLEN_NUR_AUS_QUELLEN = ("Nenne nur Zahlen, Daten, Uhrzeiten, Beträge und Namen, die genau so in den Auszügen oben stehen. Eine Zahl oder einen Namen, "
                           "der dort nicht steht, lässt du weg, auch wenn du ihn zu wissen glaubst.")
 
@@ -6865,7 +6859,7 @@ def linkfrage(frage: str) -> bool:
 
 
 def mit_fokus(zusatz: str, frage: str) -> str:
-    if ERSTE_FASSUNG_STRENG and zusatz.strip():
+    if ERSTE_FASSUNG_STRENG and "Auszüge aus dem Wissensspeicher der Community" in zusatz:
         zusatz = zusatz + "\n\n" + ZAHLEN_NUR_AUS_QUELLEN
     if linkfrage(frage):
         zusatz = (zusatz + "\n\n" if zusatz else "") + LINK_FOKUS
@@ -6949,6 +6943,14 @@ def genannte_sache(verlauf: list[dict], ab, frage: str) -> str:
 
 
 _NUR_GESPRAECH = re.compile(r"^\s*(?:hallo|hi|servus|grüß gott|griaß di|guten (?:morgen|tag|abend)|danke|dankeschön|ok|okay|super|passt|tschüss|baba|ciao)\b[\s!.,]*$", re.I)
+
+
+def erdung_noetig(frage: str, nachrichten: list[dict] | None = None) -> bool:
+    if not suche_denkbar(frage) or _dateifrage(frage):
+        return False
+    if nachrichten and absicht.ohne_suche(absicht.letzte(nachrichten)):
+        return False
+    return wissensfrage(frage, frage_zeichen=True) or nachschauen.nicht_im_lexikon(frage)
 
 
 def suche_denkbar(frage: str) -> bool:
@@ -7721,6 +7723,8 @@ def namen_fehlen(frage: str, antwort: str) -> list[str]:
 def nebenher_satz(lauf: dict | None) -> str:
     neben = lauf.get("nebenher") if lauf else None
     leer = lauf.get("nebenher_leer") if lauf else None
+    neben = neben if neben and neben.get("anfragen") else None
+    leer = leer if leer and leer.get("anfragen") else None
     if neben:
         if len(neben["anfragen"]) > 1:
             vorne, letzte = _aufzaehlung(neben["anfragen"])

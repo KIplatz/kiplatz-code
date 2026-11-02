@@ -12,8 +12,8 @@ psutil==5.9.8 \
     --hash=sha256:8db4c1b57507eef143a15a6884ca10f7c73876cdf5d51e713151c1236a0e68cf
 pycparser==3.0 \
     --hash=sha256:b727414169a36b7d524c1c3e31839a521725078d7b2ff038656844266160a992
-pypdf==6.19.0 \
-    --hash=sha256:7e5d6e730e7dae87d560a2cee218b852f6498c8be61966f3cd02ead971e48d14
+pypdf==6.21.4 \
+    --hash=sha256:33e4fb41ca352810eb4e9838aa0d82d6888a5f8bf682f43e99cce5faa666255c
 pythonnet==3.1.0 ; sys_platform == "win32" \
     --hash=sha256:7bdd4de03df3547a48122a3989265c8b31d5be0d19dadffa009eec7df8085e0b
 pywebview==6.2.1 \

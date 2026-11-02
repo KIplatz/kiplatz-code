@@ -90,7 +90,7 @@ def bewerten(antwort: str, erwartet: str, pflicht) -> tuple[bool, float, list[st
 
 
 MESSREIHE_DATEI = "messreihe.json"
-MESSREIHE_MAX = 1500
+MESSREIHE_MAX = 1600
 MESSREIHE_BERICHTE = 60
 RUNDE_FRAGEN = 100
 PROBELAUF_FRAGEN = 24
@@ -176,10 +176,11 @@ def messreihe_laden(ordner: Path | None = None) -> list[dict]:
 
 MESSREIHE_ANTWORT = 4000
 _WEG_IM_NETZ = (True, False, "nicht_erreicht")
-BEWERTET_WIE = {"klasse_a": "wissen", "klasse_b": "wissen", "klasse_c": "wissen", "klasse_d": "erfunden", "besucher": "alltag", "besucher_en": "alltag_en"}
-BEKANNT = ("wissen", "alltag", "alltag_en", "klasse_a", "klasse_b", "klasse_c", "besucher", "besucher_en")
+BEWERTET_WIE = {"klasse_a": "wissen", "klasse_b": "wissen", "klasse_c": "wissen", "klasse_d": "erfunden", "besucher": "alltag", "besucher_en": "alltag_en",
+                "schule": "wissen"}
+BEKANNT = ("wissen", "alltag", "alltag_en", "klasse_a", "klasse_b", "klasse_c", "besucher", "besucher_en", "schule")
 ARTEN_NAMEN = (("wissen", "Wissen"), ("alltag", "Alltag und Praxis"), ("alltag_en", "Alltag und Praxis auf Englisch"),
-               ("besucher", "Fragen wie auf der Startseite"), ("besucher_en", "Fragen wie auf der Startseite, auf Englisch"),
+               ("besucher", "Fragen wie auf der Startseite"), ("besucher_en", "Fragen wie auf der Startseite, auf Englisch"), ("schule", "Schulwissen mit Zahl oder Datum"),
                ("erfunden", "Erfundenes erkennen"), ("rueckfrage", "Nachfragen"), ("grenze", "Formatvorgaben"), ("sicherheit", "Sicherheit"))
 KLASSEN_NAMEN = (("A", "Klasse A, echte Namen in den Formen der Weiß-nicht-Übungen"), ("B", "Klasse B, Grundwissen deutschsprachiger Raum"),
                  ("C", "Klasse C, Weltwissen in anderen Formen"), ("D", "Klasse D, Erfundenes in denselben Formen"))

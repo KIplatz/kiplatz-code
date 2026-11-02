@@ -12,9 +12,11 @@ LANG, KURZ = kl.SYSTEMTEXT, kl.SYSTEMTEXT_KURZ
 
 
 def test_allgemeinwissen_der_ganzen_welt_sagt_das_modell_selbst():
-    assert "Was in jedem Lexikon oder Ratgeber steht, sagst du selbst, für die ganze Welt" in LANG
-    assert "Lexikon- und Alltagswissen der ganzen Welt sagst du selbst" in KURZ
-    for beispiel in ("„Wie viele Einwohner hat Neapel?“", "„Was hilft gegen Sonnenbrand?“"):
+    assert "Erklärungen und Rat aus jedem Lexikon oder Ratgeber schreibst du selbst, für die ganze Welt" in LANG
+    assert "Stehen oben Auszüge, nimmst du Zahlen, Daten und Namen nur aus ihnen" in LANG
+    assert "If there are passages above, you take numbers, dates and names only from them" in kl.SYSTEMTEXT_EN
+    assert "Wissen der ganzen Welt sagst du selbst." in KURZ
+    for beispiel in ("„Wie viele Einwohner hat Neapel?“ beantwortest du mit der Zahl aus dem Auszug", "„Was hilft gegen Sonnenbrand?“ aus deinem Wissen"):
         assert beispiel in LANG
     assert "kennst du fast nie" not in LANG and "kennst du fast nie" not in KURZ
 
@@ -38,5 +40,6 @@ def test_der_vorspann_der_auszuege_sagt_dasselbe_wie_der_systemtext():
     import wissen
     quelle = inspect.getsource(wissen.kontext_bauen)
     assert "ein Preis, eine Zahl, ein Datum, ein Produkt" not in quelle
-    assert "Lexikon- und Weltwissen (Einwohner großer Städte, Höhen, Jahreszahlen der Geschichte, bekannte Personen) sagst du auch ohne Auszug." in quelle
+    assert "Lexikon- und Weltwissen (Einwohner großer Städte, Höhen, Jahreszahlen der Geschichte, bekannte Personen) sagst du auch ohne Auszug." not in quelle
+    assert "Jede Zahl, jedes Datum, jede Jahreszahl und jeden Namen nimmst du aus einem Auszug, der von der gefragten Sache handelt" in quelle
     assert "„Wer war Mozart?“ beantwortest du, „Wer ist Maria Huber aus Wels?“ nicht." in LANG

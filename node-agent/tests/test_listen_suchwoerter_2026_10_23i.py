@@ -13,24 +13,26 @@ TABELLE = "Welche sind die 5 größten Städte Österreichs? Bitte als Tabelle m
 
 
 def test_listenfrage_sucht_mit_den_woertern_des_modells(tmp_path, monkeypatch):
+    import app_web
     api, _fake, _ = _api(tmp_path)
     gefragt: list = []
 
-    def suchwoerter(nachrichten, frage, *, entscheiden=False, bisher=None, ohne_modell=False):
+    def suchwoerter(nachrichten, frage, *, bisher=None, ohne_modell=False):
         gefragt.append(ohne_modell)
         return ["Statistik Österreich größte Städte Einwohnerzahl 2026"]
 
     monkeypatch.setattr(api, "_suchwoerter", suchwoerter)
-    monkeypatch.setattr(api, "_suchrunde", lambda frage, alle, lauf, treffer, frisch=False: ([], ""))
     monkeypatch.setattr(api._nachschauer, "suche_runde", lambda *a, **k: ([], [], ""), raising=False)
-    api._nachschauen(TABELLE, [], suchen=True)
-    assert gefragt == [True]
-    gefragt.clear()
-    api._nachschauen(TABELLE, [], suchen=True, modell_woerter=True)
-    assert gefragt == [False]
+    for modell, erwartet in ((True, False), (False, True)):
+        gefragt.clear()
+        app_web._SUCHLAUF.stand = lauf = {"runde": 0, "gesucht": [], "gelesen": set()}
+        api._suche_nebenher(TABELLE, None, modell=modell)
+        assert gefragt == [erwartet] and lauf["nebenher"]["regel"] is erwartet
+    app_web._SUCHLAUF.stand = None
+    assert app_web.erdung_noetig(TABELLE)
 
 
-def test_der_faden_neben_der_kopie_gibt_den_schalter_weiter(tmp_path, monkeypatch):
+def test_live_nachpruefen_sucht_im_faden_wie_es_war(tmp_path, monkeypatch):
     api, _fake, _ = _api(tmp_path)
     aufrufe: list = []
 
@@ -39,9 +41,5 @@ def test_der_faden_neben_der_kopie_gibt_den_schalter_weiter(tmp_path, monkeypatc
         return [], ""
 
     monkeypatch.setattr(api, "_nachschauen", nachschauen)
-    api._nachschauen_vorab(TABELLE, [], None, frisch=False, modell=True)()
-    api._nachschauen_vorab(TABELLE, [], None, frisch=False)()
-    api._nachschauen_vorab(TABELLE, [], None, frisch=True, modell=True)()
-    assert aufrufe[0].get("suchen") and aufrufe[0].get("modell_woerter") is True
-    assert aufrufe[1].get("suchen") and aufrufe[1].get("modell_woerter") is False
-    assert aufrufe[2].get("frisch") and "modell_woerter" not in aufrufe[2]
+    api._nachschauen_vorab(TABELLE, [], None)()
+    assert aufrufe[0].get("frisch") and "suchen" not in aufrufe[0]

@@ -187,6 +187,9 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
     ("2026-11-02c", frozenset({"ohne_suche"}), "Fragen nach dem Neuesten („neuestes Buch“, „latest“) suchen immer (nachschauen._JETZT_PRAKTISCH), "
      "„Nachgeschaut:“ am Anfang einer Antwort fällt (app_web.ohne_auszuege); Antworten ohne Suche können ein erfundenes Neuestes tragen "
      "(Fitzek → „Die letzte Stunde“), sie gehen"),
+    ("2026-11-02d", frozenset({"ohne_suche"}), "Jede Frage, die Quellen braucht, wird geerdet (app_web.erdung_noetig: Wissen der Community oder Suche vor "
+     "der ersten Fassung, Zahlen, Daten und Namen nur aus den Auszügen); das Modell entscheidet nie mehr „KEINE“. Antworten ohne Suche können "
+     "Zahlen, Daten und Namen aus dem Gedächtnis des Modells tragen, sie gehen; gesuchte Antworten waren schon geerdet und bleiben"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())
