@@ -7293,6 +7293,7 @@ _AUSZUG = re.compile(r"Auszüg|Auszug\b|Wissensspeicher|\b(?:die|den|in den|laut
                      r"\bQuellen\s+(?:nennen|zeigen|sagen|enthalten|erwähnen|geben|liegen|belegen|bestätigen)|"
                      r"\bsteht (?:hier|dazu|darüber)(?: (?:auch|leider))? nichts\b|\bdazu steht (?:hier )?nichts\b|\bhier steht nichts\b", re.I)
 _QUELLEN_ZEILE = re.compile(r"^[ \t]*(?:\*\*|__)?(?:Quellen?|Quellenangaben?|Sources?)(?:\*\*|__)?[ \t]*:(?:\*\*|__)?[^\n]*$", re.I | re.M)
+_NACHGESCHAUT_ANFANG = re.compile(r"^[ \t]*(?:\*\*|__)?(?:Nachgeschaut|Looked up)(?:\*\*|__)?[ \t]*:(?:\*\*|__)?[ \t]*", re.I | re.M)
 _AUSZUG_KLAMMER = re.compile(r"\s*\([^()]*(?:Auszüg|Auszug\b|Wissensspeicher|\bQuellen?\b)[^()]*\)\s*", re.I)
 _AUSZUG_EN = re.compile(r"\bpassages?\b|\bknowledge store\b|\b(?:the|in the|according to the|my|no|all|both) sources\b"
                         r"|\bsources (?:mention|show|say|contain|give|confirm)\b|\b(?:there is|I find) nothing (?:here|about this|on this)\b", re.I)
@@ -7300,6 +7301,7 @@ _AUSZUG_EN = re.compile(r"\bpassages?\b|\bknowledge store\b|\b(?:the|in the|acco
 
 def ohne_auszuege(text: str | None) -> str:
     t = re.sub(r"\n{3,}", "\n\n", _QUELLEN_ZEILE.sub("", text or "")).strip()
+    t = _NACHGESCHAUT_ANFANG.sub("", t)
     t = antwortspeicher_basis.ohne_schlussangebot(t)
     t = _AUSZUG_KLAMMER.sub(" ", t)
     t = re.sub(r"([.!?])\s*\.", r"\1", re.sub(r"\s+([.,;:!?])", r"\1", re.sub(r"[ \t]{2,}", " ", t))).strip()

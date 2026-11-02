@@ -84,7 +84,8 @@ _WANN_FAEHRT = re.compile(r"\b(wann (?:f[äa]hrt|geht|kommt|startet|landet|flieg
 _VON_NACH = re.compile(r"\bvon\s+\S+.*\bnach\s+\S+|\bfrom\s+\S+.*\bto\s+\S+", re.I)
 _JETZT_PRAKTISCH = re.compile(r"\b(preis(?:e)?|kostet|kosten|tarif\w*|ticket\w*|eintritt\w*|[öo]ffnungszeit\w*|ge[öo]ffnet|hat (?:\w+ )*offen|"
                               r"termin\w*|heute|morgen|[üu]bermorgen|aktuell\w*|derzeit|gerade jetzt|diese woche|n[äa]chste woche|am wochenende|"
-                              r"price|costs?|opening hours|open today|today|tomorrow|currently|right now|deadline\w*|this year|dieses jahr|heuer)\b", re.I)
+                              r"price|costs?|opening hours|open today|today|tomorrow|currently|right now|deadline\w*|this year|dieses jahr|heuer|"
+                              r"neue?ste[nmrs]?|newest|latest|most recent)\b", re.I)
 
 
 _AMT_WER = re.compile(r"(?i)\b(?:wer (?:ist|sind)|who (?:is|are|'s))\b|\bwho's\b")

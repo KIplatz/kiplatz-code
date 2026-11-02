@@ -14,6 +14,9 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-11-02c": [
+        "Fragst du nach dem Neuesten, etwa dem neuesten Buch einer Autorin oder dem neuesten Handy, schaut KIplatz jetzt immer im Internet nach. Aus dem Gedächtnis kann es nicht wissen, was gerade neu ist.",
+    ],
     "2026-11-02b": [
         "Fragst du nach einer Zahl oder einem Datum, etwa „Wann gab es die ersten Menschen?“, sucht KIplatz jetzt gleich im Internet und schreibt die Antwort einmal, mit Quelle. Bisher schrieb es sie zuerst aus dem Gedächtnis, verwarf sie, weil die Zahl nicht belegt war, und schrieb sie dann ein zweites Mal. Die Antwort kommt so schneller.",
     ],
@@ -1343,6 +1346,7 @@ KURZ_JE_TAG: dict[str, list[str]] = {
     "2026-11-02": [
         "Sucht KIplatz im Internet, liest es nur noch Seiten zu der Sache, nach der du fragst",
         "Fragst du nach einer Zahl oder einem Datum, sucht KIplatz gleich und schreibt die Antwort nur einmal",
+        "Fragst du nach dem Neuesten, schaut KIplatz jetzt immer im Internet nach",
     ],
     "2026-10-29": [
         "Nach der Anmeldung im Browser kommt KIplatz jetzt von selbst nach vorne",

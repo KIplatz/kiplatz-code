@@ -1,6 +1,6 @@
 {
- "pruefwert": "0891ecdd26c46aea63a0a473",
+ "pruefwert": "89b159e66ed1f75a4edff230",
  "mindest_bau": "2026-10-26k",
- "erneuert": "2026-11-02b",
- "grund": "2026-11-02b: Zahl- und Datumsfragen suchen zuerst, Themenfilter mit Wortteilen und ohne Fragewörter"
+ "erneuert": "2026-11-02c",
+ "grund": "2026-11-02c: das Neueste wird immer gesucht, Nachgeschaut-Markierung fällt"
 }

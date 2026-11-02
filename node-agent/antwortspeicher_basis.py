@@ -184,6 +184,9 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
     ("2026-11-02b", frozenset({"suche"}), "Wissensfragen nach Zahl oder Datum suchen vor der ersten Fassung (app_web.zahl_wissensfrage), der Themenfilter "
      "kennt zusammengesetzte Wörter (nachschauen._traegt), „nichts Passendes gefunden“ gilt als „weiß ich nicht“; Antworten aus der Suche seit 02a "
      "können genau diesen Satz als Antwort tragen, sie gehen (wenige, seit dem Morgen des 02.11.)"),
+    ("2026-11-02c", frozenset({"ohne_suche"}), "Fragen nach dem Neuesten („neuestes Buch“, „latest“) suchen immer (nachschauen._JETZT_PRAKTISCH), "
+     "„Nachgeschaut:“ am Anfang einer Antwort fällt (app_web.ohne_auszuege); Antworten ohne Suche können ein erfundenes Neuestes tragen "
+     "(Fitzek → „Die letzte Stunde“), sie gehen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())
