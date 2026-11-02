@@ -1,6 +1,6 @@
 {
- "pruefwert": "5c1ef530bd12cb38a96f5e35",
+ "pruefwert": "6d84675f56f9727db75f8647",
  "mindest_bau": "2026-10-26k",
- "erneuert": "2026-10-29f",
- "grund": "2026-10-29f: nur der Start der ersten Prüfrunde nach dem Update, am Antwortweg ändert sich nichts"
+ "erneuert": "2026-11-02a",
+ "grund": "2026-11-02a: Suche liest nur Seiten zum Gegenstand der Frage, Modell antwortet nur aus Quellen zur gefragten Sache"
 }

@@ -708,7 +708,7 @@ class Nachschauer:
 
     def suche_runde(self, anfragen: list[str], frage: str, *, sprache: str = "", zeit: str = "", ausser=frozenset(), heute=None,
                     ziel: tuple = (None, None), lesen_max: int = 0, seiten_max: int = 0, warten_s: float = 0.0, liste_immer: bool = False,
-                    preis: bool = False) -> tuple[list[Ergebnis], list[str], str]:
+                    preis: bool = False, kern: frozenset[str] | None = None, merk: dict | None = None) -> tuple[list[Ergebnis], list[str], str]:
         from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
         from datetime import date as _date
         heute = heute or _heute_frager()
@@ -727,7 +727,13 @@ class Nachschauer:
         for i in range(max((len(tr) for tr, _ in listen), default=0)):
             gemischt += [tr[i] for tr, _ in listen if i < len(tr)]
         fenster = letzt_fenster(frage)
-        reihe = treffer_reihen(gemischt, frage, heute=heute, r=r, ziel=ziel, ausser=ausser)
+        if merk is not None and any(treu(q, frage) for q, _z in auftraege):
+            merk["treu_gesucht"] = True
+        if not kern:
+            kern = kernwoerter_runde(frage, auftraege, listen)
+            if merk is not None and kern:
+                merk["kern"] = kern
+        reihe = treffer_reihen(gemischt, frage, heute=heute, r=r, ziel=ziel, ausser=ausser, kern=kern)
         reihe = ohne_vorbehalt(reihe, oeffner=self._seiten_oeffner, fuer_frage=True)
         if not reihe:
             if not nicht_durch:
@@ -748,7 +754,7 @@ class Nachschauer:
                 sperren(t["adresse"])
                 return t, None
 
-        erste = ({tr[0]["adresse"] for tr, _w in listen if tr} if not r and tuple(ziel) == (None, None) and not belege.regelfrage(frage) else set())
+        erste = ({tr[0]["adresse"] for tr, _w in listen if tr and am_thema(tr[0], kern)} if not r and tuple(ziel) == (None, None) and not belege.regelfrage(frage) else set())
         vorn = sorted(reihe, key=lambda t: t["adresse"] not in erste)
         fertig: list = []
         versucht: set[str] = set()
@@ -1264,7 +1270,69 @@ def videos_aus_quellen(quellen: list[dict], themenfrage: str, *, hoechstens: int
     return [{"nummer": n, "titel": t[3]} for n, t in sorted(gefunden.items(), key=lambda kv: kv[1])[:max(0, hoechstens)]]
 
 
-def treffer_reihen(treffer: list[dict], frage: str, *, heute, r: str = "", ziel: tuple = (None, None), ausser=frozenset()) -> list[dict]:
+KERN_ANTEIL = 0.6
+KERN_MIN_TREFFER = 4
+
+
+def _trefferwoerter(t: dict) -> set[str]:
+    adresse = str(t.get("adresse", ""))
+    return set(wissen.woerter(f"{t.get('titel', '')} {t.get('text', '')} " + re.sub(r"[-/._?=&]", " ", adresse)))
+
+
+def _kern_kandidaten(frage: str) -> set[str]:
+    return {w for w in wissen.woerter(wissen.ohne_fragewendung(frage)) if len(w) >= 4 and not w.isdigit()}
+
+
+def treu(anfrage: str, frage: str) -> bool:
+    kandidaten = _kern_kandidaten(frage)
+    return bool(kandidaten) and (kandidaten <= set(wissen.woerter(anfrage)) or anfrage == suchbegriffe_regel(frage))
+
+
+def kernwoerter(frage: str, treffer: list[dict]) -> frozenset[str]:
+    fw = _kern_kandidaten(frage)
+    seiten, gesehen = [], set()
+    for t in treffer or []:
+        adresse = str(t.get("adresse", ""))
+        if adresse.lower().startswith("https://") and adresse not in gesehen:
+            gesehen.add(adresse)
+            seiten.append(_trefferwoerter(t))
+    if not fw or len(seiten) < KERN_MIN_TREFFER:
+        return frozenset()
+    return frozenset(w for w in fw if sum(1 for tw in seiten if w in tw) >= KERN_ANTEIL * len(seiten))
+
+
+def mit_kern(anfrage: str, frage: str, kern: frozenset[str]) -> str:
+    fehlt = kern - set(wissen.woerter(anfrage))
+    if not fehlt:
+        return anfrage
+    dazu = []
+    for wort in re.findall(r"[^\W_]+", frage or ""):
+        stamm = wissen.woerter(wort)
+        if len(stamm) == 1 and stamm[0] in fehlt and wort not in dazu:
+            dazu.append(wort)
+    return f"{anfrage} {' '.join(dazu)}".strip()
+
+
+def kernwoerter_runde(frage: str, auftraege: list[tuple[str, str]], listen: list[tuple[list[dict], str]]) -> frozenset[str]:
+    if len(anfragen_aufteilen([suchbegriffe_regel(frage)], frage)) > 1:
+        return frozenset()
+    saetze = [kernwoerter(frage, tr) for (q, _z), (tr, _w) in zip(auftraege, listen) if tr and treu(q, frage)]
+    saetze = [s for s in saetze if s]
+    if not saetze:
+        return frozenset()
+    return frozenset.intersection(*saetze)
+
+
+def kern_treffer(t: dict, kern: frozenset[str]) -> int:
+    return len(kern & _trefferwoerter(t)) if kern else 0
+
+
+def am_thema(t: dict, kern: frozenset[str]) -> bool:
+    return not kern or kern_treffer(t, kern) > 0
+
+
+def treffer_reihen(treffer: list[dict], frage: str, *, heute, r: str = "", ziel: tuple = (None, None), ausser=frozenset(),
+                   kern: frozenset[str] = frozenset()) -> list[dict]:
     fw = set(wissen.woerter(wissen.ohne_fragewendung(frage)))
     gesehen: set[str] = set()
     bewertet = []
@@ -1275,6 +1343,9 @@ def treffer_reihen(treffer: list[dict], frage: str, *, heute, r: str = "", ziel:
         if not adresse.lower().startswith("https://") or adresse in gesehen or adresse in ausser:
             continue
         gesehen.add(adresse)
+        im_thema = kern_treffer(t, kern)
+        if kern and not im_thema and not (regel and amtlich(adresse)):
+            continue
         kopf = f"{t.get('titel', '')} {t.get('text', '')}"
         tw = set(wissen.woerter(kopf + " " + adresse.replace("-", " ").replace("/", " ")))
         p = (len(fw & tw) / max(1, len(fw))) * 3.0 + zeit_punkte(kopf, heute, r, fenster) * 0.75 + 1.0 / (1 + rang)
@@ -1284,6 +1355,8 @@ def treffer_reihen(treffer: list[dict], frage: str, *, heute, r: str = "", ziel:
             p += AMTLICH_PUNKTE
         if gesperrt(adresse):
             p -= 10.0
+        if kern and im_thema < len(kern):
+            p -= 3.0
         bewertet.append((p, rang, t))
     bewertet.sort(key=lambda x: (-x[0], x[1]))
     return [t for p, _, t in bewertet if p > -5.0]

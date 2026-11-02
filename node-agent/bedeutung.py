@@ -49,8 +49,9 @@ class Bedeutung:
             if self.bereit() or (self._thread and self._thread.is_alive()):
                 return False
             self.phase, self.meldung = "laden", ""
-            self._thread = threading.Thread(target=self._ablauf, name="bedeutung-einschalten", daemon=True)
-            self._thread.start()
+            t = threading.Thread(target=self._ablauf, name="bedeutung-einschalten", daemon=True)
+            t.start()
+            self._thread = t
             return True
 
     def _ablauf(self) -> None:

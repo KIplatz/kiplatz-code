@@ -177,6 +177,9 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
      "der Einspruch und damit jede Antwort für Mitglieder bleibt gleich, nichts zu verwerfen"),
     ("2026-10-29f", frozenset(), "nur der Start der ersten Prüfrunde nach dem Update (app_web._neuer_bau_pruefen); am Antwortweg ändert sich nichts, "
      "nichts zu verwerfen"),
+    ("2026-11-02a", frozenset({"suche"}), "Die Suche liest nur Seiten, die den Gegenstand der Frage tragen (nachschauen.kernwoerter, auch in "
+     "späteren Runden mit den Wörtern des Modells), und das Modell antwortet nur aus Quellen zur gefragten Sache; Antworten aus der Suche "
+     "können aus einer fremden Seite stammen (Enshrouded → Lagerverwaltungs-Software), sie gehen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())

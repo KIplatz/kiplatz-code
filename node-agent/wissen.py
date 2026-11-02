@@ -1280,7 +1280,9 @@ def kontext_bauen(tr: list[Treffer], *, live: set[str] | None = None) -> tuple[s
                           "(Überschriften und Themen genügen, in ganzen Sätzen, mit Quellennummer). Das ist dann keine Erfindung, sondern der Inhalt der Seite.")
         if any(t.quelle.art == "nachgeschaut" for t in tr):
             zeilen.append("Die mit „nachgeschaut“ markierten Quellen hat das Programm für genau diese Frage im Internet nachgeschaut (Wetterdienst, Nachrichtenfeed, Spielstände oder Suche). "
-                          "Antworte daraus in ganzen Sätzen mit Quellennummer; bei Wetter nenne Tag, Ort, Höchst- und Tiefsttemperatur und ob es regnet; bei Schlagzeilen "
+                          "Antworte daraus in ganzen Sätzen mit Quellennummer, aber nur aus Quellen, die von genau der Sache handeln, nach der gefragt wurde "
+                          "(dasselbe Spiel, Produkt, derselbe Ort oder dieselbe Person beim Namen); handelt keine davon von ihr, sag in einem Satz, dass du "
+                          "dazu nichts Passendes gefunden hast, und schreib nichts aus den anderen. Bei Wetter nenne Tag, Ort, Höchst- und Tiefsttemperatur und ob es regnet; bei Schlagzeilen "
                           "die wichtigsten Überschriften; bei Spielständen und Spielplänen beide Mannschaften, Stand oder Uhrzeit und von wann der Stand ist, nur die Spiele, "
                           "nach denen gefragt wurde. Rechne nichts um und ergänze nichts, was dort nicht steht. Bei einer Ja-Nein-Frage („Regnet es morgen?“) "
                           "beginnt die Antwort mit Ja oder Nein, und zwar so, wie es zum Inhalt passt (kein Regen heißt Nein).")

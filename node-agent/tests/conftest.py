@@ -21,6 +21,15 @@ import grafik_last
 grafik_last.BELEGT_ECHT = grafik_last.belegt
 grafik_last.belegt = lambda **_k: (False, "")
 
+import wortliste
+
+
+def _wortliste_nie_aus_dem_netz(paket, ziel) -> None:
+    raise OSError("Tests holen die Wortliste nie vom echten Server")
+
+
+wortliste._holen_standard = _wortliste_nie_aus_dem_netz
+
 import tempfile
 
 import kartenteiler

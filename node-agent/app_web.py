@@ -1366,7 +1366,7 @@ class Api:
             ki_laufzeit.zone_setzen(zone)
             try:
                 erg["r"] = self._nachschauer.suche_runde(anfragen, frage, sprache=sprache, zeit=nachschauen.zeitraum(frage),
-                                                          ausser=frozenset(), ziel=zeitziel(frage), **mehr)
+                                                          ausser=frozenset(), ziel=zeitziel(frage), merk=lauf, **mehr)
             except BaseException as exc:
                 erg["e"] = exc
 
@@ -1379,6 +1379,8 @@ class Api:
                 raise erg["e"]
             return erg["r"]
         lauf["nebenher"] = {"anfragen": anfragen, "holen": holen}
+        if any(nachschauen.treu(q, frage) for q in anfragen):
+            lauf["treu_gesucht"] = True
 
     def nachschauen_an(self) -> bool:
         if getattr(_FENSTERFRAGE, "an", False):
@@ -1503,6 +1505,14 @@ class Api:
         vergleich = belege.vergleichsfrage(frage)
         anfragen, mehr = vergleich_runde(frage, anfragen)
         markt = mehr.pop("sprache", "")
+        kern = lauf.get("kern") if lauf else None
+        if kern:
+            anfragen = [nachschauen.mit_kern(q, frage, kern) for q in anfragen]
+        elif (not vergleich and not (lauf and (lauf.get("treu_gesucht") or lauf.get("gesucht")))
+              and not any(nachschauen.treu(q, frage) for q in anfragen)):
+            regel = nachschauen.suchbegriffe_regel(frage)
+            if regel and len(nachschauen.anfragen_aufteilen([regel], frage)) == 1 and regel not in anfragen:
+                anfragen = anfragen + [regel]
         if neben is not None and neben["anfragen"] != anfragen:
             neben = None
         if vergleich:
@@ -1515,7 +1525,7 @@ class Api:
         try:
             ergebnisse, gelesen, woher = neben["holen"]() if neben is not None else self._nachschauer.suche_runde(
                 anfragen, frage, sprache=markt or such_sprache(frage), zeit=nachschauen.zeitraum(frage),
-                ausser=frozenset(lauf["gelesen"]) if lauf else frozenset(), ziel=zeitziel(frage), **mehr)
+                ausser=frozenset(lauf["gelesen"]) if lauf else frozenset(), ziel=zeitziel(frage), kern=kern, merk=lauf, **mehr)
         except app_core.AppError as exc:
             _log(self._core, f"ABGELEHNT nachschauen suche: {exc.code}: {exc.detail}")
             if lauf is not None:
