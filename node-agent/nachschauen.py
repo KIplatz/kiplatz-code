@@ -1279,8 +1279,13 @@ def _trefferwoerter(t: dict) -> set[str]:
     return set(wissen.woerter(f"{t.get('titel', '')} {t.get('text', '')} " + re.sub(r"[-/._?=&]", " ", adresse)))
 
 
+def _traegt(wort: str, trefferwoerter: set[str]) -> bool:
+    return wort in trefferwoerter or (len(wort) >= 5 and any(wort in x for x in trefferwoerter))
+
+
 def _kern_kandidaten(frage: str) -> set[str]:
-    return {w for w in wissen.woerter(wissen.ohne_fragewendung(frage)) if len(w) >= 4 and not w.isdigit()}
+    inhalt = " ".join(w for w in re.findall(r"[^\W_]+", wissen.ohne_fragewendung(frage)) if w.lower() not in _NICHT_SUCHEN)
+    return {w for w in wissen.woerter(inhalt) if len(w) >= 4 and not w.isdigit()}
 
 
 def treu(anfrage: str, frage: str) -> bool:
@@ -1324,7 +1329,8 @@ def kernwoerter_runde(frage: str, auftraege: list[tuple[str, str]], listen: list
 
 
 def kern_treffer(t: dict, kern: frozenset[str]) -> int:
-    return len(kern & _trefferwoerter(t)) if kern else 0
+    tw = _trefferwoerter(t) if kern else set()
+    return sum(1 for w in kern if _traegt(w, tw))
 
 
 def am_thema(t: dict, kern: frozenset[str]) -> bool:

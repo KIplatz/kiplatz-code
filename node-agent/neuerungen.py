@@ -14,6 +14,9 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-11-02b": [
+        "Fragst du nach einer Zahl oder einem Datum, etwa „Wann gab es die ersten Menschen?“, sucht KIplatz jetzt gleich im Internet und schreibt die Antwort einmal, mit Quelle. Bisher schrieb es sie zuerst aus dem Gedächtnis, verwarf sie, weil die Zahl nicht belegt war, und schrieb sie dann ein zweites Mal. Die Antwort kommt so schneller.",
+    ],
     "2026-11-02a": [
         "Sucht KIplatz im Internet, liest es nur noch Seiten, die von der Sache handeln, nach der du fragst. Wer nach einem Spiel fragt, bekommt keine Antwort mehr aus einer Seite über etwas ganz anderes, nur weil ein paar Wörter gleich sind. Findet KIplatz nichts Passendes, sagt es das.",
     ],
@@ -1339,6 +1342,7 @@ ZURUECKGEHALTEN: dict[str, list[str]] = {
 KURZ_JE_TAG: dict[str, list[str]] = {
     "2026-11-02": [
         "Sucht KIplatz im Internet, liest es nur noch Seiten zu der Sache, nach der du fragst",
+        "Fragst du nach einer Zahl oder einem Datum, sucht KIplatz gleich und schreibt die Antwort nur einmal",
     ],
     "2026-10-29": [
         "Nach der Anmeldung im Browser kommt KIplatz jetzt von selbst nach vorne",
@@ -1472,6 +1476,10 @@ KURZ_JE_TAG: dict[str, list[str]] = {
 
 
 GESCHICHTE_JE_TAG: dict[str, dict[str, str]] = {
+    "2026-11-02": {
+        "haken": "Frag KIplatz ab heute „Wann gab es die ersten Menschen?“, und es schaut gleich im Internet nach, statt erst aus dem Gedächtnis zu raten.",
+        "text": "Bei Fragen nach einer Zahl oder einem Datum gilt nur, was in einer Quelle steht. Darum sucht KIplatz dort jetzt zuerst und liest nur Seiten, die von der Sache handeln, nach der du fragst.",
+    },
     "2026-10-29": {
         "haken": "Frag KIplatz ab heute „Wie tief ist die Edlwanger Klamm?“, und es erfindet dir keine Tiefe, denn diese Klamm gibt es nicht.",
         "text": "Bei einem Namen, den es vielleicht gar nicht gibt, schaut es zuerst im Internet nach. Steht dort nichts, sagt es das ehrlich.",

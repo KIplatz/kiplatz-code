@@ -35,7 +35,7 @@ def _vorbereiten(tmp_path, monkeypatch):
     api._wiki = _Wiki()
     faeden, gesucht = [], []
 
-    def nachschauen(frage, treffer, *, frisch=False, nachrichten=None, abgedeckt=None):
+    def nachschauen(frage, treffer, *, frisch=False, nachrichten=None, abgedeckt=None, suchen=False):
         faeden.append(threading.current_thread().name)
         gesucht.append(frisch)
         time.sleep(DAUER)

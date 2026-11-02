@@ -1,6 +1,6 @@
 {
- "pruefwert": "6d84675f56f9727db75f8647",
+ "pruefwert": "0891ecdd26c46aea63a0a473",
  "mindest_bau": "2026-10-26k",
- "erneuert": "2026-11-02a",
- "grund": "2026-11-02a: Suche liest nur Seiten zum Gegenstand der Frage, Modell antwortet nur aus Quellen zur gefragten Sache"
+ "erneuert": "2026-11-02b",
+ "grund": "2026-11-02b: Zahl- und Datumsfragen suchen zuerst, Themenfilter mit Wortteilen und ohne Fragewörter"
 }

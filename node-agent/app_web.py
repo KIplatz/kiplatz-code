@@ -1173,8 +1173,12 @@ class Api:
                 self._schritt("prüft, welche Fundstellen wirklich passen …")
                 sortiert = self._bewertung.sortieren(frage, kandidaten)
         if not live and self.nachschauen_an():
-            nach, satz = vorab() if vorab is not None else self._nachschauen(frage, ergaenzend + orte + server + lokal, frisch=frisch,
-                                                                             nachrichten=nachrichten, abgedeckt=sortiert.deckt_ab if sortiert is not None else None)
+            alles = ergaenzend + orte + server + lokal
+            vorhanden = sortiert.treffer if sortiert is not None else alles
+            zahl = (vorab is None and not frisch and not selbst and bool(vorhanden) and zahl_wissensfrage(frage)
+                    and not (sortiert.deckt_ab if sortiert is not None else self._deckt_ab(frage, alles)))
+            nach, satz = vorab() if vorab is not None else self._nachschauen(frage, alles, frisch=frisch, suchen=zahl, nachrichten=nachrichten,
+                                                                             abgedeckt=sortiert.deckt_ab if sortiert is not None else None)
             if nach and sortiert is not None and (art is None or art.art == "suche"):
                 s2 = self._bewertung.sortieren(frage, nach)
                 if s2 is not None:
@@ -6524,6 +6528,10 @@ def klein_wissensfrage(modellname: str, frage: str) -> bool:
     return wissensfrage(frage)
 
 
+def zahl_wissensfrage(frage: str) -> bool:
+    return wissensfrage(frage) and (massfrage(frage) or belege.zahlenfrage(frage)) and not nachschauen.richtung(frage)
+
+
 def wissensfrage(frage: str) -> bool:
     f = " ".join(str(frage or "").split())
     if not _FAKTENFRAGE_ANFANG.match(f) or _AN_DIE_KI.search(f) or schriftstueck._PERSOENLICH.search(f) or _RAT_ODER_ZEIT.search(f):
@@ -7264,6 +7272,7 @@ _WEISS_NICHT = re.compile(r"kenne ich (?:das |es |leider |gerade |noch )*nicht|s
                           r"|\bkeine (?:der |dieser )?(?:Quellen?|Auszüge) (?:nennt|nennen|enthält|enthalten|gibt|geben|sagt|sagen)\b"
                           r"|\bin (?:keiner|den) (?:der )?(?:Quellen?|Auszügen?) (?:steht|stehen|findet sich|finden sich) (?:keine|nichts|nicht)\b"
                           r"|\bdie Quellen (?:nennen|enthalten|geben) (?:keine|nichts)\b"
+                          r"|\bnichts Passendes gefunden\b"
                           r"|ist mir (?:leider )?nicht bekannt|habe ich keine (?:Informationen|Angaben|Daten)|liegen mir keine (?:Informationen|Angaben|Daten)|kann ich (?:dir |Ihnen )?(?:leider )?nicht (?:sagen|beantworten)"
                           r"|\bI (?:do not|don't|don’t) (?:yet )?know\b|\bI (?:can't|can’t|cannot) (?:say|tell|answer)\b|\bI have no (?:information|details|data)\b"
                           r"|\bnone of the (?:sources|passages) (?:mention|mentions|say|says|give|gives|contain|contains|name|names)\b"

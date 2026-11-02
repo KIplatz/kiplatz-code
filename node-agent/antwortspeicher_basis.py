@@ -61,7 +61,8 @@ _GLEICH = {"einwohnerzahl": "einwohner", "bewohner": "einwohner", "einwohnern": 
 
 
 _WEISS_NICHT = re.compile(r"wei(ß|ss) ich (noch )?nicht|keine (gesicherten |verlässlichen )?(informationen|angaben)|nicht (sicher )?sagen|kann ich nicht beantworten"
-                          r"|\bI (?:do not|don't|don’t) (?:yet )?know\b|\bI (?:can't|can’t|cannot) (?:say|tell|answer)\b|\bnothing reliable\b", re.I)
+                          r"|\bI (?:do not|don't|don’t) (?:yet )?know\b|\bI (?:can't|can’t|cannot) (?:say|tell|answer)\b|\bnothing reliable\b"
+                          r"|nichts Passendes gefunden", re.I)
 
 
 def _woerter(text: str) -> list[str]:
@@ -180,6 +181,9 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
     ("2026-11-02a", frozenset({"suche"}), "Die Suche liest nur Seiten, die den Gegenstand der Frage tragen (nachschauen.kernwoerter, auch in "
      "späteren Runden mit den Wörtern des Modells), und das Modell antwortet nur aus Quellen zur gefragten Sache; Antworten aus der Suche "
      "können aus einer fremden Seite stammen (Enshrouded → Lagerverwaltungs-Software), sie gehen"),
+    ("2026-11-02b", frozenset({"suche"}), "Wissensfragen nach Zahl oder Datum suchen vor der ersten Fassung (app_web.zahl_wissensfrage), der Themenfilter "
+     "kennt zusammengesetzte Wörter (nachschauen._traegt), „nichts Passendes gefunden“ gilt als „weiß ich nicht“; Antworten aus der Suche seit 02a "
+     "können genau diesen Satz als Antwort tragen, sie gehen (wenige, seit dem Morgen des 02.11.)"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())
