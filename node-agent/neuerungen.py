@@ -14,6 +14,9 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-11-02e": [
+        "Eine Folgefrage wie „Und wie viele Arten?“ bleibt jetzt beim Thema der Frage davor. Mit dem Update von heute Mittag suchte KIplatz dafür kurz nur mit den Wörtern der Folgefrage und fand etwas ganz anderes.",
+    ],
     "2026-11-02d": [
         "Bei jeder Wissensfrage holt KIplatz jetzt zuerst Quellen, aus dem Wissen der Community oder aus dem Internet, und nimmt Zahlen, Daten und Namen nur aus ihnen. Bisher entschied das Modell selbst, ob es nachschaut, und riet manchmal aus dem Gedächtnis. Findet KIplatz nichts, sagt es das, statt zu raten.",
     ],

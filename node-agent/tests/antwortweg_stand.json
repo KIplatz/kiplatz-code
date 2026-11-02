@@ -1,6 +1,6 @@
 {
- "pruefwert": "a3a75816162927b6f4bae15d",
+ "pruefwert": "018ecaedb2de76addac0bafe",
  "mindest_bau": "2026-10-26k",
- "erneuert": "2026-11-02d",
- "grund": "2026-11-02d: Kern, jede Frage, die Quellen braucht, wird geerdet; das Modell entscheidet nie mehr, ob gesucht wird"
+ "erneuert": "2026-11-02e",
+ "grund": "2026-11-02e: Folgefragen suchen mit den Wörtern des Modells, Regel-Anfrage aus vorheriger und Folgefrage"
 }

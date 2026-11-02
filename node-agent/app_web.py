@@ -1147,7 +1147,7 @@ class Api:
                   and (auftrag_art is None or auftrag_art.art == "suche") and (erdung_noetig(frage, nachrichten) or bool(namen)))
         if frisch and not live and not selbst and self.nachschauen_an() and frage.strip():
             vorab = self._nachschauen_vorab(frage, server + lokal, nachrichten)
-        elif (erdung and not nachschauen.richtung(frage)
+        elif (erdung and not nachschauen.richtung(frage) and not _frueher_gefragt(nachrichten)
               and (bool(namen) or nachschauen.nicht_im_lexikon(frage) or not self._deckt_ab(frage, ergaenzend + orte + server + lokal))):
             if namen:
                 _log(self._core, f"OK unbekannter name: {len(namen)} Name(n) kennt keine Wortliste, die Suche läuft gleich mit")
@@ -1429,6 +1429,10 @@ class Api:
             else:
                 lauf["nebenher_leer"] = lauf.pop("nebenher", None)
         leer_gesucht = list((lauf.get("nebenher_leer") or {}).get("anfragen") or []) if lauf else []
+        if lauf is not None:
+            lauf["folgefrage"] = (next((str(n.get("content") or "") for n in reversed((nachrichten or [])[:-1])
+                                       if n.get("role") == "user" and isinstance(n.get("content"), str)), "")
+                                  if _frueher_gefragt(nachrichten) else "")
         if a.art == "suche":
             if alle is None and not spaeter and not _frueher_gefragt(nachrichten) and not leer_gesucht:
                 alle = self._suchwoerter(nachrichten, frage, ohne_modell=True)
@@ -1512,7 +1516,8 @@ class Api:
             anfragen = [nachschauen.mit_kern(q, frage, kern) for q in anfragen]
         elif (not vergleich and not (lauf and (lauf.get("treu_gesucht") or lauf.get("gesucht")))
               and not any(nachschauen.treu(q, frage) for q in anfragen)):
-            regel = nachschauen.suchbegriffe_regel(frage)
+            vorige = lauf.get("folgefrage") if lauf else ""
+            regel = nachschauen.suchbegriffe_regel(f"{vorige} {frage}" if vorige else frage)
             if regel and len(nachschauen.anfragen_aufteilen([regel], frage)) == 1 and regel not in anfragen:
                 anfragen = anfragen + [regel]
         if neben is not None and neben["anfragen"] != anfragen:
