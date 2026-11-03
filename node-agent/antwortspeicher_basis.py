@@ -193,6 +193,8 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
     ("2026-11-02e", frozenset({"suche"}), "Eine Folgefrage sucht wieder mit den Wörtern des Modells aus dem ganzen Gespräch, nie nebenher mit der Regel "
      "und ohne angehängte Regel-Anfrage (app_web._suche_nebenher, _suchrunde); Suchantworten auf Folgefragen seit 02d können ein anderes Thema "
      "tragen („Arten“ nach den Bäumen → Kryptowährungen), sie gehen"),
+    ("2026-11-03b", frozenset(), "ki_laufzeit misst nur das Schreibtempo des Chat-Modells für die Meldung „kann gerade nicht gut“ an den Server; "
+     "Wortlaut und Quellen einer Antwort ändern sich nicht, nichts zu verwerfen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())

@@ -14,6 +14,9 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-11-03b": [
+        "Merkt ein PC der Community, dass er gerade viel langsamer schreibt als sonst, sagt er das jetzt auch dann, wenn die Grafikkarte nicht sichtbar belegt ist. Deine Frage geht dann gleich an einen schnelleren PC.",
+    ],
     "2026-11-03a": [
         "Läuft auf einem PC der Community gerade ein Spiel und braucht die Grafikkarte, sagt der PC das jetzt sofort. Deine Frage geht dann gleich an einen anderen PC, statt zuerst 10 Sekunden auf ihn zu warten.",
     ],

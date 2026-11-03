@@ -1132,7 +1132,8 @@ class Rechenarbeit:
             return False
 
     def _leistung(self) -> dict:
-        karte = grafik_last.belegt_sofort()
+        belegt, langsam = grafik_last.belegt_sofort(), ki_laufzeit.gerade_langsam()
+        karte = None if belegt is None and langsam is None else bool(belegt) or bool(langsam)
         return {"warm": bool(self._urteil_bereit()), "tempo": self._tempo(), "modell": self._modell(), "kopie": bool(self._kopie()),
                 "uebersetzen": self._uebersetzen is not None, **({} if karte is None else {"karte": "belegt" if karte else "frei"})}
 

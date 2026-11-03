@@ -1,6 +1,6 @@
 {
- "pruefwert": "018ecaedb2de76addac0bafe",
+ "pruefwert": "f5c4db2eac997d626f662584",
  "mindest_bau": "2026-10-26k",
- "erneuert": "2026-11-02e",
- "grund": "2026-11-02e: Folgefragen suchen mit den Wörtern des Modells, Regel-Anfrage aus vorheriger und Folgefrage"
+ "erneuert": "2026-11-03b",
+ "grund": "2026-11-03b: nur Tempomessung in ki_laufzeit, Antworten unverändert"
 }

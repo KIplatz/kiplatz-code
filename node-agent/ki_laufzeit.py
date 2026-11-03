@@ -94,6 +94,7 @@ if str(_HERE) not in sys.path:
 import app_core
 import stueckliste
 import selbstauskunft
+import sicher_schreiben
 
 KI_DIRNAME = "ki"
 CHUNK = 1024 * 1024
@@ -1294,6 +1295,32 @@ class KiServer:
         self.gebunden = False
         self._atexit_registriert = False
         self.abbruch = threading.Event()
+        self._fluege: dict[int, list] = {}
+        self._flug_n = 0
+        self._flug_lock = threading.Lock()
+
+    def _flug_start(self) -> int:
+        lock = getattr(self, "_flug_lock", None)
+        if lock is None:
+            return 0
+        with lock:
+            t = time.monotonic()
+            for k in [k for k, (beginn, _p) in self._fluege.items() if t - beginn > 600.0]:
+                self._fluege.pop(k, None)
+            self._flug_n += 1
+            nebeneinander = bool(self._fluege)
+            for f in self._fluege.values():
+                f[1] = f[1] or nebeneinander
+            self._fluege[self._flug_n] = [t, nebeneinander]
+            return self._flug_n
+
+    def _flug_ende(self, nummer: int) -> bool:
+        lock = getattr(self, "_flug_lock", None)
+        if lock is None or not nummer:
+            return False
+        with lock:
+            f = self._fluege.pop(nummer, None)
+            return f is not None and not f[1]
 
 
     def laeuft(self) -> bool:
@@ -1307,6 +1334,8 @@ class KiServer:
         _ohne_windows_fenster()
         exe = self.ordner.server_exe
         modell = modell_pfad if modell_pfad is not None and not (embedding or bewerten or hoeren) else self.ordner.modell_pfad(wahl.modell)
+        self._tempo_schluessel = None if (embedding or bewerten or hoeren) else f"{wahl.modell.name}|{wahl.geraet_name_de()}|{Path(modell).name}"
+        tempo_datei_setzen(self.ordner.ki_dir / TEMPO_DATEI)
         if not exe.is_file():
             raise KiError("KI_LAUFZEIT", "die KI-Laufzeit fehlt noch")
         if not modell.is_file():
@@ -1564,6 +1593,7 @@ class KiServer:
         req = urllib.request.Request(self._url("/v1/chat/completions"), data=json.dumps(body).encode("utf-8"),
                                      headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"})
         t0 = time.time()
+        flug = self._flug_start()
         nochmal_kleiner = True
         if abbruch is None:
             abbruch = self.abbruch
@@ -1578,6 +1608,8 @@ class KiServer:
                             text = bis_zum_letzten_satz(text)
                         u = data.get("usage") or {}
                         _messen(art or ("eigen" if system is not None else "antwort"), time.time() - t0, data.get("timings"), max=max_tokens)
+                        if self._flug_ende(flug):
+                            tempo_beobachten(getattr(self, "_tempo_schluessel", None), data.get("timings"))
                         if system is None:
                             _mitschneiden(body, text.strip(), False)
                         return Antwort(text.strip(), int(u.get("prompt_tokens", 0)), int(u.get("completion_tokens", 0)), round(time.time() - t0, 1), gekuerzt=gekuerzt)
@@ -1631,6 +1663,8 @@ class KiServer:
                     if zu_lang and not abgebrochen:
                         text = bis_zum_letzten_satz(text)
                     _messen(art or ("eigen" if system is not None else "antwort"), time.time() - t0, timings, max=max_tokens, **({"abgebrochen": 1} if abgebrochen else {}))
+                    if self._flug_ende(flug):
+                        tempo_beobachten(getattr(self, "_tempo_schluessel", None), timings)
                     if system is None:
                         _mitschneiden(body, text.strip(), abgebrochen)
                     return Antwort(text.strip(), int(usage.get("prompt_tokens", 0)), int(usage.get("completion_tokens", len(parts))), round(time.time() - t0, 1), abgebrochen, gekuerzt)
@@ -1812,6 +1846,100 @@ def _messen(art: str, sekunden: float, timings: dict | None = None, **mehr) -> N
             except (TypeError, ValueError):
                 pass
     liste.append(e)
+
+
+TEMPO_DATEI = "tempo.json"
+TEMPO_MIN_STUECKE = 16
+TEMPO_LANGSAM_ANTEIL = 0.5
+TEMPO_GILT_S = 600.0
+TEMPO_NORMAL_MIN = 5
+TEMPO_NORMAL_MAX = 50
+TEMPO_SCHREIBEN_S = 60.0
+TEMPO_NEU_LERNEN_S = 24 * 3600.0
+TEMPO_NEU_LERNEN_N = 20
+_tempo_lock = threading.Lock()
+_tempo_normal: dict[str, list[float]] = {}
+_tempo_zuletzt: dict[str, tuple[float, float]] = {}
+_tempo_langsam: dict[str, list] = {}
+_tempo_datei: list = [None, False, 0.0]
+
+
+def tempo_datei_setzen(pfad: Path) -> None:
+    with _tempo_lock:
+        if _tempo_datei[0] != pfad:
+            _tempo_datei[0], _tempo_datei[1] = pfad, False
+
+
+def _tempo_laden() -> None:
+    if _tempo_datei[1] or _tempo_datei[0] is None:
+        return
+    _tempo_datei[1] = True
+    try:
+        roh = json.loads(Path(_tempo_datei[0]).read_text(encoding="utf-8")) if Path(_tempo_datei[0]).is_file() else {}
+    except (OSError, ValueError, UnicodeDecodeError):
+        roh = {}
+    for k, werte in (roh.get("normal") or {}).items() if isinstance(roh, dict) and isinstance(roh.get("normal"), dict) else ():
+        if isinstance(k, str) and isinstance(werte, list):
+            gut = [float(w) for w in werte if isinstance(w, (int, float)) and 0 < float(w) < 100000][-TEMPO_NORMAL_MAX:]
+            if gut and k not in _tempo_normal:
+                _tempo_normal[k] = gut
+    for k, st in (roh.get("langsam") or {}).items() if isinstance(roh, dict) and isinstance(roh.get("langsam"), dict) else ():
+        if isinstance(k, str) and isinstance(st, list) and len(st) == 2 and isinstance(st[0], (int, float)) and isinstance(st[1], list)                 and k not in _tempo_langsam:
+            _tempo_langsam[k] = [float(st[0]), [float(w) for w in st[1] if isinstance(w, (int, float)) and 0 < float(w) < 100000][-TEMPO_NORMAL_MAX:]]
+
+
+def _tempo_ueblich(werte: list[float]) -> float:
+    s = sorted(werte)
+    return s[int(0.8 * (len(s) - 1))]
+
+
+def tempo_beobachten(schluessel: str | None, timings: dict | None, *, jetzt=time.monotonic, wand=time.time) -> None:
+    if not schluessel or not isinstance(timings, dict):
+        return
+    try:
+        n, ms = float(timings.get("predicted_n") or 0), float(timings.get("predicted_ms") or 0)
+    except (TypeError, ValueError):
+        return
+    if n < TEMPO_MIN_STUECKE or ms <= 0:
+        return
+    tempo = n * 1000.0 / ms
+    with _tempo_lock:
+        _tempo_laden()
+        _tempo_zuletzt[schluessel] = (jetzt(), tempo)
+        werte = _tempo_normal.setdefault(schluessel, [])
+        if len(werte) >= TEMPO_NORMAL_MIN and tempo < TEMPO_LANGSAM_ANTEIL * _tempo_ueblich(werte):
+            st = _tempo_langsam.setdefault(schluessel, [wand(), []])
+            st[1].append(round(tempo, 2))
+            del st[1][:-TEMPO_NORMAL_MAX]
+            if wand() - st[0] >= TEMPO_NEU_LERNEN_S and len(st[1]) >= TEMPO_NEU_LERNEN_N:
+                _tempo_normal[schluessel] = list(st[1])
+                _tempo_langsam.pop(schluessel, None)
+        else:
+            _tempo_langsam.pop(schluessel, None)
+            werte.append(round(tempo, 2))
+            del werte[:-TEMPO_NORMAL_MAX]
+        pfad = _tempo_datei[0]
+        if pfad is None or jetzt() - _tempo_datei[2] < TEMPO_SCHREIBEN_S:
+            return
+        _tempo_datei[2] = jetzt()
+        inhalt = {"normal": {k: list(v) for k, v in _tempo_normal.items()},
+                  "langsam": {k: [st[0], list(st[1])] for k, st in _tempo_langsam.items()}}
+    try:
+        sicher_schreiben.json_datei(pfad, inhalt, indent=None)
+    except OSError:
+        pass
+
+
+def gerade_langsam(*, jetzt=time.monotonic) -> bool | None:
+    with _tempo_lock:
+        _tempo_laden()
+        t = jetzt()
+        frisch = [(k, v) for k, (zeit, v) in _tempo_zuletzt.items() if t - zeit < TEMPO_GILT_S]
+        urteile = [v < TEMPO_LANGSAM_ANTEIL * _tempo_ueblich(_tempo_normal[k]) for k, v in frisch
+                   if len(_tempo_normal.get(k) or ()) >= TEMPO_NORMAL_MIN]
+    if not urteile:
+        return None
+    return any(urteile)
 
 
 def ist_windows() -> bool:
