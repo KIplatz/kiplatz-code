@@ -638,6 +638,8 @@ class Community:
                 werte = {"warm": "1" if leistung.get("warm") else "0", "tempo": f"{float(leistung.get('tempo') or 0):.2f}", "skills": "1", **werte}
                 if leistung.get("kopie"):
                     werte["kopie"] = "1"
+                if leistung.get("karte") in ("belegt", "frei"):
+                    werte["karte"] = leistung["karte"]
                 if leistung.get("uebersetzen") and not nur_fragen:
                     werte["uebersetzen"] = "1"
             flags.append(urllib.parse.urlencode(werte))

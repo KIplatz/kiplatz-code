@@ -14,6 +14,9 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-11-03a": [
+        "Läuft auf einem PC der Community gerade ein Spiel und braucht die Grafikkarte, sagt der PC das jetzt sofort. Deine Frage geht dann gleich an einen anderen PC, statt zuerst 10 Sekunden auf ihn zu warten.",
+    ],
     "2026-11-02e": [
         "Eine Folgefrage wie „Und wie viele Arten?“ bleibt jetzt beim Thema der Frage davor. Mit dem Update von heute Mittag suchte KIplatz dafür kurz nur mit den Wörtern der Folgefrage und fand etwas ganz anderes.",
     ],
@@ -1349,6 +1352,9 @@ ZURUECKGEHALTEN: dict[str, list[str]] = {
 }
 
 KURZ_JE_TAG: dict[str, list[str]] = {
+    "2026-11-03": [
+        "Braucht ein Spiel die Grafikkarte eines PCs, geht deine Frage jetzt sofort an einen anderen PC",
+    ],
     "2026-11-02": [
         "Sucht KIplatz im Internet, liest es nur noch Seiten zu der Sache, nach der du fragst",
         "Bei jeder Wissensfrage holt KIplatz jetzt zuerst Quellen und rät nicht mehr aus dem Gedächtnis",
@@ -1486,6 +1492,10 @@ KURZ_JE_TAG: dict[str, list[str]] = {
 
 
 GESCHICHTE_JE_TAG: dict[str, dict[str, str]] = {
+    "2026-11-03": {
+        "haken": "Frag KIplatz „Wie hoch ist der Großglockner?“, während auf einem PC der Community ein Spiel läuft, und deine Frage wartet ab heute nicht mehr auf ihn.",
+        "text": "Der PC merkt selbst, wenn ein anderes Programm seine Grafikkarte braucht, und sagt es gleich weiter. Deine Frage geht dann sofort an einen freien PC.",
+    },
     "2026-11-02": {
         "haken": "Frag KIplatz ab heute „Wann gab es die ersten Menschen?“, und es schaut gleich im Internet nach, statt erst aus dem Gedächtnis zu raten.",
         "text": "Bei Fragen nach einer Zahl oder einem Datum gilt nur, was in einer Quelle steht. Darum sucht KIplatz dort jetzt zuerst und liest nur Seiten, die von der Sache handeln, nach der du fragst.",

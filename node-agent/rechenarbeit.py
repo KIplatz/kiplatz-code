@@ -18,6 +18,7 @@ import antwortspeicher_basis
 import app_core
 import community
 import credits
+import grafik_last
 import hausordnung
 import kartenteiler as karten
 import ki_laufzeit
@@ -1131,8 +1132,9 @@ class Rechenarbeit:
             return False
 
     def _leistung(self) -> dict:
+        karte = grafik_last.belegt_sofort()
         return {"warm": bool(self._urteil_bereit()), "tempo": self._tempo(), "modell": self._modell(), "kopie": bool(self._kopie()),
-                "uebersetzen": self._uebersetzen is not None}
+                "uebersetzen": self._uebersetzen is not None, **({} if karte is None else {"karte": "belegt" if karte else "frei"})}
 
     def _tempo(self) -> float:
         try:

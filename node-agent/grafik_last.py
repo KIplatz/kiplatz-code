@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import re
 import sys
+import threading
 import time
 
 SCHWELLE_3D = 40.0
@@ -126,4 +127,25 @@ def belegt(*, jetzt=time.monotonic) -> tuple[bool, str] | None:
     return _gemerkt[1]
 
 
-__all__ = ["belegt", "fremd", "eigene", "auslastung", "SCHWELLE_3D", "SCHWELLE_VIDEO", "GILT_S"]
+_misst = threading.Lock()
+_gescheitert = -1e9
+
+
+def belegt_sofort() -> bool | None:
+    if sys.platform != "win32":
+        return None
+    stand, wert = _gemerkt
+    jetzt = time.monotonic()
+    if (wert is None or jetzt - stand >= GILT_S) and jetzt - _gescheitert >= GILT_S and _misst.acquire(blocking=False):
+        def messen() -> None:
+            global _gescheitert
+            try:
+                if belegt() is None:
+                    _gescheitert = time.monotonic()
+            finally:
+                _misst.release()
+        threading.Thread(target=messen, name="grafik-last", daemon=True).start()
+    return None if wert is None else wert[0]
+
+
+__all__ = ["belegt", "belegt_sofort", "fremd", "eigene", "auslastung", "SCHWELLE_3D", "SCHWELLE_VIDEO", "GILT_S"]
