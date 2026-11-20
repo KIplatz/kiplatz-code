@@ -16,6 +16,12 @@ MAX_NACHRICHTEN = 12
 
 
 MAX_TEXT = 8000
+BESUCHER_MAX_ZEICHEN = 300
+_MARKEN = re.compile(r"\[(?:E-Mail-Adresse|Kontonummer|Telefonnummer) entfernt\]")
+
+
+def besucher_laenge(text: str) -> int:
+    return len(_MARKEN.sub("x", " ".join(str(text or "").split())))
 
 
 STARK_AB_B = 8.0
@@ -71,6 +77,18 @@ SKILL_MAX = 12000
 
 
 FRIST_HOLEN_S = 300
+
+
+def skill_pruefen(skill) -> dict | None:
+    if skill in (None, "", {}):
+        return None
+    if not isinstance(skill, dict):
+        raise VermittlungError("SKILL", "der Skill ist unlesbar")
+    name = " ".join(str(skill.get("name", "")).split())[:80]
+    text = str(skill.get("text", "")).replace("\r\n", "\n")
+    if not name or not 20 <= len(text) <= SKILL_MAX:
+        raise VermittlungError("SKILL", f"ein Skill braucht einen Namen und höchstens {SKILL_MAX // 1000} Tsd. Zeichen")
+    return {"name": name, "text": text}
 
 
 ZUHAUSE_AUS_TEXT = "Dein PC daheim ist gerade nicht eingeschaltet oder nicht im Internet. Sobald er läuft, frag einfach noch einmal."

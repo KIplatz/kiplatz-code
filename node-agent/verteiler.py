@@ -49,11 +49,14 @@ QR_BREMSE_S = 24 * 3600
 KONTEN_JE_GERAET = 5
 KONTO_BEKANNT_TAGE = 90
 UNKLAR_ADMIN = 3
+FREIGABE_KONTEN = 2
+FREIGABE_KONTO_TAGE = 7
 STARK_DA_S = 300
 PRUEF_ART = "hausordnung"
 PRUEF_TEXT = 6000
 VERSTOESSE_SPERRE = 2
 MAX_GERAETE = 20000
+FREMDE_FRAGEN_TAGE = 7
 GERAETE_MAX_BYTES = 64 * 1024 * 1024
 AUFTRAEGE_SCHREIB_MAX_BYTES = 6 * 1024 * 1024
 AUFTRAEGE_KUERZEN_AUF_BYTES = 5 * 1024 * 1024
@@ -409,6 +412,7 @@ class Verteiler:
         self._skizzen_cache: tuple | None = None
         self._vf_geprueft = 0.0
         self._unklar: dict[tuple[str, str], float] = {}
+        self._ok_stimmen: dict[str, dict[str, float]] = {}
         self.bremse = schleifenbremse.Schleifenbremse(jetzt=jetzt, log=self._log)
         self._stufe: dict[str, tuple[float, float]] = {}
         self._stark_arbeit: dict[str, float] = {}
@@ -844,6 +848,117 @@ class Verteiler:
             k["benutzer"] = str(e["konto_benutzer"])
         return k
 
+    def konto_tage(self, sub: str) -> float | None:
+        sub = str(sub or "")
+        if not sub:
+            return None
+        seit = [str(e.get("konto_seit") or "") for e in self._geraete_lesen().values() if isinstance(e, dict) and e.get("konto_sub") == sub]
+        zeiten = []
+        for s in seit:
+            try:
+                zeiten.append(datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp())
+            except ValueError:
+                continue
+        if not zeiten:
+            return None
+        return max(0.0, (datetime.now(timezone.utc).timestamp() - min(zeiten)) / 86400.0)
+
+
+    def darf_fremde_fragen(self, kennung: str) -> bool:
+        e = self._geraete_lesen().get(str(kennung))
+        if not isinstance(e, dict) or e.get("gesperrt") or e.get("fremde_pausiert"):
+            return False
+        if e.get("admin") and not e.get("admin_ruht"):
+            return True
+        tage = self.konto_tage(str(e.get("konto_sub") or ""))
+        return tage is not None and tage >= FREMDE_FRAGEN_TAGE
+
+    @_gesperrt
+    def antwort_schluessel_setzen(self, kennung: str, eintrag) -> dict:
+        import frage_krypto as fk
+        g = self._geraete()
+        e = g.get(str(kennung))
+        if not isinstance(e, dict):
+            raise VerteilerError("RECHEN_GERAET", "dieses Gerät gibt es nicht")
+        if not isinstance(eintrag, dict) or not fk.antwortschluessel_pruefen(eintrag, jetzt=self._jetzt()):
+            raise VerteilerError("SCHLUESSEL_FORM", "der Antwort-Schlüssel ist nicht gültig unterschrieben")
+        unterschrift = {"art": "p256", "punkt": str(eintrag["unterschrift"]["punkt"])}
+        alt = e.get("unterschrift_schluessel")
+        if isinstance(alt, dict) and alt.get("punkt") != unterschrift["punkt"]:
+            raise VerteilerError("SCHLUESSEL_FEST", "dieses Gerät hat schon einen anderen Unterschrift-Schlüssel")
+        e["unterschrift_schluessel"] = unterschrift
+        e["antwort_schluessel"] = {"antwort": {"art": "p256", "punkt": str(eintrag["antwort"]["punkt"])},
+                                   "antwort_bis": int(eintrag["antwort_bis"]), "antwort_sig": str(eintrag["antwort_sig"])}
+        self._geraete_schreiben(g)
+        if alt is None:
+            self._log(f"SCHLUESSEL {kennung} {fk.schluessel_kennung(unterschrift)[:16]}")
+        b = e.get("beglaubigung") if isinstance(e.get("beglaubigung"), dict) else {}
+        return {"ok": True, "beglaubigt_bis": int(b.get("bis") or 0)}
+
+    def unterschrift_schluessel(self, kennung: str) -> dict | None:
+        e = self._geraete_lesen().get(str(kennung))
+        u = e.get("unterschrift_schluessel") if isinstance(e, dict) else None
+        return dict(u) if isinstance(u, dict) else None
+
+    def beglaubigen_liste(self) -> list[dict]:
+        out = []
+        for k, e in self._geraete_lesen().items():
+            if not isinstance(e, dict) or not isinstance(e.get("unterschrift_schluessel"), dict) or not self.darf_fremde_fragen(k):
+                continue
+            b = e.get("beglaubigung") if isinstance(e.get("beglaubigung"), dict) else {}
+            out.append({"kennung": k, "unterschrift": dict(e["unterschrift_schluessel"]), "beglaubigt_bis": int(b.get("bis") or 0)})
+        return out
+
+    @_gesperrt
+    def fremde_pausieren(self, kennung: str, an: bool, grund: str = "") -> dict:
+        g = self._geraete()
+        e = g.get(str(kennung))
+        if not isinstance(e, dict):
+            raise VerteilerError("RECHEN_GERAET", "dieses Gerät gibt es nicht")
+        e["fremde_pausiert"] = bool(an)
+        e["fremde_grund"] = " ".join(str(grund or "").split())[:200] if an else ""
+        self._geraete_schreiben(g)
+        self._log(f"FREMDE {kennung} {'pausiert' if an else 'wieder erlaubt'} {e['fremde_grund']}")
+        return {"kennung": str(kennung), "fremde_pausiert": bool(an), "fremde_grund": e["fremde_grund"]}
+
+    def gesperrte_schluessel(self) -> list[str]:
+        import frage_krypto as fk
+        out = set()
+        for e in self._geraete_lesen().values():
+            if isinstance(e, dict) and e.get("gesperrt") and isinstance(e.get("unterschrift_schluessel"), dict):
+                try:
+                    out.add(fk.schluessel_kennung(e["unterschrift_schluessel"]))
+                except fk.KryptoFehler:
+                    continue
+        return sorted(out)
+
+    @_gesperrt
+    def beglaubigung_setzen(self, kennung: str, beglaubigung, wurzel: dict | None) -> dict:
+        import frage_krypto as fk
+        g = self._geraete()
+        e = g.get(str(kennung))
+        if not isinstance(e, dict) or not isinstance(e.get("unterschrift_schluessel"), dict):
+            raise VerteilerError("RECHEN_GERAET", "dieses Gerät hat keinen Unterschrift-Schlüssel")
+        if not fk.beglaubigung_pruefen(wurzel, e["unterschrift_schluessel"], beglaubigung, jetzt=self._jetzt()):
+            raise VerteilerError("BEGLAUBIGUNG", "die Beglaubigung passt nicht")
+        e["beglaubigung"] = {"bis": int(beglaubigung["bis"]), "sig": str(beglaubigung["sig"])}
+        self._geraete_schreiben(g)
+        self._log(f"BEGLAUBIGT {kennung} bis {e['beglaubigung']['bis']}")
+        return {"kennung": str(kennung), "bis": e["beglaubigung"]["bis"]}
+
+    def empfaenger_eintraege(self, kennungen, *, wurzel: dict | None, gesperrt=frozenset()) -> dict[str, dict]:
+        import frage_krypto as fk
+        geraete = self._geraete_lesen()
+        out: dict[str, dict] = {}
+        for k in kennungen:
+            e = geraete.get(str(k))
+            if not isinstance(e, dict) or not isinstance(e.get("antwort_schluessel"), dict) or not self.darf_fremde_fragen(str(k)):
+                continue
+            eintrag = {**e["antwort_schluessel"], "unterschrift": e.get("unterschrift_schluessel"), "beglaubigung": e.get("beglaubigung")}
+            if fk.empfaenger_pruefen(eintrag, wurzel, jetzt=self._jetzt(), gesperrt=gesperrt) is not None:
+                out[str(k)] = eintrag
+        return out
+
     @_gesperrt
     def geraet_sperren(self, kennung: str, gesperrt: bool, grund: str = "") -> dict:
         g = self._geraete()
@@ -876,6 +991,7 @@ class Verteiler:
         return [{"kennung": k, "name": e.get("name", ""), "abschnitte": e.get("abschnitte", 0), "geprueft": e.get("geprueft", 0), "abgelehnt": e.get("abgelehnt", 0), "credits": e.get("credits", 0), "angelegt": e.get("angelegt", ""),
                  "gesperrt": bool(e.get("gesperrt")), "sperrgrund": e.get("sperrgrund", ""), "gesperrt_seit": e.get("gesperrt_seit", ""), "verstoesse": int(e.get("verstoesse", 0)),
                  "lebenslang": bool(e.get("lebenslang")),
+                 "fremde_pausiert": bool(e.get("fremde_pausiert")), "fremde_grund": str(e.get("fremde_grund", "") or ""),
                  "antworten": int(e.get("antworten", 0)), "admin": bool(e.get("admin")),
                  "vertieft": int(e.get("vertieft", 0)), "vertieft_geprueft": int(e.get("vertieft_geprueft", 0)),
                  "konto_sub": str(e.get("konto_sub", "") or ""), "konto_name": str(e.get("konto_name", "") or ""),
@@ -1204,6 +1320,9 @@ class Verteiler:
                     continue
                 von = (herkunft or {}).get(q.kennung)
                 if mein_konto and von and von != "admin" and (self.konto_von(von) or {}).get("sub") == mein_konto:
+                    continue
+                schon = self._ok_stimmen.get(q.kennung, {})
+                if "geraet:" + geraet.kennung in schon or (mein_konto and "konto:" + mein_konto in schon):
                     continue
                 if q.gueltig_bis and not q.gueltig():
                     continue
@@ -1679,7 +1798,7 @@ class Verteiler:
                 "geraet": neu.kurz() if neu else geraet.kurz()}
 
     @_gesperrt
-    def urteil_annehmen(self, geraet: Geraet, body: dict) -> dict:
+    def urteil_annehmen(self, geraet: Geraet, body: dict, *, herkunft: dict | None = None, admin: bool = False) -> dict:
         auftraege = self._auftraege()
         self._abgelaufene_freigeben(auftraege)
         kennung = str(body.get("auftrag", ""))
@@ -1708,13 +1827,15 @@ class Verteiler:
         self.bremse.erledigt(geraet.kennung, ("pruefen", quelle))
         g = self._geraete()
         if urteil == "ok":
-            self.speicher.freigeben(quelle)
-            haken = getattr(self, "freigegeben", None)
-            if haken is not None:
-                try:
-                    haken(quelle)
-                except Exception as exc:
-                    self._log(f"FEHLER freigabe-haken {quelle}: {type(exc).__name__}")
+            r["freigegeben"] = self._ok_zaehlen(quelle, geraet.kennung, herkunft, admin)
+            if r["freigegeben"]:
+                self.speicher.freigeben(quelle)
+                haken = getattr(self, "freigegeben", None)
+                if haken is not None:
+                    try:
+                        haken(quelle)
+                    except Exception as exc:
+                        self._log(f"FEHLER freigabe-haken {quelle}: {type(exc).__name__}")
         elif sicher:
             self.speicher.entfernen(quelle)
         else:
@@ -1726,6 +1847,30 @@ class Verteiler:
         neu = self.geraet_pruefen_ohne_token(geraet.kennung)
         r["geraet"] = neu.kurz() if neu else geraet.kurz()
         return r
+
+    def _ok_zaehlen(self, quelle: str, pruefer: str, herkunft: dict | None, admin: bool) -> bool:
+        if admin:
+            self._ok_stimmen.pop(quelle, None)
+            return True
+        von = str((herkunft or {}).get(quelle) or "")
+        schreiber = "" if not von or von == "admin" else str((self.konto_von(von) or {}).get("sub") or "")
+        konto = str((self.konto_von(pruefer) or {}).get("sub") or "")
+        tage = self.konto_tage(konto) if konto else None
+        stimmen = self._ok_stimmen.setdefault(quelle, {})
+        stimmen["geraet:" + pruefer] = self._jetzt()
+        if len(self._ok_stimmen) > 5000:
+            for alt in sorted(self._ok_stimmen, key=lambda k: max(self._ok_stimmen[k].values(), default=0.0))[:1000]:
+                self._ok_stimmen.pop(alt, None)
+        if not konto or konto == schreiber or tage is None or tage < FREIGABE_KONTO_TAGE:
+            self._log(f"URTEIL ok {quelle} von {pruefer} zählt nicht für die Freigabe (ohne Konto, Konto des Schreibers oder jünger als {FREIGABE_KONTO_TAGE} Tage)")
+            return False
+        stimmen["konto:" + konto] = self._jetzt()
+        n = sum(1 for k in stimmen if k.startswith("konto:"))
+        if n >= FREIGABE_KONTEN:
+            self._ok_stimmen.pop(quelle, None)
+            return True
+        self._log(f"URTEIL ok {quelle} von {pruefer}: {n} von {FREIGABE_KONTEN} Konten, wartet auf das nächste")
+        return False
 
     @_gesperrt
     def geraet_verstoss(self, kennung: str, grund: str) -> bool:

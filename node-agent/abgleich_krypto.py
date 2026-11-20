@@ -100,26 +100,42 @@ def pruefzahl(oeffentlich_: dict) -> str:
     return s[:3] + " " + s[3:]
 
 
-def fach_packen(k: bytes, geraet_oeffentlich: dict, *, wegwerf: ec.EllipticCurvePrivateKey | None = None, iv: bytes | None = None) -> dict:
-    if geraet_oeffentlich.get("art") != "p256":
+FACH_INFO = b"kiplatz-abgleich-fach-v1"
+FACH_AAD = b"kiplatz-fach"
+
+
+def punkt_laden(roh: bytes) -> ec.EllipticCurvePublicKey:
+    try:
+        return ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), roh)
+    except (ValueError, TypeError) as exc:
+        raise KryptoFehler("kein gültiger P-256-Punkt") from exc
+
+
+def fach_packen(k: bytes, geraet_oeffentlich: dict, *, wegwerf: ec.EllipticCurvePrivateKey | None = None, iv: bytes | None = None,
+                info: bytes = FACH_INFO, aad: bytes = FACH_AAD) -> dict:
+    if not isinstance(geraet_oeffentlich, dict) or geraet_oeffentlich.get("art") != "p256":
         raise KryptoFehler("unbekannte Art des Geräteschlüssels")
     g_roh = unb64(geraet_oeffentlich["punkt"])
-    g = ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), g_roh)
+    g = punkt_laden(g_roh)
     e = wegwerf or neues_geraet()
     e_roh = oeffentlich_roh(e)
-    w = _hkdf(e.exchange(ec.ECDH(), g), salt=e_roh + g_roh, info=b"kiplatz-abgleich-fach-v1")
+    w = _hkdf(e.exchange(ec.ECDH(), g), salt=e_roh + g_roh, info=info)
     iv = iv or os.urandom(12)
-    return {"art": "p256", "epk": b64(e_roh), "iv": b64(iv), "ct": b64(AESGCM(w).encrypt(iv, k, b"kiplatz-fach"))}
+    return {"art": "p256", "epk": b64(e_roh), "iv": b64(iv), "ct": b64(AESGCM(w).encrypt(iv, k, aad))}
 
 
-def fach_oeffnen(fach: dict, privat: ec.EllipticCurvePrivateKey) -> bytes:
+def fach_oeffnen(fach: dict, privat: ec.EllipticCurvePrivateKey, *, info: bytes = FACH_INFO, aad: bytes = FACH_AAD) -> bytes:
     if not isinstance(fach, dict) or fach.get("art") != "p256":
         raise KryptoFehler("unbekannte Art des Fachs")
-    e_roh, g_roh = unb64(fach["epk"]), oeffentlich_roh(privat)
-    e = ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), e_roh)
-    w = _hkdf(privat.exchange(ec.ECDH(), e), salt=e_roh + g_roh, info=b"kiplatz-abgleich-fach-v1")
     try:
-        k = AESGCM(w).decrypt(unb64(fach["iv"]), unb64(fach["ct"]), b"kiplatz-fach")
+        e_roh, g_roh = unb64(fach["epk"]), oeffentlich_roh(privat)
+        iv, ct = unb64(fach["iv"]), unb64(fach["ct"])
+    except KeyError as exc:
+        raise KryptoFehler("dem Fach fehlt ein Teil") from exc
+    e = punkt_laden(e_roh)
+    w = _hkdf(privat.exchange(ec.ECDH(), e), salt=e_roh + g_roh, info=info)
+    try:
+        k = AESGCM(w).decrypt(iv, ct, aad)
     except Exception as exc:
         raise KryptoFehler("das Fach gehört nicht zu diesem Gerät oder wurde verändert") from exc
     if len(k) != 32:

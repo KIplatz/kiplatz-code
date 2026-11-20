@@ -81,7 +81,7 @@ STECKBRIEF = (
     "Steckbrief KIplatz: kostenlose KI aus Österreich, offen für alle auf der Welt, auf Deutsch und Englisch, gebaut von einer Community. Läuft am eigenen Gerät: ja, als Programm "
     "für Windows 11; vom Handy oder einem anderen Gerät fragt man über die App oder kiplatz.at, dann antwortet ein PC der Community. "
     "Die Antworten entstehen auf den Computern der Mitglieder, nicht in einem Rechenzentrum; der Server in Wien vermittelt nur. "
-    "Kostenlos ohne Grenze, kein Bezahltarif, keine Werbung, Quellen unter jeder Antwort. KIplatz gibt es seit September 2026."
+    "Kostenlos ohne Grenze, kein Bezahltarif, keine Werbung, bei jeder Antwort steht, woher sie kommt (Quellen oder der Hinweis, dass keine dabei war). KIplatz gibt es seit September 2026."
 )
 
 TEXTE: dict[str, str] = {
@@ -105,7 +105,8 @@ TEXTE: dict[str, str] = {
                "verkaufen. Wer Credits hat, bekommt Vorrang, wenn viele Fragen gleichzeitig kommen.",
     "vergleich": "Ich bin anders gebaut als die großen Anbieter, darum messe ich mich nicht an ihnen. Ich laufe nicht in einem "
                  "Rechenzentrum, sondern auf den Computern der Mitglieder: auf deinem PC oder auf einem Gerät der Community, das gerade "
-                 "Zeit hat. Unter jeder Antwort stehen die Quellen, und wenn ich etwas nicht weiß, sage ich es, statt zu raten. Ich bin "
+                 "Zeit hat. Bei jeder Antwort steht, aus welchen Quellen sie kommt oder dass ich ohne Quelle geantwortet habe, und wenn ich etwas "
+                 "nicht weiß, sage ich es, statt zu raten. Ich bin "
                  "kostenlos, ohne Werbung und ohne Konzern dahinter, und Fragen über dich selbst speichert der Server nie. Am besten "
                  "probierst du es aus: Frag mich etwas, das du wirklich wissen willst. Und je mehr Mitglieder mitmachen, desto mehr weiß ich.",
     "steckbrief": STECKBRIEF,

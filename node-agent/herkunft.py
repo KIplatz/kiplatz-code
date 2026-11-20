@@ -62,8 +62,12 @@ class Herkunft:
         self.oeffentlich_b64 = _b64(self._oeffentlich.public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw))
 
     def etikett(self, text: str, *, tag: str | None = None) -> dict:
+        return self.etikett_fuer(pruefsumme(text), tag=tag)
+
+    def etikett_fuer(self, summe: str, *, tag: str | None = None) -> dict:
         tag = tag or time.strftime("%Y-%m-%d", time.gmtime())
-        summe = pruefsumme(text)
+        if not isinstance(summe, str) or len(summe) != 64 or not all(c in "0123456789abcdef" for c in summe):
+            raise ValueError("keine gültige Prüfsumme")
         return {"v": VERSION, "ki_erzeugt": True, "von": VON, "tag": tag, "pruefsumme": summe,
                 "unterschrift": _b64(self._privat.sign(_nachricht(tag, summe)))}
 

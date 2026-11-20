@@ -103,6 +103,20 @@ def schluessel(vereinfacht: str) -> bytes:
     return hashlib.sha256(f"kiplatz-antwortspeicher/{FORMAT}/{vereinfacht}".encode("utf-8")).digest()
 
 
+_ZWEI_NAMEN = re.compile(r"[A-ZÄÖÜ][a-zäöüß]+[\s-]+[A-ZÄÖÜ][a-zäöüß]+")
+
+
+def speicher_freigabe(nachrichten, *, skill=None) -> tuple[str, str]:
+    kern = frage_taugt(nachrichten, skill=skill)
+    if not kern:
+        return "", ""
+    text = str(nachrichten[0].get("content", ""))
+    rest = text.split(None, 1)[1] if len(text.split(None, 1)) > 1 else ""
+    if _ZWEI_NAMEN.search(rest):
+        return "", ""
+    return schluessel(kern).hex(), kern
+
+
 def kennung(schl: bytes) -> str:
     return hashlib.sha256(b"kiplatz-antwortspeicher-id/" + schl).hexdigest()[:20]
 
@@ -195,6 +209,9 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
      "tragen („Arten“ nach den Bäumen → Kryptowährungen), sie gehen"),
     ("2026-11-03b", frozenset(), "ki_laufzeit misst nur das Schreibtempo des Chat-Modells für die Meldung „kann gerade nicht gut“ an den Server; "
      "Wortlaut und Quellen einer Antwort ändern sich nicht, nichts zu verwerfen"),
+    ("2026-11-19a", frozenset(), "Ende-zu-Ende: Fragen und Antworten reisen verschlossen, das fragende Gerät "
+     "prüft Unterschrift und Platzordnung selbst, eine Krisenfrage verlässt das Gerät nicht; wie eine Antwort entsteht, ändert sich nicht, "
+     "nichts zu verwerfen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())

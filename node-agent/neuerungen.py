@@ -14,6 +14,14 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-11-19a": [
+        "Fragst du die Community, reist deine Frage jetzt verschlüsselt. Öffnen können sie nur die PCs der Community, die antworten dürfen, "
+        "der Server in Wien gibt sie nur weiter. Allgemeine Wissensfragen ohne Namen sieht er als Stichwörter, damit die Antwort beim "
+        "nächsten Mal gleich kommt.",
+        "Dein Gerät prüft jede Antwort aus der Community jetzt selbst: ob der PC sie unterschrieben hat, ob sie sich an die Platzordnung hält "
+        "und welche Sätze in den Quellen stehen. Unter den Details siehst du, wie viele Quellen der Server bestätigt hat.",
+        "Schreibst du in einer Krise, antwortet dein Gerät sofort selbst mit Nummern, wo du Hilfe bekommst. Diese Frage verlässt dein Gerät nicht.",
+    ],
     "2026-11-03b": [
         "Merkt ein PC der Community, dass er gerade viel langsamer schreibt als sonst, sagt er das jetzt auch dann, wenn die Grafikkarte nicht sichtbar belegt ist. Deine Frage geht dann gleich an einen schnelleren PC.",
     ],
@@ -1355,6 +1363,10 @@ ZURUECKGEHALTEN: dict[str, list[str]] = {
 }
 
 KURZ_JE_TAG: dict[str, list[str]] = {
+    "2026-11-19": [
+        "Persönliche Fragen an die Community reisen jetzt verschlüsselt, der Server in Wien gibt sie nur weiter",
+        "Jede Antwort aus der Community prüft dein Gerät jetzt selbst, auch ob der PC sie unterschrieben hat",
+    ],
     "2026-11-03": [
         "Braucht ein Spiel die Grafikkarte eines PCs, geht deine Frage jetzt sofort an einen anderen PC",
     ],
@@ -1495,6 +1507,10 @@ KURZ_JE_TAG: dict[str, list[str]] = {
 
 
 GESCHICHTE_JE_TAG: dict[str, dict[str, str]] = {
+    "2026-11-19": {
+        "haken": "Frag KIplatz ab heute „Was tun, wenn der Vermieter die Kaution nicht zurückgibt?“, und deine Frage reist verschlüsselt zu dem PC, der dir antwortet.",
+        "text": "Unterwegs kann sie niemand lesen, auch nicht in Wien, wo sie nur weitergereicht wird. Die Antwort prüft dein Gerät selbst, bevor du sie siehst.",
+    },
     "2026-11-03": {
         "haken": "Frag KIplatz „Wie hoch ist der Großglockner?“, während auf einem PC der Community ein Spiel läuft, und deine Frage wartet ab heute nicht mehr auf ihn.",
         "text": "Der PC merkt selbst, wenn ein anderes Programm seine Grafikkarte braucht, und sagt es gleich weiter. Deine Frage geht dann sofort an einen freien PC.",

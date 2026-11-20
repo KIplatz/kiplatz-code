@@ -60,10 +60,12 @@ def pakete_auspacken(daten: bytes) -> dict[str, bytes]:
 
 class Pakete:
 
-    def __init__(self, ordner, speicher, vt: verteiler.Verteiler, sperre, antworten=None) -> None:
+    def __init__(self, ordner, speicher, vt: verteiler.Verteiler, sperre, antworten=None, unterschreiben=None) -> None:
         self.dir = Path(ordner) / DIRNAME
         self.speicher, self.vt, self.sperre = speicher, vt, sperre
         self.antworten = antworten
+        self.unterschreiben = unterschreiben
+        self._u_marke = "|u1" if unterschreiben is not None else ""
         self._lock = threading.Lock()
         self._sig: dict[str, str] = {}
         self._objekte: dict[str, str] = {}
@@ -125,7 +127,7 @@ class Pakete:
         neu: dict[str, str | None] = {}
         gesehen: set[str] = set()
         for k in set(marken) | set(je_quelle_v) | set(je_quelle_t):
-            for art, sig in (("q", f"{marken.get(k)}|{idx_mt.get(k)}"), ("v", f"{marken.get(k)}|{vf_mt.get(k)}")):
+            for art, sig in (("q", f"{marken.get(k)}|{idx_mt.get(k)}{self._u_marke}"), ("v", f"{marken.get(k)}|{vf_mt.get(k)}")):
                 schl = f"{art}:{k}"
                 if not _SCHLUESSEL.match(schl):
                     continue
@@ -186,14 +188,16 @@ class Pakete:
                     pass
         return len(neu)
 
-    @staticmethod
-    def _quelle(wi, kennung: str, vektoren: dict, texte: dict) -> dict | None:
+    def _quelle(self, wi, kennung: str, vektoren: dict, texte: dict) -> dict | None:
         roh = [d for d in wi.roh_ausgeben([kennung]) if not d["privat"] and d["freigegeben"]]
         if not roh:
             return None
         vk = {s: {"hash": e.get("hash"), "s": e.get("s", 1.0), "vq": e.get("vq"), "sk": e.get("sk")}
               for s, e in vektoren.items() if (texte.get(s) or (None,))[0] == e.get("hash") and e.get("vq") and e.get("sk")}
-        return {"format": FORMAT, "art": "q", "kennung": kennung, "quelle": roh[0], "vektoren": vk}
+        out = {"format": FORMAT, "art": "q", "kennung": kennung, "quelle": roh[0], "vektoren": vk}
+        if self.unterschreiben is not None:
+            out["unterschriften"] = self.unterschreiben(kennung, [a[3] for a in roh[0].get("abschnitte") or [] if len(a) > 3])
+        return out
 
     @staticmethod
     def _vorbereitet(kennung: str, eintraege: dict, texte: dict) -> dict | None:
@@ -219,11 +223,17 @@ class Spiegel:
         self._vektoren: dict[str, dict[str, dict]] = {}
         self._verzeichnisse: dict[str, tuple[dict, dict]] = {}
         self._antworten: dict[str, dict] = {}
+        self._unterschriften: dict[str, dict[str, str]] = {}
         self.version = 0
         self.vollstaendig = False
         self._such: tuple | None = None
         self.letzte_suche = ""
         self._geladen = False
+
+    def unterschrift(self, kennung: str, text: str) -> str | None:
+        import hashlib as _h
+        with self._lock:
+            return (self._unterschriften.get(str(kennung)) or {}).get(_h.sha256(str(text).encode("utf-8")).hexdigest())
 
     def bereit(self) -> bool:
         self._laden()
@@ -263,6 +273,9 @@ class Spiegel:
                 raise ValueError(f"Paket {schl} enthält, was nicht hinaus darf")
             if wortindex_auch:
                 self._wi.roh_aufnehmen([q], [k])
+            u = daten.get("unterschriften")
+            self._unterschriften[k] = {str(h): str(s) for h, s in (u.items() if isinstance(u, dict) else ())
+                                       if isinstance(h, str) and len(h) == 64 and isinstance(s, str) and len(s) <= 120}
             vk = {}
             for s, e in (daten.get("vektoren") or {}).items():
                 if not str(s).startswith(k + ":"):
@@ -289,6 +302,7 @@ class Spiegel:
         if art == "q":
             self._wi.roh_aufnehmen([], [k])
             self._vektoren.pop(k, None)
+            self._unterschriften.pop(k, None)
         elif art == "a":
             for nr in [n for n in self._antworten if n[:2] == k]:
                 del self._antworten[nr]

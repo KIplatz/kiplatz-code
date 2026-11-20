@@ -24,6 +24,7 @@ import * as pdfZusammen from "./pdf-zusammen.js";
 import * as antwortPdf from "./antwort-pdf.js";
 import { Sprechen, anhaengen as sprAnhaengen, GROESSE_MB as SPRACHE_MB } from "./sprache.js";
 import * as zuhause from "./zuhause.js";
+import * as weg from "./frage-weg.js";
 
 
 function zeitzone() { const z = -new Date().getTimezoneOffset(); return Number.isInteger(z) ? z : null; }
@@ -564,6 +565,97 @@ function arbeitKnoten() {
 
 function knoepfeLaufend(an) { $("#btn-senden").hidden = an; $("#btn-stopp").hidden = !an; }
 
+
+const OFFENLEGBAR = new Map();
+const KRISEN_LIEFERSCHEIN = { modell: "ohne Modell", dauer_s: 0, wortstuecke: 0, gelesen: 0, quellen: weg.KRISENHILFE.woher, quellen_liste: [],
+  gemacht: weg.KRISENHILFE.gemacht, erfunden: "nichts", krisenhilfe: true };
+const KEIN_PC = "Gerade sind alle PCs der Community beschäftigt. Probier es bitte in ein paar Minuten noch einmal.";
+const fehlerAntwort = (text) => ({ rolle: "assistant", text, lieferschein: {}, fehler: true });
+
+function meldenNebenbei(kennung, code, zweite = false) {
+  holen("/antwort-melden", { body: { auftrag: kennung, code, zweite }, geraet: z.geraet }).catch(() => { });
+}
+
+
+async function zweiteNebenbei(kennung, e, unterschriften) {
+  const ende = Date.now() + 130000;
+  while (Date.now() < ende) {
+    let zw = null;
+    try { zw = await holen("/antwort-zweite/" + encodeURIComponent(kennung), { geraet: z.geraet }); } catch { return; }
+    if (zw?.nachricht) {
+      const code = await weg.zweitePruefen(zw, e, unterschriften);
+      if (code) meldenNebenbei(kennung, code, true);
+      return;
+    }
+    await schlafen(5000);
+  }
+}
+
+async function verschlossenFragen(g, verlauf, { sk, fg, frisch, vorige }, k) {
+  const letzte = [...verlauf].reverse().find((n) => n.role === "user")?.content || "";
+  const vor = weg.vorher(letzte);
+
+  if (vor.krise) return { rolle: "assistant", text: vor.krise, lieferschein: { ...KRISEN_LIEFERSCHEIN } };
+  if (!vor.haus.ok || (sk && !weg.vorher(`${sk.name}\n${sk.text}`).haus.ok)) return fehlerAntwort("Das verstößt gegen die Platzordnung. Bitte eine andere Frage.");
+  let w = await weg.empfaengerAuswerten(await holen("/empfaenger", { geraet: z.geraet }));
+  if (w.notAus?.an) return fehlerAntwort("Die Community ist gerade angehalten. Probier es bitte später noch einmal.");
+
+
+  if (!w.anzahl) return fehlerAntwort(KEIN_PC);
+  const skill = sk ? { name: sk.name, text: sk.text } : null;
+  let v = null, kennung = "", freigegeben = false;
+  for (let versuch = 1; versuch <= 2 && !kennung; versuch++) {
+    const ver = await weg.verschliessen(verlauf, w.empf, { skill, fachgebiete: fg, zone: zeitzone(), frisch, speicher: !vorige });
+    v = ver.v; freigegeben = !!ver.body.speicher;
+    try {
+      kennung = String((await holen("/frage-stellen", { body: { ...ver.body, ...(vorige ? { vorige } : {}) }, geraet: z.geraet })).kennung || "");
+      if (!kennung) return fehlerAntwort(KEIN_PC);
+    }
+    catch (e) {
+      if (e.code !== "NEU_VERSCHLIESSEN" || versuch === 2) throw e;
+      w = await weg.empfaengerAuswerten(await holen("/empfaenger", { geraet: z.geraet }));
+      if (!w.anzahl) return fehlerAntwort(KEIN_PC);
+    }
+  }
+  z.laufend.kennung = kennung;
+  const e = weg.empfang(v);
+  const t0 = Date.now(); let r = null; let seit = ""; let aussetzer = 0;
+  while (Date.now() - t0 < 240000 && !z.laufend.abbrechen) {
+    const pfad = "/antwort/" + encodeURIComponent(kennung) + "?warten=15" + (seit ? "&seit=" + encodeURIComponent(seit) : "");
+    try { r = await holen(pfad, { geraet: z.geraet, zeitlimit: 30000 }); }
+    catch (err) { if (z.laufend.abbrechen) break; if (++aussetzer >= 3) throw err; await schlafen(1500); continue; }
+    aussetzer = 0;
+    if (z.laufend.abbrechen) break;
+    seit = r.stand || "";
+    if (r.status === "fertig" || r.status === "verworfen") break;
+    const folgen = nahUnten();
+    if (r.status === "genommen") {
+      const t = await weg.teile(r, e);
+      k.ent.hidden = true;
+      k.schritt.textContent = t.schritt || "ein PC aus der Community erarbeitet deine Antwort …";
+    } else k.schritt.textContent = r.vor_dir ? `wartet auf einen freien PC (${r.vor_dir} vor dir) …` : "wartet auf einen freien PC …";
+    if (g.kennung === z.gespraeche.aktuellId && folgen) runter();
+  }
+  if (z.laufend.abbrechen) return { rolle: "assistant", text: "Angehalten.", lieferschein: {}, fehler: true };
+  if (r?.status !== "fertig") return fehlerAntwort(r?.grund ? r.grund.charAt(0).toUpperCase() + r.grund.slice(1) : KEIN_PC);
+  if (!r.nachricht) {
+
+    if (!weg.offenAnnehmen(r, freigegeben)) return fehlerAntwort("Die Antwort aus der Community hat unsere Prüfung nicht bestanden. Frag bitte noch einmal.");
+    return { rolle: "assistant", text: r.text || "(keine Antwort erhalten)", lieferschein: { ...(r.lieferschein || {}), ki_erzeugt: true, ...(r.etikett ? { etikett: r.etikett } : {}) }, von: r.von || "", auftrag: kennung };
+  }
+  const l = await weg.lesen(r, v, e, { abschnitt: w.abschnitt, unterschriften: w.unterschriften });
+  if (!l.ok) {
+    meldenNebenbei(kennung, l.code);
+    return fehlerAntwort("Die Antwort aus der Community hat unsere Prüfung nicht bestanden. Frag bitte noch einmal.");
+  }
+  OFFENLEGBAR.set(kennung, l.beweis);
+  while (OFFENLEGBAR.size > 50) OFFENLEGBAR.delete(OFFENLEGBAR.keys().next().value);
+  if (r.zweite === "wartet" || r.zweite === "da") zweiteNebenbei(kennung, e, w.unterschriften);
+  let etikett = null;
+  try { etikett = (await holen("/etikett", { body: { auftrag: kennung, ...l.etikett }, geraet: z.geraet })).etikett || null; } catch { }
+  return { rolle: "assistant", text: l.text, lieferschein: { ...l.lieferschein, ki_erzeugt: true, ...(etikett ? { etikett } : {}) }, von: r.von || "", auftrag: kennung };
+}
+
 async function fragen(text, { frisch = false, wiederholen = false, anhaenge = null, vorige = "", netz = false } = {}) {
   if (!text || z.laufend || z.sperre) return;
   const g = z.gespraeche.aktuell;
@@ -607,37 +699,42 @@ async function fragen(text, { frisch = false, wiederholen = false, anhaenge = nu
 
 
     const fg = skillAblage.holen(meineKi.NAME) ? meineKi.fachgebiete(z.einst.meineKi) : [];
-    const body = { nachrichten: verlauf, auszuege: [], frisch, zone: zeitzone(), ...(sk ? { skill: { name: sk.name, text: sk.text } } : {}), ...(vorige ? { vorige } : {}), ...(fg.length ? { fachgebiete: fg } : {}) };
 
 
-    void netz;
-    z.laufend.kennung = (await holen("/frage-stellen", { body, geraet: z.geraet })).kennung;
-    const t0 = Date.now(); let r = null; let seit = ""; let aussetzer = 0;
-    while (Date.now() - t0 < 240000 && !z.laufend.abbrechen) {
+    if (weg.bereit()) ergebnis = await verschlossenFragen(g, verlauf, { sk, fg, frisch, vorige }, k);
+    else {
+      const body = { nachrichten: verlauf, auszuege: [], frisch, zone: zeitzone(), ...(sk ? { skill: { name: sk.name, text: sk.text } } : {}), ...(vorige ? { vorige } : {}), ...(fg.length ? { fachgebiete: fg } : {}) };
 
 
-      const weg = "/antwort/" + encodeURIComponent(z.laufend.kennung) + "?warten=15" + (seit ? "&seit=" + encodeURIComponent(seit) : "");
-      try { r = await holen(weg, { geraet: z.geraet, zeitlimit: 30000 }); }
-      catch (e) { if (z.laufend.abbrechen) break; if (++aussetzer >= 3) throw e; await schlafen(1500); continue; }
-      aussetzer = 0;
-      if (z.laufend.abbrechen) break;
-      seit = r.stand || "";
-      if (r.status === "fertig" || r.status === "verworfen") break;
-      const folgen = nahUnten();
-      if (r.status === "genommen") {
+      void netz;
+      z.laufend.kennung = (await holen("/frage-stellen", { body, geraet: z.geraet })).kennung;
+      const t0 = Date.now(); let r = null; let seit = ""; let aussetzer = 0;
+      while (Date.now() - t0 < 240000 && !z.laufend.abbrechen) {
 
 
-        k.ent.hidden = true;
-        k.schritt.textContent = r.schritt || "ein PC aus der Community erarbeitet deine Antwort …";
+        const pfad = "/antwort/" + encodeURIComponent(z.laufend.kennung) + "?warten=15" + (seit ? "&seit=" + encodeURIComponent(seit) : "");
+        try { r = await holen(pfad, { geraet: z.geraet, zeitlimit: 30000 }); }
+        catch (e) { if (z.laufend.abbrechen) break; if (++aussetzer >= 3) throw e; await schlafen(1500); continue; }
+        aussetzer = 0;
+        if (z.laufend.abbrechen) break;
+        seit = r.stand || "";
+        if (r.status === "fertig" || r.status === "verworfen") break;
+        const folgen = nahUnten();
+        if (r.status === "genommen") {
+
+
+          k.ent.hidden = true;
+          k.schritt.textContent = r.schritt || "ein PC aus der Community erarbeitet deine Antwort …";
+        }
+        else k.schritt.textContent = r.vor_dir ? `wartet auf einen freien PC (${r.vor_dir} vor dir) …` : "wartet auf einen freien PC …";
+        if (g.kennung === z.gespraeche.aktuellId && folgen) runter();
       }
-      else k.schritt.textContent = r.vor_dir ? `wartet auf einen freien PC (${r.vor_dir} vor dir) …` : "wartet auf einen freien PC …";
-      if (g.kennung === z.gespraeche.aktuellId && folgen) runter();
+      if (z.laufend.abbrechen) ergebnis = { rolle: "assistant", text: "Angehalten.", lieferschein: {}, fehler: true };
+      else if (r?.status === "fertig") ergebnis = { rolle: "assistant", text: r.text || "(keine Antwort erhalten)", lieferschein: { ...(r.lieferschein || {}), ki_erzeugt: true, ...(r.etikett ? { etikett: r.etikett } : {}) }, von: r.von || "", auftrag: z.laufend.kennung,
+        ...(body.zuhause ? { daheim: r.zuhause ? (r.lieferschein?.zuhause === "mit_unterlagen" ? "daheim" : "daheim_ohne") : "aus" } : {}),
+        ...(r.lieferschein?.dateien?.length ? { dateien: r.lieferschein.dateien.map((d) => ({ ...d, pc: z.zuhause[0]?.pc_name || "", kid: z.zuhause[0]?.kid || "" })) } : {}) };
+      else ergebnis = { rolle: "assistant", text: r?.grund ? r.grund.charAt(0).toUpperCase() + r.grund.slice(1) : "Gerade sind alle PCs der Community beschäftigt. Probier es bitte in ein paar Minuten noch einmal.", lieferschein: {}, fehler: true };
     }
-    if (z.laufend.abbrechen) ergebnis = { rolle: "assistant", text: "Angehalten.", lieferschein: {}, fehler: true };
-    else if (r?.status === "fertig") ergebnis = { rolle: "assistant", text: r.text || "(keine Antwort erhalten)", lieferschein: { ...(r.lieferschein || {}), ki_erzeugt: true, ...(r.etikett ? { etikett: r.etikett } : {}) }, von: r.von || "", auftrag: z.laufend.kennung,
-      ...(body.zuhause ? { daheim: r.zuhause ? (r.lieferschein?.zuhause === "mit_unterlagen" ? "daheim" : "daheim_ohne") : "aus" } : {}),
-      ...(r.lieferschein?.dateien?.length ? { dateien: r.lieferschein.dateien.map((d) => ({ ...d, pc: z.zuhause[0]?.pc_name || "", kid: z.zuhause[0]?.kid || "" })) } : {}) };
-    else ergebnis = { rolle: "assistant", text: r?.grund ? r.grund.charAt(0).toUpperCase() + r.grund.slice(1) : "Gerade sind alle PCs der Community beschäftigt. Probier es bitte in ein paar Minuten noch einmal.", lieferschein: {}, fehler: true };
   } catch (e) {
     ergebnis = { rolle: "assistant", text: e instanceof ServerFehler ? e.message : "Das hat nicht geklappt.", lieferschein: {}, fehler: true };
     if (e.status === 401) status("Dieses Handy ist abgemeldet. Melde dich bitte einfach neu an.");
@@ -2026,6 +2123,13 @@ function verdrahten() {
       const an = !gefahr && vorschlag.length >= 3 && $("#as-community").checked ? "community" : "admin";
       try {
         await holen("/rueckmeldung", { body: { frage: frage?.text || "", antwort: n.text, grund: grund || "Vorschlag zur Antwort", vorschlag, an }, geraet: z.geraet });
+
+
+        const beweis = gefahr && n.auftrag ? OFFENLEGBAR.get(n.auftrag) : null;
+        if (beweis) {
+          holen("/antwort-offenlegen", { body: { auftrag: n.auftrag, frage_id: beweis.frage_id, frage_roh: weg.b64(beweis.frage_roh), antwort: weg.b64(beweis.antwort), sig: beweis.sig }, geraet: z.geraet })
+            .catch(() => { });
+        }
         dankeZeile(i, an === "community" ? "Danke. Ein anderes Mitglied prüft deinen Vorschlag, danach gilt er für alle." : "Danke, ist bei uns angekommen. Wir sehen es uns an.");
       } catch (err) { status(err.message); }
     }, { once: true });

@@ -979,8 +979,60 @@ class Rechenarbeit:
                 self.phase = vorher
             self._karte.ende()
 
+    def _verschlossen_vorbereiten(self, auftrag: dict) -> tuple[dict, object, dict]:
+        import frage_krypto as fk
+        kennung = str(auftrag.get("auftrag", ""))
+        try:
+            g = self._community.verschlossen_oeffnen(auftrag["verschlossen"])
+            inhalt = g.inhalt
+            nachrichten = vermittlung_basis._nachrichten_pruefen(inhalt.get("nachrichten"))
+            sk = vermittlung_basis.skill_pruefen(inhalt.get("skill"))
+        except (fk.KryptoFehler, vermittlung_basis.VermittlungError, KeyError, TypeError) as exc:
+            self._frage_erledigt = True
+            self._verzichten(kennung, "SCHLUESSEL")
+            raise app_core.AppError("ANTWORT_SCHLUESSEL", "die verschlossene Frage ließ sich auf diesem Gerät nicht öffnen") from exc
+        letzte = next((n["content"] for n in reversed(nachrichten) if n["role"] == "user"), "")
+        if auftrag.get("besucher"):
+            if len(nachrichten) != 1 or not 3 <= vermittlung_basis.besucher_laenge(letzte) <= vermittlung_basis.BESUCHER_MAX_ZEICHEN:
+                self._frage_erledigt = True
+                self._verzichten(kennung, "BESUCHER_FORM")
+                raise app_core.AppError("BESUCHER_FORM", "die Probefrage hat nicht die Form einer Probefrage")
+            sk = None
+            inhalt = {k_: v_ for k_, v_ in inhalt.items() if k_ not in ("skill", "fachgebiete")}
+            if inhalt.get("frisch") and not auftrag.get("frisch_erlaubt"):
+                inhalt = {**inhalt, "frisch": False}
+        b = hausordnung.pruefen(letzte)
+        if b.ok and sk:
+            b = hausordnung.pruefen(f"{sk.get('name', '')}\n{sk.get('text', '')}")
+        if not b.ok:
+            self._frage_erledigt = True
+            self._verzichten(kennung, "HAUSORDNUNG")
+            raise app_core.AppError("HAUSORDNUNG", b.text)
+        if inhalt.get("speicher_ok"):
+            _schl, kern = antwortspeicher_basis.speicher_freigabe(nachrichten, skill=sk)
+            if not kern or kern != " ".join(str(inhalt.get("speicher_frage") or "").split())[:500]:
+                inhalt = {**inhalt, "speicher_ok": False, "speicher_frage": ""}
+        offen = {"nachrichten": nachrichten, "auszuege": [], "frisch": bool(inhalt.get("frisch")), **({"skill": sk} if sk else {})}
+        if isinstance(inhalt.get("fachgebiete"), list):
+            offen["fachgebiete"] = [f for f in inhalt["fachgebiete"] if isinstance(f, str)][:12]
+        if inhalt.get("zone") is not None:
+            offen["zone"] = inhalt.get("zone")
+        return offen, fk.Kanal(g), inhalt
+
+    def _verzichten(self, kennung: str, grund: str) -> None:
+        if hasattr(self._community, "antwort_verzicht"):
+            try:
+                wie = self._community.antwort_verzicht(kennung, grund)
+                self._log(f"OK rechenarbeit antwort {kennung} abgegeben ({wie or 'ohne Rückmeldung'}): {grund}")
+            except Exception as exc:
+                self._log(f"FEHLER frage zurück: {type(exc).__name__}")
+
     def _antwort_geben_innen(self, auftrag: dict) -> None:
         fuer = str(auftrag.get("fuer", "") or "einem Mitglied")[:60]
+        kanal, inhalt = None, {}
+        if isinstance(auftrag.get("verschlossen"), dict):
+            offen, kanal, inhalt = self._verschlossen_vorbereiten(auftrag)
+            auftrag = {**auftrag, **offen}
         self.phase, self.meldung, self.auftrag_n = "antwortet", fuer, 1
         t0 = time.time()
         laden_s = 0.0
@@ -998,8 +1050,12 @@ class Rechenarbeit:
         if isinstance(auftrag.get("skill"), dict):
             extra["skill"] = auftrag["skill"]
         zuhause = auftrag.get("zuhause") if isinstance(auftrag.get("zuhause"), dict) else None
-        melder = Melder(lambda t: self._community.antwort_teil(kennung, t),
-                        (lambda t: self._community.antwort_schritt(kennung, t)) if hasattr(self._community, "antwort_schritt") else None)
+        if kanal is not None:
+            melder = Melder(lambda t: self._community.antwort_teil_verschlossen(kennung, kanal.verschliessen("teil", {"text": str(t)})),
+                            lambda t: self._community.antwort_teil_verschlossen(kennung, kanal.verschliessen("schritt", {"text": str(t)})))
+        else:
+            melder = Melder(lambda t: self._community.antwort_teil(kennung, t),
+                            (lambda t: self._community.antwort_schritt(kennung, t)) if hasattr(self._community, "antwort_schritt") else None)
         try:
             import inspect
             parameter = inspect.signature(self._antworten).parameters
@@ -1051,9 +1107,20 @@ class Rechenarbeit:
             mit_ablauf = "ablauf" in inspect.signature(self._community.antwort_senden).parameters
         except (TypeError, ValueError):
             mit_ablauf = False
+        verschlossen_antwort = None
+        if kanal is not None:
+            verschlossen_antwort = kanal.antwort(text, lieferschein if isinstance(lieferschein, dict) else {}, self._community.frage_schluessel().unterschrift)
+            ls = lieferschein if isinstance(lieferschein, dict) else {}
+            zahlen = {k: ls[k] for k in ("wortstuecke", "dauer_s", "modell") if k in ls}
         for versuch in (1, 2):
             try:
-                r = self._community.antwort_senden(str(auftrag["auftrag"]), text, lieferschein, dauer, messung, **({"ablauf": zeiten} if mit_ablauf else {}))
+                if verschlossen_antwort is not None:
+                    r = self._community.antwort_senden_verschlossen(
+                        str(auftrag["auftrag"]), verschlossen_antwort, zahlen, dauer, messung, ablauf=zeiten,
+                        speicher_text=text if inhalt.get("speicher_ok") else "", speicher_frage=str(inhalt.get("speicher_frage") or "")[:500])
+                else:
+                    offen_ls = {x: v for x, v in lieferschein.items() if x != "abschnitte"} if isinstance(lieferschein, dict) else lieferschein
+                    r = self._community.antwort_senden(str(auftrag["auftrag"]), text, offen_ls, dauer, messung, **({"ablauf": zeiten} if mit_ablauf else {}))
                 break
             except app_core.AppError as exc:
                 if versuch == 2:

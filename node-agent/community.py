@@ -40,6 +40,9 @@ PRUEFSTAND_ERGEBNIS_TIMEOUT_S = 180.0
 MAX_ANTWORT = 4 * 1024 * 1024
 _UA = "CommunityAI-Fenster/1"
 LEITUNG_RUHE_S = 60.0
+FRAGE_SCHLUESSEL_DATEI = "frage_schluessel.json"
+SPERRLISTE_DATEI = "sperrliste.json"
+ANTWORTSCHLUESSEL_WECHSEL_S = 86400
 SCHLUESSEL_ERNEUERN_TAGE = 90
 LEITUNGEN_MAX = 4
 _LEITUNG_WEG = (http.client.RemoteDisconnected, http.client.BadStatusLine, ConnectionResetError, ConnectionAbortedError, BrokenPipeError)
@@ -169,6 +172,18 @@ class Community:
         self._leitung_extras = {"verbinden": verbinden, "uhr": uhr}
         self.letzte_suche = "wort"
         self.takt_s = 0
+        self._fs = None
+        self._fs_lock = threading.RLock()
+        self._fs_angemeldet = False
+        self._fs_naechster = 0.0
+        self._abschnitt_sig: dict[str, str] = {}
+        self._abschnitt_auskunft: tuple[float, dict | None] = (0.0, None)
+        self._gesehen = None
+        try:
+            import frage_krypto
+            self._gesehen = frage_krypto.Gesehen()
+        except ImportError:
+            pass
 
 
     def _gelesene_adresse(self) -> str | None:
@@ -455,6 +470,12 @@ class Community:
             body["fachgebiete"] = fg
         a = self._anfrage("/suche", body)
         self.letzte_suche = str(a.get("suche") or "wort")
+        u = a.get("unterschriften")
+        if isinstance(u, dict):
+            with self._fs_lock:
+                if len(self._abschnitt_sig) > 4000:
+                    self._abschnitt_sig.clear()
+                self._abschnitt_sig.update({str(h): str(s) for h, s in u.items() if isinstance(h, str) and len(h) == 64 and isinstance(s, str) and len(s) <= 120})
         treffer = []
         for t in a.get("treffer", []):
             q = t.get("quelle") or {}
@@ -503,6 +524,22 @@ class Community:
 
     def geraet_sperren(self, kennung: str, gesperrt: bool, grund: str = "") -> dict:
         return self._anfrage("/geraet-sperren", {"kennung": kennung, "gesperrt": bool(gesperrt), "grund": grund}, mit_schluessel=True)
+
+    def fremde_freigeben(self, kennung: str) -> dict:
+        return self._anfrage("/fremde-freigeben", {"kennung": kennung}, mit_schluessel=True)
+
+    def antwort_melden(self, auftrag: str, code: str, *, zweite: bool = False) -> str:
+        try:
+            return str(self._anfrage("/antwort-melden", {"auftrag": auftrag, "code": code, "zweite": bool(zweite)}, als_geraet=True,
+                                     timeout=10.0).get("wie", ""))
+        except app_core.AppError:
+            return ""
+
+    def antwort_offenlegen(self, auftrag: str, frage_id: str, frage_roh: bytes, antwort_roh: bytes, sig: str, *, zweite: bool = False) -> str:
+        import abgleich_krypto as ak
+        r = self._anfrage("/antwort-offenlegen", {"auftrag": auftrag, "frage_id": frage_id, "frage_roh": ak.b64(frage_roh), "antwort": ak.b64(antwort_roh),
+                                                  "sig": sig, "zweite": bool(zweite)}, als_geraet=True, timeout=20.0)
+        return str(r.get("wie", ""))
 
     def geraet_lebenslang(self, kennung: str, grund: str = "") -> dict:
         return self._anfrage("/geraet-lebenslang", {"kennung": kennung, "grund": grund}, mit_schluessel=True)
@@ -629,6 +666,8 @@ class Community:
                       warten_s: float = 0.0, nur_fragen: bool = False, vorab: bool = False) -> dict | None:
         flags = [f for f, an in (("pruefen=1", pruefen), ("antworten=1", antworten), ("vertiefen=1", vertiefen), ("nur_fragen=1", nur_fragen),
                                  ("vorab=1", vorab and not nur_fragen)) if an]
+        if antworten and hasattr(self, "_fs_lock"):
+            self._frage_schluessel_sicherstellen()
         if leistung:
             werte = {"modell": str(leistung.get("modell") or "")[:60]}
             if leistung.get("geschwister"):
@@ -997,6 +1036,158 @@ class Community:
 
     def antwort_senden(self, auftrag: str, text: str, lieferschein: dict, dauer_s: float, messung: dict | None = None, *, ablauf: dict | None = None) -> dict:
         body = {"auftrag": auftrag, "text": text, "lieferschein": lieferschein, "dauer_s": dauer_s}
+        if messung:
+            body["messung"] = messung
+        if ablauf:
+            body["ablauf"] = ablauf
+        return self._anfrage("/antwort", body, als_geraet=True, timeout=ERGEBNIS_TIMEOUT_S)
+
+
+    def _fk(self):
+        import frage_krypto
+        return frage_krypto
+
+    def frage_schluessel(self):
+        fk = self._fk()
+        with self._fs_lock:
+            if self._fs is not None:
+                return self._fs
+            import abgleich_krypto as ak
+            d = sicher_schreiben.json_laden(self.dir / FRAGE_SCHLUESSEL_DATEI, None, art=dict)
+            sch = None
+            if isinstance(d, dict):
+                try:
+                    sch = fk.Schluessel(ak.privat_laden(ak.unb64(geheim.lesen(str(d["antwort"])))),
+                                        ak.privat_laden(ak.unb64(geheim.lesen(str(d["unterschrift"])))), seit=float(d.get("seit") or 0))
+                except (KeyError, ValueError, TypeError, geheim.GeheimError, fk.KryptoFehler):
+                    sch = None
+            if sch is None:
+                sch = fk.Schluessel(ak.neues_geraet(), fk.neuer_unterschrift_schluessel(), seit=time.time())
+                self._frage_schluessel_speichern(sch)
+            self._fs = sch
+            return sch
+
+    def _frage_schluessel_speichern(self, sch) -> None:
+        import abgleich_krypto as ak
+        app_core.ensure_plain_directory(self.dir)
+        sicher_schreiben.json_datei(self.dir / FRAGE_SCHLUESSEL_DATEI, {
+            "antwort": geheim.schuetzen(ak.b64(ak.privat_speichern(sch.antwort))),
+            "unterschrift": geheim.schuetzen(ak.b64(ak.privat_speichern(sch.unterschrift))),
+            "seit": int(sch.seit)})
+
+    def frage_schluessel_pflegen(self, *, neu: bool = False) -> dict | None:
+        sch = self.frage_schluessel()
+        with self._fs_lock:
+            if neu or time.time() - sch.seit >= ANTWORTSCHLUESSEL_WECHSEL_S:
+                sch.wechseln()
+                self._frage_schluessel_speichern(sch)
+            eintrag = sch.oeffentlich()
+        try:
+            r = self._anfrage("/antwort-schluessel", {"schluessel": eintrag}, als_geraet=True)
+        except app_core.AppError:
+            return None
+        self.sperrliste_nehmen(r.get("sperrliste"))
+        return r
+
+    def _frage_schluessel_sicherstellen(self) -> None:
+        jetzt = time.time()
+        if jetzt < self._fs_naechster:
+            return
+        self._fs_naechster = jetzt + 600
+        try:
+            r = self.frage_schluessel_pflegen(neu=not self._fs_angemeldet)
+        except Exception:
+            r = None
+        if r is not None:
+            self._fs_angemeldet = True
+            self._fs_naechster = self._fs.seit + ANTWORTSCHLUESSEL_WECHSEL_S if self._fs is not None else jetzt + 600
+
+    def abschnitt_unterschrift(self, text: str) -> str | None:
+        import hashlib
+        if not hasattr(self, "_abschnitt_sig"):
+            return None
+        with self._fs_lock:
+            return self._abschnitt_sig.get(hashlib.sha256(str(text).encode("utf-8")).hexdigest())
+
+    def abschnitt_schluessel(self) -> dict | None:
+        fk = self._fk()
+        t, gemerkt = self._abschnitt_auskunft
+        if time.time() - t < 3600:
+            return gemerkt
+        try:
+            a = self._anfrage("/abschnitt-schluessel")
+        except app_core.AppError:
+            return gemerkt
+        schl = a.get("schluessel") if isinstance(a.get("schluessel"), dict) else None
+        gilt = schl if schl and fk.beglaubigung_pruefen(fk.beglaubigung_laden(), schl, a.get("beglaubigung"), rolle="abschnitt") else None
+        self._abschnitt_auskunft = (time.time(), gilt)
+        return gilt
+
+    def sperrstand(self):
+        fk = self._fk()
+        d = sicher_schreiben.json_laden(self.dir / SPERRLISTE_DATEI, None, art=dict)
+        return fk.Sperrstand(fk.beglaubigung_laden(), d if isinstance(d, dict) else None)
+
+    def sperrliste_nehmen(self, liste) -> bool:
+        st = self.sperrstand()
+        if not st.nehmen(liste):
+            return False
+        app_core.ensure_plain_directory(self.dir)
+        sicher_schreiben.json_datei(self.dir / SPERRLISTE_DATEI, st.liste)
+        return True
+
+    def empfaenger_holen(self) -> tuple[dict, dict]:
+        fk = self._fk()
+        r = self._anfrage("/empfaenger", als_geraet=self.geraet() is not None)
+        self.sperrliste_nehmen(r.get("sperrliste"))
+        wurzel, gesperrt = fk.beglaubigung_laden(), self.sperrstand().gesperrt
+        empf, unterschriften = {}, set()
+        for e in r.get("empfaenger") or []:
+            pub = fk.empfaenger_pruefen(e, wurzel, gesperrt=gesperrt) if isinstance(e, dict) else None
+            if pub is not None:
+                empf[str(e.get("kennung", ""))[:32]] = pub
+                unterschriften.add(str(e["unterschrift"]["punkt"]))
+        return empf, {**r, "_unterschriften": unterschriften}
+
+    def frage_stellen_verschlossen(self, paket: dict, *, vorige: str = "", skill: bool = False, speicher: str = "", speicher_frage: str = "") -> str:
+        a = self._anfrage("/frage-stellen", {"verschlossen": paket, **({"vorige": str(vorige)[:32]} if vorige else {}), "skill": bool(skill),
+                                             **({"speicher": speicher, "speicher_frage": speicher_frage} if speicher else {})}, als_geraet=True)
+        k = str(a.get("kennung", ""))
+        if not k:
+            raise CommunityError("COMMUNITY_ANTWORT", "der Server hat keine Kennung für die Frage geschickt")
+        return k
+
+    def antwort_zweite(self, kennung: str) -> dict:
+        try:
+            return self._anfrage("/antwort-zweite/" + kennung, als_geraet=True)
+        except app_core.AppError:
+            return {}
+
+    def etikett_holen(self, auftrag: str, frage_id: str, pruefsumme: str, etikett_sig: str) -> dict | None:
+        try:
+            r = self._anfrage("/etikett", {"auftrag": auftrag, "frage_id": frage_id, "pruefsumme": pruefsumme, "etikett_sig": etikett_sig},
+                              als_geraet=True)
+        except app_core.AppError:
+            return None
+        return r.get("etikett") if isinstance(r.get("etikett"), dict) else None
+
+    def verschlossen_oeffnen(self, verschlossen: dict):
+        fk = self._fk()
+        g = fk.frage_oeffnen(verschlossen, self.frage_schluessel().kandidaten())
+        if not self._gesehen.neu(g.frage_id):
+            raise fk.KryptoFehler("diese Frage kam schon einmal")
+        return g
+
+    def antwort_teil_verschlossen(self, auftrag: str, nachricht: dict) -> None:
+        try:
+            self._anfrage("/antwort-teil", {"auftrag": auftrag, "nachricht": nachricht}, als_geraet=True, timeout=5.0)
+        except app_core.AppError:
+            self.teil_fehler += 1
+
+    def antwort_senden_verschlossen(self, auftrag: str, nachricht: dict, zahlen: dict, dauer_s: float, messung: dict | None = None, *,
+                                    ablauf: dict | None = None, speicher_text: str = "", speicher_frage: str = "") -> dict:
+        body = {"auftrag": auftrag, "nachricht": nachricht, "lieferschein": zahlen, "dauer_s": dauer_s,
+                **({"text": speicher_text, "speicher_frage": speicher_frage} if speicher_text else {})}
         if messung:
             body["messung"] = messung
         if ablauf:

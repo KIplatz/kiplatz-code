@@ -45,6 +45,7 @@ Copy-Item -Recurse (Join-Path $here "skills_vorlagen") (Join-Path $arbeit "node-
 Copy-Item (Join-Path $here "requirements.txt") (Join-Path $arbeit "node-agent")
 Copy-Item (Join-Path $here "neuerungen_en.json") (Join-Path $arbeit "node-agent")
 Copy-Item (Join-Path $here "flughaefen.tsv") (Join-Path $arbeit "node-agent")
+if (Test-Path (Join-Path $here "beglaubigung.json")) { Copy-Item (Join-Path $here "beglaubigung.json") (Join-Path $arbeit "node-agent") }
 Copy-Item (Join-Path $here "..\SCHNITTSTELLE.md") (Join-Path $arbeit "node-agent")
 
 $eingebettet = Join-Path $arbeit "python\python.exe"

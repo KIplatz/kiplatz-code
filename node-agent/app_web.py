@@ -211,7 +211,7 @@ SPIELWIESE_ADRESSE = "https://kiplatz.at:8445"
 ADMIN_FENSTER = frozenset({
     "pruefstand_stand", "pruefstand_setzen", "pruefstand_jetzt", "kurztest_starten", "quellen_stand", "not_aus_setzen", "sammler_stand",
     "sammler_setzen", "sammler_jetzt", "community_einladung", "community_schluessel_wechseln", "community_geraete", "community_geraet_admin",
-    "community_geraet_sperren", "community_geraet_lebenslang", "community_geraet_entfernen", "community_konto_suchen", "community_konten_alle",
+    "community_geraet_sperren", "community_fremde_freigeben", "community_geraet_lebenslang", "community_geraet_entfernen", "community_konto_suchen", "community_konten_alle",
     "community_konto_ueberall", "community_teams_admin", "community_team_admin", "community_fehlerberichte", "fehler_woche", "fehler_entfernen",
     "wissen_freigeben", "wissen_meldung_inhalt", "wissen_meldung_erledigt",
 })
@@ -837,6 +837,8 @@ class Api:
         self._halter = scheiben_halter.Halter(core.base_dir, lambda: self._community, limit_mb=lambda: max(0, self._core.load_freigabe().speicher_mb - self._wiki.belegt_mb() - self._osm.belegt_mb() - self._wiki_en.belegt_mb()), log=lambda line: _log(core, line),
                                               ordner=lambda: speicher_pfad(self._core.load_freigabe().speicher_ort))
         self._spiegel = gemeinschaft.Spiegel(core.base_dir, lambda: self._community, protokoll=lambda line: _log(core, line)) if wortindex.moeglich() else None
+        self._offenlegbar: dict[str, tuple] = {}
+        self._lock_offenlegbar = threading.Lock()
         self._themen = themen.Themen(lambda: self._ki.einstellung(), lambda: self._community, self._wissen, log=lambda line: _log(core, line))
         self._rechen = rechen or rechenarbeit.Rechenarbeit(core, lambda: self._community, self._kontobuch, geraet_name=geraet_name, protokoll=lambda line: _log(core, line), halter=self._halter, themen=self._themen, stand=lambda: " ".join(x for x in (self._wiki.text_de(), self._osm.text_de()) if x),
                                                             server=getattr(self._bedeutung, "server", None), server_geteilt=lambda: getattr(self._bedeutung, "phase", "") == "bereit",
@@ -2398,6 +2400,8 @@ class Api:
                 text, schein = antwortsprache.antwort_uebersetzen(self._ki.server.frage, text, schein, teil_melden, log=lambda z: _log(self._core, z),
                                                                   frage=antwortsprache.letzte_frage(nachrichten))
                 text, schein = self.eigene_worte_englisch(text, schein)
+            if direkt and "uebersetzt_s" not in schein:
+                schein = {**schein, "sprache": "en"}
             if en_frage:
                 schein = quellen_titel_englisch(schein)
             if daheim:
@@ -2683,6 +2687,8 @@ class Api:
                 lieferschein["stand"] = quellen_stand
             if skill_name:
                 lieferschein["skill"] = skill_name
+            if fuer != "dich":
+                lieferschein["abschnitte"] = self._abschnitte_mitgeben(quellen)
             antwort_text = ohne_auszuege(ohne_markdown(a.text)) or "(keine Antwort erhalten)"
             if lieferschein.get("videos") or re.search(r"youtube\.com/watch\?|youtu\.be/", antwort_text):
                 bisher = list(lieferschein.get("videos") or [])
@@ -2953,23 +2959,37 @@ class Api:
                              else ("Automatisch: Rechner ohne starke Grafikkarte fragen die Community." if an is None else "Deine Fragen beantwortet ab jetzt dieses Gerät selbst."))
 
     def _community_antwort(self, nachrichten: list[dict], fuer_seite, *, vorige: str = "", skill: dict | None = None, fachgebiete: list | None = None) -> dict:
-        online = None
+        import frage_krypto
+        empf, liste = self._community.empfaenger_holen()
+        if (liste.get("not_aus") or {}).get("an"):
+            grund = str((liste.get("not_aus") or {}).get("grund") or "")
+            raise app_core.AppError("COMMUNITY_NOT_AUS", "die Community ist gerade angehalten" + (f" ({grund})" if grund else ""))
         try:
-            rs = self._community.rechenstand()
-            if (rs.get("not_aus") or {}).get("an"):
-                grund = str((rs.get("not_aus") or {}).get("grund") or "")
-                raise app_core.AppError("COMMUNITY_NOT_AUS", "die Community ist gerade angehalten" + (f" ({grund})" if grund else ""))
-            online = int((rs.get("fragen") or {}).get("rechner_online", 0) or 0)
-        except (ValueError, TypeError, AttributeError):
+            online = int((liste.get("fragen") or {}).get("rechner_online", 0) or 0)
+        except (ValueError, TypeError):
             online = None
-        except app_core.AppError as exc:
-            if exc.code == "COMMUNITY_NOT_AUS":
-                raise
-            online = None
-        if online == 0:
+        if online == 0 or not empf:
             raise app_core.AppError("COMMUNITY_KEINER", "gerade beantwortet kein Gerät der Community Fragen")
-        extra = {**({"vorige": vorige} if vorige else {}), **({"skill": skill} if skill else {}), **({"fachgebiete": list(fachgebiete)} if fachgebiete else {})}
-        k = self._community.frage_stellen(nachrichten, **extra)
+        gemasked = [{"role": n["role"], "content": vermittlung_basis.unkenntlich(n["content"]) if n.get("role") == "user" else n["content"]}
+                    for n in nachrichten if isinstance(n, dict) and isinstance(n.get("content"), str)]
+        speicher, kern = antwortspeicher_basis.speicher_freigabe(gemasked, skill=skill) if not vorige else ("", "")
+        inhalt = {"nachrichten": gemasked, "frisch": False, **({"skill": skill} if skill else {}),
+                  **({"fachgebiete": list(fachgebiete)} if fachgebiete else {}),
+                  "speicher_ok": bool(speicher), **({"speicher_frage": kern} if speicher else {})}
+        k, verschl = "", None
+        erlaubt = set(liste.get("_unterschriften") or ())
+        for versuch in (1, 2):
+            verschl = frage_krypto.frage_verschliessen(inhalt, empf)
+            try:
+                k = self._community.frage_stellen_verschlossen(verschl.paket, vorige=vorige, skill=bool(skill), speicher=speicher, speicher_frage=kern)
+                break
+            except app_core.AppError as exc:
+                if exc.code != "NEU_VERSCHLIESSEN" or versuch == 2:
+                    raise
+                empf, liste2 = self._community.empfaenger_holen()
+                erlaubt = set(liste2.get("_unterschriften") or ())
+                if not empf:
+                    raise app_core.AppError("COMMUNITY_KEINER", "gerade beantwortet kein Gerät der Community Fragen") from exc
         t0 = time.time()
         warten_ungenommen = WARTEN_UNGENOMMEN_S if not online else WARTEN_UNGENOMMEN_BESCHAEFTIGT_S
         fuer_seite("Deine Frage ist bei der Community. Ein freier PC übernimmt sie gleich …" if not online
@@ -2977,7 +2997,7 @@ class Api:
         self._schritt("wartet auf einen freien PC der Community …")
         self._community_frage = k
         try:
-            d = self._community_warten(k, t0, warten_ungenommen, fuer_seite)
+            d = self._community_warten(k, t0, warten_ungenommen, fuer_seite, verschl=verschl, erlaubt=erlaubt, speicher_frei=bool(speicher))
             if isinstance(d, dict):
                 d = {**d, "auftrag": k}
             return d
@@ -2985,7 +3005,11 @@ class Api:
             self._community_frage = None
 
     def _community_warten(self, k: str, t0: float, warten_ungenommen: float, fuer_seite, *, daheim: bool = False,
-                          warten_genommen: float = WARTEN_ANTWORT_S) -> dict:
+                          warten_genommen: float = WARTEN_ANTWORT_S, verschl=None, erlaubt=frozenset(), speicher_frei: bool = False) -> dict:
+        empfang = None
+        if verschl is not None:
+            import frage_krypto
+            empfang = frage_krypto.Empfang(verschl)
         stand = ""
         fehlversuche = 0
         while True:
@@ -3006,11 +3030,17 @@ class Api:
             if self.abbruch_gewuenscht:
                 self._community.frage_aufgeben(k)
                 raise app_core.AppError("ABGEBROCHEN", "auf deinen Wunsch abgebrochen")
-            if not r.get("stand"):
+            if not r.get("stand") and r.get("status") not in ("fertig", "verworfen"):
                 time.sleep(WARTEN_TAKT_S)
             stand = f"{r.get('status')}:{r.get('stand') or ''}"
             st = r.get("status")
             if st == "fertig":
+                if empfang is not None and "nachricht" in r:
+                    return self._verschlossen_lesen(k, r, empfang, verschl, erlaubt=erlaubt)
+                if empfang is not None:
+                    if not speicher_frei or not isinstance(r.get("text"), str) or not hausordnung.pruefen(r["text"]).ok:
+                        raise app_core.AppError("COMMUNITY_PRUEFUNG", "die Antwort aus der Community kam nicht verschlossen")
+                    r = {**r, "lieferschein": {**(r.get("lieferschein") if isinstance(r.get("lieferschein"), dict) else {}), "aus_speicher": True}}
                 if isinstance(r.get("etikett"), dict) and isinstance(r.get("lieferschein"), dict):
                     r["lieferschein"] = {**r["lieferschein"], "etikett": r["etikett"]}
                 return r
@@ -3018,9 +3048,12 @@ class Api:
                 raise app_core.AppError("COMMUNITY_KEINER", str(r.get("grund", "kein Rechner hat geantwortet")))
             if st == "genommen":
                 fuer_seite("Dein PC daheim ist dran …" if daheim else "Ein PC aus der Community erarbeitet gerade deine Antwort …")
-                self._schritt(str(r.get("schritt") or ("dein PC daheim ist dran …" if daheim else "ein PC aus der Community erarbeitet deine Antwort …")))
-                if r.get("teil") and self._window is not None:
-                    self._js(f"app.teil({json.dumps(str(r['teil']), ensure_ascii=False)})")
+                schritt, teil = r.get("schritt"), r.get("teil")
+                if empfang is not None:
+                    schritt, teil = self._verschlossen_teile(r, empfang)
+                self._schritt(str(schritt or ("dein PC daheim ist dran …" if daheim else "ein PC aus der Community erarbeitet deine Antwort …")))
+                if teil and self._window is not None:
+                    self._js(f"app.teil({json.dumps(str(teil), ensure_ascii=False)})")
                 if time.time() - t0 > warten_genommen:
                     self._community.frage_aufgeben(k)
                     raise app_core.AppError("COMMUNITY_LANGSAM", "dein PC daheim hat zu lange gebraucht; probier es gleich noch einmal" if daheim
@@ -3028,6 +3061,126 @@ class Api:
             elif time.time() - t0 > warten_ungenommen:
                 self._community.frage_aufgeben(k)
                 raise app_core.AppError("COMMUNITY_KEINER", vermittlung_basis.ZUHAUSE_AUS_TEXT if daheim else "gerade ist kein Rechner der Community frei")
+
+    ABSCHNITTE_MAX = 16
+    ABSCHNITTE_ZEICHEN = 60000
+    OFFENLEGBAR_MAX = 50
+    ZWEITE_WARTEN_S = 130.0
+
+    def _melden_nebenbei(self, k: str, code: str, *, zweite: bool = False) -> None:
+        threading.Thread(target=lambda: self._community.antwort_melden(k, code, zweite=zweite), name="melden", daemon=True).start()
+
+    def _offenlegbar_merken(self, k: str, frage_id: str, frage_roh: bytes, antwort_roh: bytes, sig: str) -> None:
+        with self._lock_offenlegbar:
+            self._offenlegbar[k] = (frage_id, frage_roh, antwort_roh, sig)
+            while len(self._offenlegbar) > self.OFFENLEGBAR_MAX:
+                self._offenlegbar.pop(next(iter(self._offenlegbar)))
+
+    def _zweite_pruefen(self, k: str, empfang, erlaubt=frozenset()) -> None:
+        import frage_krypto
+        ende = time.time() + self.ZWEITE_WARTEN_S
+        while time.time() < ende:
+            z = self._community.antwort_zweite(k)
+            n = z.get("nachricht") if isinstance(z, dict) else None
+            if n:
+                try:
+                    text, _ls, ok = empfang.antwort_lesen(empfang.oeffnen(n), z.get("sig_schluessel"))
+                except frage_krypto.KryptoFehler:
+                    self._community.antwort_melden(k, "OEFFNEN", zweite=True)
+                    return
+                if not ok or str((z.get("sig_schluessel") or {}).get("punkt", "")) not in erlaubt:
+                    self._community.antwort_melden(k, "UNTERSCHRIFT", zweite=True)
+                elif not hausordnung.pruefen(text).ok:
+                    self._community.antwort_melden(k, "PLATZORDNUNG", zweite=True)
+                return
+            time.sleep(5.0)
+
+    def _abschnitte_mitgeben(self, quellen) -> list[dict]:
+        out, summe = [], 0
+        for q in quellen or []:
+            if not isinstance(q, dict) or q.get("privat") or not q.get("text"):
+                continue
+            text = str(q["text"])
+            if len(out) >= self.ABSCHNITTE_MAX or summe + len(text) > self.ABSCHNITTE_ZEICHEN:
+                break
+            sig = None
+            if self._spiegel is not None:
+                try:
+                    sig = self._spiegel.unterschrift(str(q.get("kennung", "")), text)
+                except Exception:
+                    sig = None
+            sig = sig or self._community.abschnitt_unterschrift(text)
+            out.append({"nummer": int(q.get("nummer") or 0), "kennung": str(q.get("kennung", ""))[:200], "art": str(q.get("art", ""))[:40],
+                        "titel": str(q.get("titel", ""))[:300], "adresse": str(q.get("adresse", ""))[:500], "text": text,
+                        **({"sig": sig} if sig else {})})
+            summe += len(text)
+        return out
+
+    def _verschlossen_teile(self, r: dict, empfang) -> tuple[str, str]:
+        import frage_krypto
+        aus = {"schritt_v": "", "teil_v": ""}
+        def zaehler(f):
+            n = r.get(f).get("n") if isinstance(r.get(f), dict) else 0
+            return n if isinstance(n, int) and not isinstance(n, bool) else 0
+        for feld in sorted(aus, key=zaehler):
+            n = r.get(feld)
+            if n and empfang.ist_neu(n):
+                try:
+                    aus[feld] = str(empfang.oeffnen(n).daten.get("text") or "")[:12000]
+                except frage_krypto.KryptoFehler:
+                    pass
+        return aus["schritt_v"], aus["teil_v"]
+
+    def _verschlossen_lesen(self, k: str, r: dict, empfang, verschl, *, erlaubt) -> dict:
+        import frage_krypto
+        try:
+            offen = empfang.oeffnen(r["nachricht"])
+            text, ls, unterschrift_ok = empfang.antwort_lesen(offen, r.get("sig_schluessel"))
+        except frage_krypto.KryptoFehler as exc:
+            self._melden_nebenbei(k, "OEFFNEN")
+            raise app_core.AppError("COMMUNITY_PRUEFUNG", "die Antwort aus der Community ließ sich nicht öffnen") from exc
+        sig_schluessel = r.get("sig_schluessel") if isinstance(r.get("sig_schluessel"), dict) else {}
+        if not unterschrift_ok or str(sig_schluessel.get("punkt", "")) not in erlaubt:
+            self._melden_nebenbei(k, "UNTERSCHRIFT")
+            raise app_core.AppError("COMMUNITY_PRUEFUNG", "die Antwort aus der Community trug keine gültige Unterschrift")
+        if not hausordnung.pruefen(text).ok:
+            self._melden_nebenbei(k, "PLATZORDNUNG")
+            raise app_core.AppError("COMMUNITY_PRUEFUNG", "die Antwort aus der Community hielt sich nicht an die Platzordnung")
+        self._offenlegbar_merken(k, verschl.frage_id, verschl.roh, str(offen.daten.get("antwort", "")).encode("utf-8"), str(offen.daten.get("sig") or ""))
+        if r.get("zweite") in ("wartet", "da"):
+            threading.Thread(target=self._zweite_pruefen, args=(k, empfang, erlaubt), name="stichprobe", daemon=True).start()
+        ls = dict(ls)
+        abschnitte = ls.pop("abschnitte", None)
+        if "uebersetzt_s" in ls:
+            ls["pruefung_selbst"] = False
+        elif (isinstance(abschnitte, list) and abschnitte) or isinstance(ls.get("pruefung"), dict):
+            abschnitte = abschnitte if isinstance(abschnitte, list) else []
+            schl = self._community.abschnitt_schluessel() if abschnitte else None
+            auszuege, bestaetigt = [], 0
+            for ab_ in abschnitte[:self.ABSCHNITTE_MAX]:
+                if not isinstance(ab_, dict) or not isinstance(ab_.get("text"), str):
+                    continue
+                if schl and ab_.get("sig") and frage_krypto.abschnitt_pruefen(schl, str(ab_.get("kennung", "")), ab_["text"], ab_["sig"]):
+                    bestaetigt += 1
+                try:
+                    auszuege.append((int(ab_.get("nummer") or 0), ab_["text"]))
+                except (TypeError, ValueError):
+                    continue
+            vorher = pruefung.englisch()
+            pruefung.sprache_setzen(ls.get("sprache") == "en")
+            try:
+                pr = pruefung.pruefen(text, auszuege)
+            finally:
+                pruefung.sprache_setzen(vorher)
+            ls["pruefung"], ls["erfunden"] = pr.kurz(), pr.text
+            ls["pruefung_selbst"] = True
+            ls["abschnitte_bestaetigt"] = {"bestaetigt": bestaetigt, "gesamt": len(auszuege)}
+        if (r.get("lieferschein") or {}).get("kleineres_modell"):
+            ls["kleineres_modell"] = True
+        et = self._community.etikett_holen(k, verschl.frage_id, frage_krypto.text_pruefsumme(text), str(offen.daten.get("etikett_sig") or ""))
+        if et:
+            ls["etikett"] = et
+        return {**{x: v for x, v in r.items() if x != "nachricht"}, "text": text, "lieferschein": ls}
 
     def community_einladung(self) -> dict:
         def go():
@@ -3791,6 +3944,15 @@ class Api:
             frage = next((m.get("text", "") for m in reversed(g.nachrichten[:n]) if m.get("rolle") == "user"), "")
             ziel = "community" if str(an) == "community" and "anstößig" not in grund.lower() and len(vorschlag) >= 3 else "admin"
             self._community.rueckmeldung(frage, str(g.nachrichten[n].get("text", "")), grund, vorschlag, ziel)
+            if "anstößig" in grund.lower():
+                auftrag = str(((g.nachrichten[n].get("lieferschein") or {}) if isinstance(g.nachrichten[n].get("lieferschein"), dict) else {}).get("auftrag") or "")
+                with self._lock_offenlegbar:
+                    beweis = self._offenlegbar.get(auftrag) if auftrag else None
+                if beweis is not None:
+                    try:
+                        self._community.antwort_offenlegen(auftrag, beweis[0], beweis[1], beweis[2], beweis[3])
+                    except app_core.AppError as exc:
+                        _log(self._core, f"HINWEIS antwort offenlegen: {exc.code}")
             return {"an": ziel}
         r = self._guarded("antwort_rueckmelden", go)
         if r["ok"]:
@@ -4577,7 +4739,8 @@ class Api:
             if abbruch is not None:
                 abbruch.clear()
             _FACH.wert = fachgebiete = self._fachgebiete()
-            if ki_starten and self.fragt_community() and hausordnung.pruefen(str(text)).ok:
+            krise = krisenhilfe.antwort(str(text)) is not None
+            if ki_starten and not krise and self.fragt_community() and hausordnung.pruefen(str(text)).ok:
                 try:
                     vorige = self._nochmal_vorige.pop(str(kennung), "")
                     sk_mit, _sk_weg = skills.passend(self._kiste.fuer_gespraech(g.skill), erster_immer=False)
@@ -4618,7 +4781,8 @@ class Api:
                 return {"text": antwort_text, "lieferschein": ls, "gespraech": g.to_json_dict(), "credits": self._credits_dict()}
             if getattr(self._ki, "probe_geladen", False):
                 raise app_core.AppError("PROBE", "Dieser PC prüft gerade eine nachtrainierte Fassung. Bitte frag in einer halben Stunde noch einmal.")
-            self._ki_bereit_machen(einschalten=ki_starten)
+            if not krise:
+                self._ki_bereit_machen(einschalten=ki_starten)
             self._ablage.anhaengen(g, "user", str(text))
             admin = self._community.ist_admin()
             stand_vorher = self._kontobuch.stand() if admin else self._kontobuch.frage(geraet=self._geraet_name)
@@ -5778,6 +5942,12 @@ class Api:
             self._community.geraet_sperren(str(kennung), bool(gesperrt), str(grund))
             return {"geraete": self._community.geraete(), "admin": True}
         return self._guarded("community_geraet_sperren", go, "Gerät gesperrt. Es bekommt keine Arbeit mehr und kann nichts mehr ablegen." if gesperrt else "Sperre aufgehoben.")
+
+    def community_fremde_freigeben(self, kennung: str) -> dict:
+        def go():
+            self._community.fremde_freigeben(str(kennung))
+            return {"geraete": self._community.geraete(), "admin": True}
+        return self._guarded("community_fremde_freigeben", go, "Der PC nimmt wieder Fragen anderer Mitglieder.")
 
     def community_geraet_lebenslang(self, kennung: str, grund: str = "") -> dict:
         def go():

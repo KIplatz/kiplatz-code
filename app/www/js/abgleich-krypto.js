@@ -28,9 +28,11 @@ async function hkdf(stoff, salt, info) {
   const bits = await S.deriveBits({ name: "HKDF", hash: "SHA-256", salt, info: text.encode(info) }, basis, 256);
   return S.importKey("raw", bits, "AES-GCM", false, ["encrypt", "decrypt"]);
 }
-async function aesZu(schluessel, iv, klar, aad) { return new Uint8Array(await S.encrypt({ name: "AES-GCM", iv, additionalData: text.encode(aad) }, schluessel, klar)); }
+
+const aadBytes = (aad) => (typeof aad === "string" ? text.encode(aad) : aad);
+async function aesZu(schluessel, iv, klar, aad) { return new Uint8Array(await S.encrypt({ name: "AES-GCM", iv, additionalData: aadBytes(aad) }, schluessel, klar)); }
 async function aesAuf(schluessel, iv, ct, aad, fehler) {
-  try { return new Uint8Array(await S.decrypt({ name: "AES-GCM", iv, additionalData: text.encode(aad) }, schluessel, ct)); }
+  try { return new Uint8Array(await S.decrypt({ name: "AES-GCM", iv, additionalData: aadBytes(aad) }, schluessel, ct)); }
   catch { throw new KryptoFehler(fehler); }
 }
 
@@ -79,22 +81,24 @@ export async function pruefzahl(oeffentlich) {
   const s = String(n).padStart(6, "0");
   return s.slice(0, 3) + " " + s.slice(3);
 }
-export async function fachPacken(k, geraetOeffentlich, { wegwerf = null, iv = zufall(12) } = {}) {
+
+export async function fachPacken(k, geraetOeffentlich, { wegwerf = null, iv = zufall(12), info = "kiplatz-abgleich-fach-v1", aad = "kiplatz-fach" } = {}) {
   if (geraetOeffentlich?.art !== "p256") throw new KryptoFehler("unbekannte Art des Geräteschlüssels");
   const gRoh = unb64(geraetOeffentlich.punkt);
-  const g = await S.importKey("raw", gRoh, KURVE, false, []);
+  let g;
+  try { g = await S.importKey("raw", gRoh, KURVE, false, []); } catch { throw new KryptoFehler("kein gültiger P-256-Punkt"); }
   const eJwk = wegwerf || (await neuesGeraet()).privat;
   const eRoh = await rohAusJwk(eJwk);
   const geteilt = new Uint8Array(await S.deriveBits({ name: "ECDH", public: g }, await privatLaden(eJwk), 256));
-  const w = await hkdf(geteilt, verbinden(eRoh, gRoh), "kiplatz-abgleich-fach-v1");
-  return { art: "p256", epk: b64(eRoh), iv: b64(iv), ct: b64(await aesZu(w, iv, k, "kiplatz-fach")) };
+  const w = await hkdf(geteilt, verbinden(eRoh, gRoh), info);
+  return { art: "p256", epk: b64(eRoh), iv: b64(iv), ct: b64(await aesZu(w, iv, k, aad)) };
 }
-export async function fachOeffnen(fach, privatJwk) {
+export async function fachOeffnen(fach, privatJwk, { info = "kiplatz-abgleich-fach-v1", aad = "kiplatz-fach" } = {}) {
   if (fach?.art !== "p256") throw new KryptoFehler("unbekannte Art des Fachs");
   const eRoh = unb64(fach.epk), gRoh = await rohAusJwk(privatJwk);
   const e = await S.importKey("raw", eRoh, KURVE, false, []);
   const geteilt = new Uint8Array(await S.deriveBits({ name: "ECDH", public: e }, await privatLaden(privatJwk), 256));
-  const k = await aesAuf(await hkdf(geteilt, verbinden(eRoh, gRoh), "kiplatz-abgleich-fach-v1"), unb64(fach.iv), unb64(fach.ct), "kiplatz-fach",
+  const k = await aesAuf(await hkdf(geteilt, verbinden(eRoh, gRoh), info), unb64(fach.iv), unb64(fach.ct), aad,
     "das Fach gehört nicht zu diesem Gerät oder wurde verändert");
   if (k.length !== 32) throw new KryptoFehler("der Kontoschlüssel hat nicht die erwartete Länge");
   return k;
@@ -127,3 +131,6 @@ export async function wiederherstellungOeffnen(fach, rText) {
   const w = await hkdf(wiederherstellungLesen(rText), text.encode("kiplatz-wiederherstellung"), "kiplatz-abgleich-wieder-v1");
   return aesAuf(w, unb64(fach.iv), unb64(fach.ct), "kiplatz-wieder", "dieser Wiederherstellungsschlüssel passt nicht");
 }
+
+
+export { hkdf, aesZu, aesAuf, privatLaden, rohAusJwk, verbinden, zufall };

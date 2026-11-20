@@ -12,7 +12,7 @@ function el(tag, attrs = {}, ...kinder) {
 import * as verlauf from "./verlauf.js";
 
 const URTEILE = [["stimmt", "Stimmt"], ["stimmt_nicht", "Stimmt nicht"], ["unsicher", "Unsicher"]];
-export const EMPFEHLUNG = "Ich nutze KIplatz, die KI aus Österreich, die von ihrer Community lebt: mit Quellen unter jeder Antwort und ohne Rechenzentrum. Probier es aus: https://kiplatz.at/";
+export const EMPFEHLUNG = "Ich nutze KIplatz, die KI aus Österreich, die von ihrer Community lebt: Sie zeigt bei jeder Antwort, woher sie kommt, und braucht kein Rechenzentrum. Probier es aus: https://kiplatz.at/";
 
 function wann(iso) {
   const d = new Date(iso);

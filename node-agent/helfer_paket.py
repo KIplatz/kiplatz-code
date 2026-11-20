@@ -152,6 +152,8 @@ def quelle_vorbereiten(arbeit: Path, *, runner=subprocess.run) -> None:
     shutil.copytree(HIER / "skills_vorlagen", arbeit / "skills_vorlagen")
     for n in ("requirements.txt", "neuerungen_en.json"):
         shutil.copy2(HIER / n, arbeit / n)
+    if (HIER / "beglaubigung.json").exists():
+        shutil.copy2(HIER / "beglaubigung.json", arbeit / "beglaubigung.json")
     shutil.copy2(HIER.parent / "SCHNITTSTELLE.md", arbeit / "SCHNITTSTELLE.md")
 
 

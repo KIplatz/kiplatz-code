@@ -1,6 +1,6 @@
 {
- "pruefwert": "f5c4db2eac997d626f662584",
+ "pruefwert": "98bca98529947798d357af94",
  "mindest_bau": "2026-10-26k",
- "erneuert": "2026-11-03b",
- "grund": "2026-11-03b: nur Tempomessung in ki_laufzeit, Antworten unverändert"
+ "erneuert": "2026-11-19a",
+ "grund": "2026-11-19a: das fragende Programm nimmt eine verschlossene Antwort nur mit der Unterschrift eines Empfängers an, eine offene nur aus dem freigegebenen Speicher; gespeicherte Antworten betrifft das nicht (ERNEUERT 2026-11-19a leer)"
 }
