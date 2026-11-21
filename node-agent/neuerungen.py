@@ -14,6 +14,9 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-11-21c": [
+        "Zu einem Befund streicht KIplatz jetzt auch beruhigende Sätze wie „nicht alarmierend“, selbst wenn daneben die Ärztin oder der Arzt erwähnt wird. Fragen zu einem Befund, einer Diagnose oder einem Medikament beantwortet immer ein PC neu, nie eine gespeicherte Antwort.",
+    ],
     "2026-11-21b": [
         "Steht in einem Befund eine Abkürzung, nimmt KIplatz ihre Bedeutung jetzt aus einer geprüften Liste, etwa Hirnnerven für HN oder rechter Oberlappen für RO. Fragst du, wie schlimm ein Befund ist, sagt KIplatz offen, dass das nur deine Ärztin oder dein Arzt beurteilen kann, und erklärt dir die Wörter.",
     ],

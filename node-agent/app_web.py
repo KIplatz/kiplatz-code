@@ -7085,8 +7085,8 @@ GESUNDHEIT_REGEL_EN = ("About a person's medical findings, lab values or symptom
 ZU_LANG_HINWEIS = "Die Antwort war länger, als das Modell auf einmal schreiben kann; mit „weiter“ geht es weiter."
 DOKUMENT_MAX_TOKENS = 1500
 _GESUNDHEIT = re.compile(r"(?i)(?<![^\W\d_])(?:befund\w*|arztbrief\w*|entlassungsbrief\w*|ambulanzbrief\w*|laborbefund\w*|laborwert\w*|blutbild\w*|"
-                         r"diagnosen?|anamnese\w*|histolog\w*|patholog\w*|sonograph\w*|röntgenbild\w*|röntgenbefund\w*|mrt-befund\w*|"
-                         r"computertomograph\w*|medikament\w*|"
+                         r"diagnosen?|anamnese\w*|histolog\w*|patholog\w*|sonogra\w*|röntgenbild\w*|röntgenbefund\w*|mrt-befund\w*|biopsie\w*|"
+                         r"\w*tomogra(?:ph|f)\w*|medikament\w*|"
                          r"medical report|discharge (?:letter|summary)|lab results?|blood test|diagnosis|biopsy|mri scan|x-ray|radiology report)(?![^\W\d_])")
 _KEIN_ARZT = re.compile(r"(?i)(?<![^\W\d_])(?:pickerl\w*|sachverständig\w*|gutachter\w*|kfz|fahrzeug\w*|auto|gebäude\w*|statik\w*|"
                         r"schimmel\w*|bauschaden\w*|wasserschaden\w*)(?![^\W\d_])")
@@ -7098,13 +7098,52 @@ GESUNDHEIT_SCHWERE_EN = ("How serious this is I can't judge. Only your doctor, w
                          "right away if you have acute symptoms. What the words in the report mean:")
 _SCHWERE_FRAGE = re.compile(r"(?i)(?<![^\W\d_])(?:schlimm\w*|gefährlich\w*|ernst\w*|sorgen?|angst|harmlos\w*|krebs\w*|bösartig\w*|gutartig\w*|"
                             r"tumor\w*|sterben|bedenklich\w*|serious|worr\w*|dangerous|cancer\w*|malignant|benign|harmless|scared|afraid)(?![^\W\d_])")
-_BERUHIGUNG = re.compile(r"(?i)(?:^|nein,?\s*)nicht unbedingt|kein(?:en)? (?:akute[rn]? |große[rn]? |unmittelbare[rn]? )?(?:grund|anlass) zur "
-                         r"(?:sorge|panik|beunruhigung)|keine (?:große[rn]? )?sorgen?\b|keine panik|nichts schlimmes|unbedenklich|"
-                         r"(?:ist|sind|wirkt|scheint|klingt) (?:\w+ )?harmlos|harmlose[rn]? (?:befund|veränderung)|"
-                         r"(?:ist|sind) (?:\w+ )?nicht (?:gefährlich|schlimm|besorgniserregend|bedrohlich)|sorgen machen muss(?:t)? (?:du|man) (?:dir |sich )?nicht|"
-                         r"(?:musst|brauchst) dir (?:\w+ )?keine|in der regel (?:gutartig|harmlos)|meist(?:ens)? (?:gutartig|harmlos)|"
-                         r"no need to worry|nothing to worry|don't worry|not serious|is harmless|usually (?:benign|harmless)|no cause for concern")
-_SCHUTZ = re.compile(r"(?i)(?<![^\W\d_])(?:ob|kann nur|können nur|ärztin|arzt|doctor|nicht harmlos|nicht gutartig|nicht ungefährlich|not harmless)(?![^\W\d_])")
+_WERT_GUT = (r"harmlos\w*|gutartig\w*|ungefährlich\w*|unbedenklich\w*|beruhigend\w*|unproblematisch\w*|beruhigt|in ordnung|"
+             r"harmless|benign|reassuring|nothing to worry|probably nothing|be fine")
+_WERT_SCHLIMM = (r"alarmierend\w*|beunruhigend\w*|besorgniserregend\w*|bedrohlich\w*|lebensbedrohlich\w*|lebensgefährlich\w*|dramatisch\w*|"
+                 r"tragisch\w*|wild|schlimm(?:e[nmrs]?)?|gefährlich(?:e[nmrs]?)?|ernst(?:e[nmrs]?|haft\w*)?(?!\s+(?:zu\s+)?(?:nehmen|genommen|nimmt))|"
+                 r"bedenklich\w*|sorgen?(?!\s+(?:\w+\s+){0,2}?(?:für|dafür))|panik|alarm|aufregung|beunruhigung|angst|gefahr|"
+                 r"alarming|worrying|worrisome|concerning|concerned|worried|serious|dangerous|life-threatening|worry|panic|concern")
+_VERNEINT = (r"nicht(?![- ]steroid)|nichts|nix|kein\w*|keineswegs|kaum|nie|niemals|selten|weder|wenig|ohne|not|no|nothing|never|hardly|rarely|"
+             r"unlikely|little|without|neither|\w+n['’´`]t")
+_LUECKE = r"(?:[ \t]+(?!(?:bei|wenn|falls|if|when|with)(?![^\W\d_]))[^\W\d_]+){0,%d}?[ \t]+"
+_GUT = re.compile(rf"(?i)(?<![^\W\d_])(?:{_WERT_GUT})(?![^\W\d_])")
+_SCHLIMM = re.compile(rf"(?i)(?<![^\W\d_])(?:{_WERT_SCHLIMM})(?![^\W\d_])")
+_VOR_VERNEINT_GUT = re.compile(rf"(?i)(?:(?<![^\W\d_])(?:{_VERNEINT})(?![^\W\d_])|alles andere als|anything but|far from){_LUECKE % 5}$")
+_VOR_VERNEINT = re.compile(rf"(?i)(?<![^\W\d_])(?:{_VERNEINT})(?![^\W\d_]){_LUECKE % 3}$")
+_FACHBEGRIFF = re.compile(r"(?i)benign\w* prostat|benigne\w* prostata|gutartige prostata")
+_SORGEN_FUER = re.compile(r"(?i)(?<![^\W\d_])(?:für|dafür)(?:\W+[^\W\d_]+){0,2}\W*$")
+_NACH_VERNEINT = re.compile(r"(?i)^[ \t]+(?:[^\W\d_]+[ \t]+){0,2}?(?:nicht|not)\W*$")
+_OFFEN_VOR = re.compile(r"(?i)(?<![^\W\d_])(?:ob|whether|if|wie|how)(?:[ \t]+[^\W\d_]+){0,5}?[ \t]+$")
+_ERKLAERT = re.compile(r"(?i)(?<![^\W\d_])(?:bedeutet|bedeuten|heißt|heissen|steht für|stehen für|means|mean|stands for|refers to)(?![^\W\d_])|"
+                       r"benign\w* prostat|„[^“”\"]*$|\"[^\"]*$")
+_BOESARTIG = re.compile(r"(?i)(?<![^\W\d_])(?:bösartig\w*|maligne?\w*|malignant|malignancy)(?![^\W\d_])")
+_BOESARTIG_VERNEINT = re.compile(rf"(?i)(?<![^\W\d_])(?:{_VERNEINT})(?![^\W\d_])(?:\W+[^\W\d_]+){{0,2}}?\W+(?:bösartig|malign|krebs|cancer)|"
+                                 r"(?:bösartig|maligne?|malignant|krebs|cancer)\w*\W+(?:[^\W\d_]+\W+){0,2}?(?:nicht|not)(?![^\W\d_])")
+_BERUHIGUNG = re.compile(r"(?i)(?:^|nein,?\s*)nicht unbedingt|sorgen machen muss(?:t)? (?:du|man) (?:dir |sich )?nicht|"
+                         r"(?:musst|brauchst|mach) dir (?:\w+ )?keine[n]? (?:\w+ )?(?:sorgen|gedanken|kopf)|"
+                         r"schlimmer,? als es ist|worse than it (?:is|sounds|looks)|halb so wild|hat nichts zu bedeuten")
+
+
+def _beruhigt(satz: str) -> bool:
+    if _BERUHIGUNG.search(satz):
+        return True
+    beide = bool(_BOESARTIG.search(satz)) and not _BOESARTIG_VERNEINT.search(satz)
+    for m in _GUT.finditer(satz):
+        vor, nach = satz[:m.start()], satz[m.end():]
+        if (_VOR_VERNEINT_GUT.search(vor) or _NACH_VERNEINT.search(nach) or _OFFEN_VOR.search(vor) or _ERKLAERT.search(vor)
+                or _ERKLAERT.search(nach[:40]) or beide or _FACHBEGRIFF.search(satz)):
+            continue
+        return True
+    for m in _SCHLIMM.finditer(satz):
+        vor, nach = satz[:m.start()], satz[m.end():]
+        if m.group().lower().startswith("sorg") and _SORGEN_FUER.search(vor):
+            continue
+        if (_VOR_VERNEINT.search(vor) or _NACH_VERNEINT.search(nach)) and not _OFFEN_VOR.search(vor):
+            return True
+    return False
+
+
 _BEFUND_ZEILE = re.compile(r"(?i)^\s*(?:fragestellung|klinik|indikation|befund|beurteilung|diagnosen?|dg\.|anamnese|procedere|"
                            r"question|clinical (?:information|indication)|findings|impression|diagnosis)\s*:")
 _ICH_SORGE = re.compile(r"(?i)(?<![^\W\d_])(?:ich|mich|mir|i|me)(?![^\W\d_])")
@@ -7128,7 +7167,7 @@ def befund_ohne_einschaetzung(antwort: str, frage: str, *, englisch: bool = Fals
         kern = zeile.strip().lstrip("–-•*#").rstrip("*").strip()
         if kern.endswith("?") and len(kern) <= 80 and _SCHWERE_FRAGE.search(kern) and _ICH_SORGE.search(kern):
             continue
-        saetze = [s for s in _saetze(zeile) if not (_BERUHIGUNG.search(s) and not _SCHUTZ.search(s))]
+        saetze = [s for s in _saetze(zeile) if not _beruhigt(s)]
         neu = " ".join(saetze).rstrip()
         if zeile.strip() and not neu.strip().lstrip("–-•").strip():
             continue

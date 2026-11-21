@@ -48,6 +48,16 @@ _WANDEL = ("kost", "preis", "gebuehr", "maut", "vignett", "tarif", "ticket", "ei
            "frist", "tempolimit", "hoechstgeschwindigkeit", "vorgeschrieb", "gesetz", "mindestalter", "pickerl")
 
 
+_GESUNDHEIT = ("befund", "arztbrief", "entlassungsbrief", "ambulanzbrief", "laborwert", "blutbild", "diagnos", "anamnese", "histolog",
+               "patholog", "sonogra", "roentgenbild", "roentgenbefund", "roentgenaufnahme", "tomogra", "medikament", "ultraschall", "biops")
+_GESUNDHEIT_EN = frozenset("diagnosis diagnoses biopsy biopsies radiology mri ct medication medications discharge xray ultrasound".split())
+
+
+def gesundheit(woerter) -> bool:
+    return (any(s in x for x in woerter for s in _GESUNDHEIT) or any(x.startswith("mrt") for x in woerter)
+            or any(x in _GESUNDHEIT_EN for x in woerter) or any(x == "x" and y == "ray" for x, y in zip(woerter, woerter[1:])))
+
+
 _WANDEL_EN = frozenset("""cost costs price prices fee fees toll tolls fare fares tariff tariffs ticket tickets admission mandatory required allowed
 legal illegal banned ban law laws rule rules penalty penalties fine fines deadline deadlines limit limits minimum""".split())
 
@@ -86,7 +96,7 @@ def frage_taugt(nachrichten, *, frisch: bool = False, skill=None, zuhause=None) 
     if not text or len(text) > MAX_FRAGE:
         return ""
     w = _woerter(text)
-    if not w or len(w) > MAX_WOERTER or any(x in _NIE for x in w) or wandelt_sich(w):
+    if not w or len(w) > MAX_WOERTER or any(x in _NIE for x in w) or wandelt_sich(w) or gesundheit(w):
         return ""
     if any(x in _VERGLEICH for x in w):
         return ""
@@ -217,6 +227,8 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
      "antworten wie bisher; nichts zu verwerfen"),
     ("2026-11-21b", frozenset(), "Abkürzungen eines Befunds aus einer Liste, Schwere nie vom Modell, Beruhigung gestrichen: nur Fragen zu einem "
      "Befund, die nicht in den Speicher kommen (ich/mein, über 200 Zeichen); nichts zu verwerfen"),
+    ("2026-11-21c", frozenset(), "Beruhigung neben dem Verweis auf den Arzt gestrichen; Fragen zu Befund, Diagnose oder Medikament nutzen den "
+     "Speicher gar nicht mehr (frage_taugt), auch ältere Antworten dazu werden nie mehr ausgeliefert; nichts zu verwerfen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())
