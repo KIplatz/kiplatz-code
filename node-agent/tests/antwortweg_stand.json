@@ -1,6 +1,6 @@
 {
- "pruefwert": "98bca98529947798d357af94",
+ "pruefwert": "661b3eef3e7054d3b7c1acdc",
  "mindest_bau": "2026-10-26k",
- "erneuert": "2026-11-19a",
- "grund": "2026-11-19a: das fragende Programm nimmt eine verschlossene Antwort nur mit der Unterschrift eines Empfängers an, eine offene nur aus dem freigegebenen Speicher; gespeicherte Antworten betrifft das nicht (ERNEUERT 2026-11-19a leer)"
+ "erneuert": "2026-11-21a",
+ "grund": "2026-11-21a: eingefügter Text wie Anhang, Befund-Regel im Zusatz, Zusammenfassung auf Wunsch, Kontextreserve für lange Antworten; nichts zu verwerfen"
 }

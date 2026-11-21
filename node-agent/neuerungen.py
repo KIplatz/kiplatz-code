@@ -14,6 +14,14 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-11-21a": [
+        "Fügst du einen langen Text in deine Frage ein, etwa einen Befund, einen Brief oder einen Bescheid, arbeitet KIplatz jetzt genau mit "
+        "diesem Text, so wie bei einem Anhang. Verlangst du mehrere Teile, bekommst du jeden, und wird die Antwort zu lang, steht darunter, "
+        "dass es mit „weiter“ weitergeht.",
+        "Abkürzungen, die KIplatz nicht sicher kennt, soll es jetzt als unsicher kennzeichnen, statt eine Bedeutung zu raten. Zu einem Befund "
+        "sagt es nicht, wie schlimm etwas ist, und darunter steht, dass KI-Antworten keine Ärztin und keinen Arzt ersetzen. Das ist neu, und "
+        "wir verbessern es laufend.",
+    ],
     "2026-11-19a": [
         "Fragst du die Community, reist deine Frage jetzt verschlüsselt. Öffnen können sie nur die PCs der Community, die antworten dürfen, "
         "der Server in Wien gibt sie nur weiter. Allgemeine Wissensfragen ohne Namen sieht er als Stichwörter, damit die Antwort beim "
@@ -1363,6 +1371,10 @@ ZURUECKGEHALTEN: dict[str, list[str]] = {
 }
 
 KURZ_JE_TAG: dict[str, list[str]] = {
+    "2026-11-21": [
+        "Einen eingefügten Befund oder Brief liest KIplatz jetzt wie einen Anhang und beantwortet jeden verlangten Teil",
+        "Zu einem Befund sagt KIplatz nicht, wie schlimm etwas ist, und verweist auf deine Ärztin oder deinen Arzt",
+    ],
     "2026-11-19": [
         "Persönliche Fragen an die Community reisen jetzt verschlüsselt, der Server in Wien gibt sie nur weiter",
         "Jede Antwort aus der Community prüft dein Gerät jetzt selbst, auch ob der PC sie unterschrieben hat",
@@ -1507,6 +1519,10 @@ KURZ_JE_TAG: dict[str, list[str]] = {
 
 
 GESCHICHTE_JE_TAG: dict[str, dict[str, str]] = {
+    "2026-11-21": {
+        "haken": "Füg ab heute einen Brief oder einen Befund in deine Frage ein, schreib „Erklär mir das in einfachen Worten“ davor, und KIplatz arbeitet genau mit diesem Text.",
+        "text": "Du bekommst jeden Teil, den du verlangst. Abkürzungen, die KIplatz nicht sicher kennt, sollen als unsicher dastehen, und unter einem Befund steht, dass KI-Antworten keine Ärztin und keinen Arzt ersetzen.",
+    },
     "2026-11-19": {
         "haken": "Frag KIplatz ab heute „Was tun, wenn der Vermieter die Kaution nicht zurückgibt?“, und deine Frage reist verschlüsselt zu dem PC, der dir antwortet.",
         "text": "Unterwegs kann sie niemand lesen, auch nicht in Wien, wo sie nur weitergereicht wird. Die Antwort prüft dein Gerät selbst, bevor du sie siehst.",

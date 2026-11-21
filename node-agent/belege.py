@@ -894,10 +894,17 @@ _GELDBETRAG = re.compile(r"(?i)[€$£]\s*\d|\d[\d.,]*\s*(?:€|\$|£|euros?\b|e
 _WAEHRUNG = re.compile(r"(?i)\b(euros?|eur|dollars?|usd|pounds?|pfund|gbp|franken|chf|yen|kronen?|zloty|forint|lira|rupees?|pesos?|yuan|renminbi)\b|[€$£]")
 _WAEHRUNG_GLEICH = {"€": "euro", "euros": "euro", "eur": "euro", "$": "dollar", "dollars": "dollar", "usd": "dollar", "£": "pound", "pounds": "pound",
                     "pfund": "pound", "gbp": "pound", "chf": "franken", "kronen": "krone", "rupees": "rupee", "pesos": "peso", "renminbi": "yuan"}
+_RECHEN_AUFTRAG = re.compile(r"(?i)(?<![^\W\d_])(?:rechne\w*|berechne\w*|zähl\w*|zaehl\w*|addier\w*|summier\w*|summe|subtrahier\w*|multiplizier\w*|"
+                             r"dividier\w*|durchschnitt\w*|mittelwert\w*|calculate|add up|sum|total|average)(?![^\W\d_])"
+                             r"(?!\s+(?:nichts|nicht|keine\w*|nothing|not)\b)")
 
 
 def rechenaufgabe(frage: str) -> bool:
     if not rechnet(frage):
+        return False
+    import schriftstueck
+    teile = schriftstueck.eingefuegt(frage)
+    if teile is not None and not (rechnet(teile[0]) or _RECHEN_AUFTRAG.search(teile[0])):
         return False
     f = _ohne_code_zahlen(frage)
     if _PREISFRAGE.search(f) and not _GELDBETRAG.search(f):

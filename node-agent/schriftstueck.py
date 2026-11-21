@@ -66,6 +66,35 @@ def eigene_worte(frage: str) -> tuple[str, bool]:
     return (t[: max(0, m.start() - 1)] if m else t), m is not None
 
 
+EINGEFUEGT_MIN = 300
+EINGEFUEGT_ZEILEN = 3
+EINGEFUEGT_AUFTRAG_WORTE = 150
+_ETIKETT = re.compile(r"\n[^\n]{1,40}:[ \t]*\n")
+
+
+def eingefuegt(frage: str) -> tuple[str, str] | None:
+    t = (frage or "").replace("\r\n", "\n").strip()
+    if len(t) < EINGEFUEGT_MIN or _ANHANG_KOPF.search("\n" + t):
+        return None
+
+    def taugt(auftrag: str, rest: str) -> bool:
+        rest = rest.strip()
+        return (bool(auftrag.strip()) and len(auftrag.split()) <= EINGEFUEGT_AUFTRAG_WORTE and len(rest) >= EINGEFUEGT_MIN
+                and len([z for z in rest.splitlines() if z.strip()]) >= EINGEFUEGT_ZEILEN)
+
+    for m in _ETIKETT.finditer(t):
+        if taugt(t[: m.start()], t[m.end():]):
+            return t[: m.start()].strip(), t[m.end():].strip()
+    if "\n" in t:
+        davor, letzte = t.rsplit("\n", 1)
+        if letzte.strip().endswith("?") and len(letzte) <= 300 and taugt(letzte, davor):
+            return letzte.strip(), davor.strip()
+        erste, rest = t.split("\n", 1)
+        if len(erste) <= 300 and taugt(erste, rest):
+            return erste.strip(), rest.strip()
+    return None
+
+
 _WISSENSWORT = re.compile(r"\b(einwohner\w*|bevölkerung\w*|fläche\w*|höhe|länge|breite|tiefe|entfernung|abstand|preis\w*|kosten|kostet|temperatur\w*|"
                           r"gründung\w*|gegründet|geburt\w*|geboren|gestorben|hauptstadt|bip|bruttoinlands\w*|umsatz|gehalt|lohn|löhne|anzahl|zahl der|"
                           r"größe|gewicht|geschwindigkeit|einkommen|arbeitslos\w*|inflation\w*|währung|zeitzone|postleitzahl|vorwahl|alter von|wie alt)\b", re.I)

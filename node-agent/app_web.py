@@ -2567,7 +2567,14 @@ class Api:
         elif ohne_suche:
             zusatz, quellen, im_speicher, hinweis, quellen_stand = wissen.datum_zeile(), [], 0, KEINE_NEUE_SUCHE, None
             if ab.art == "anhang_aufgabe":
-                zusatz, hinweis = wissen.datum_zeile() + "\n\n" + ANHANG_AUFGABE_ANWEISUNG, ANHANG_AUFGABE_HINWEIS
+                text_jetzt = _letzte_frage_text(nachrichten)
+                eingefuegt = not schriftstueck.eigene_worte(text_jetzt)[1]
+                zusatz = wissen.datum_zeile() + "\n\n" + ANHANG_AUFGABE_ANWEISUNG
+                hinweis = EINGEFUEGT_AUFGABE_HINWEIS if eingefuegt else ANHANG_AUFGABE_HINWEIS
+                if gesundheit_im_gespraech(nachrichten):
+                    hinweis += " " + GESUNDHEIT_HINWEIS
+                if max_tokens is None:
+                    max_tokens = DOKUMENT_MAX_TOKENS
             _suchrunden_aufbrauchen()
         else:
             klein = not frisch and not fern and self.nachschauen_an() and klein_wissensfrage(wahl.modell.name if wahl else "", suchfrage(nachrichten))
@@ -2584,6 +2591,9 @@ class Api:
         def modell(zusatz_: str, on_token, *, max_tokens_: int | None = None):
             return self._ki.frage(modell_nachrichten, on_token=on_token, zusatz=auftrag_sprache(zusatz_), max_tokens=max_tokens_ or max_tokens, kurz=kurz)
 
+        if gesundheit_im_gespraech(nachrichten):
+            regel = GESUNDHEIT_REGEL_EN if antwortsprache.frage_sprache(_letzte_frage_text(nachrichten)) == "en" else GESUNDHEIT_REGEL
+            zusatz = regel + ("\n\n" + zusatz if zusatz else "")
         self._schritt("schreibt die Antwort …")
         zusatz = mit_auftrag(mit_fokus(zusatz, suchfrage(modell_nachrichten)), modell_nachrichten)
         try:
@@ -2601,6 +2611,8 @@ class Api:
         strom.schluss()
         if getattr(a, "gekuerzt", False):
             hinweis = (hinweis + " " if hinweis else "") + GEKUERZT_HINWEIS
+        if getattr(a, "zu_lang", False):
+            hinweis = (hinweis + " " if hinweis else "") + ZU_LANG_HINWEIS
         nachgeholt = False
 
         def nachsuchen(satz: str, grund: str) -> bool:
@@ -7049,10 +7061,47 @@ PRUEF_ZUSATZ = ("Die Person fragt, ob deine vorige Antwort stimmt. Prüfe sie mi
                 "berichtige, was nicht stimmt. Gemeint ist: „{frage}“.")
 KEINE_NEUE_SUCHE = "Keine neue Suche: die vorige Antwort wurde nur umgeformt."
 ANHANG_AUFGABE_HINWEIS = "Aufgabe zum Anhang: aus dem Anhang gelöst, nicht im Internet gesucht."
-ANHANG_AUFGABE_ANWEISUNG = ("Die Person hat einen Anhang mitgeschickt (Text aus einem Foto oder einer Datei) und gibt dazu einen Auftrag, etwa eine Aufgabe "
-                            "lösen, einen Punkt schreiben, übersetzen oder zusammenfassen. Erledige genau diesen Auftrag aus dem Anhang. Ist er eine "
-                            "Schulaufgabe, gib die Lösung so, wie sie ins Heft gehört, übersichtlich und kurz, bei Namenwörtern mit Artikel. Der Text aus "
-                            "einem Foto kann Lesefehler haben; was eindeutig gemeint ist, nimm so. Antworte in der Sprache, in der die Person schreibt.")
+ANHANG_AUFGABE_ANWEISUNG = ("Die Person hat einen Text mitgeschickt, als Anhang (Text aus einem Foto oder einer Datei) oder in die Nachricht "
+                            "eingefügt, und gibt dazu einen Auftrag oder eine Frage, etwa eine Aufgabe lösen, einen Punkt schreiben, übersetzen, "
+                            "erklären oder zusammenfassen. Erledige genau diesen Auftrag aus dem Text. Verlangt die Person mehrere Teile, eine "
+                            "Reihenfolge oder eine Form (nummerierte Punkte, eine Zusammenfassung, eine Tabelle), schreibst du jeden Teil in dieser "
+                            "Reihenfolge. Kennst du die Bedeutung einer Abkürzung oder eines Fachworts nicht sicher, schreibst du genau das dazu "
+                            "(„Bedeutung hier nicht sicher, bitte nachfragen“) und erfindest keine. Du widersprichst dem Text nur, wenn du dir sicher "
+                            "bist. Ist er eine Schulaufgabe, gib die Lösung so, wie sie ins Heft gehört, übersichtlich und kurz, bei Namenwörtern mit "
+                            "Artikel. Der Text aus einem Foto kann Lesefehler haben; was eindeutig gemeint ist, nimm so. Antworte in der Sprache, in der "
+                            "die Person schreibt.")
+EINGEFUEGT_AUFGABE_HINWEIS = "Aufgabe zum eingefügten Text: aus dem Text gelöst, nicht im Internet gesucht."
+GESUNDHEIT_HINWEIS = "KI-Antworten ersetzen keine Ärztin und keinen Arzt."
+GESUNDHEIT_REGEL = ("Zu einem Befund, zu Laborwerten oder Beschwerden einer Person sagst du nie, wie schlimm oder harmlos es ist, und beruhigst "
+                    "nicht: Das beurteilt die Ärztin oder der Arzt, die sie untersucht haben. Du erklärst, was die Wörter bedeuten.")
+GESUNDHEIT_REGEL_EN = ("About a person's medical findings, lab values or symptoms you never say how serious or harmless they are and you "
+                       "don't reassure: that is for the doctor who examined them. You explain what the words mean.")
+ZU_LANG_HINWEIS = "Die Antwort war länger, als das Modell auf einmal schreiben kann; mit „weiter“ geht es weiter."
+DOKUMENT_MAX_TOKENS = 1500
+_GESUNDHEIT = re.compile(r"(?i)(?<![^\W\d_])(?:befund\w*|arztbrief\w*|entlassungsbrief\w*|ambulanzbrief\w*|laborbefund\w*|laborwert\w*|blutbild\w*|"
+                         r"diagnosen?|anamnese\w*|histolog\w*|patholog\w*|sonograph\w*|röntgenbild\w*|röntgenbefund\w*|mrt-befund\w*|"
+                         r"computertomograph\w*|medikament\w*|"
+                         r"medical report|discharge (?:letter|summary)|lab results?|blood test|diagnosis|biopsy|mri scan|x-ray|radiology report)(?![^\W\d_])")
+_KEIN_ARZT = re.compile(r"(?i)(?<![^\W\d_])(?:pickerl\w*|sachverständig\w*|gutachter\w*|kfz|fahrzeug\w*|auto|gebäude\w*|statik\w*|"
+                        r"schimmel\w*|bauschaden\w*|wasserschaden\w*)(?![^\W\d_])")
+
+
+def gesundheit_im_gespraech(nachrichten: list[dict], tiefe: int = 3) -> bool:
+    texte = [str(n.get("content")) if isinstance(n.get("content"), str)
+             else " ".join(str(t.get("text", "")) for t in (n.get("content") or []) if isinstance(t, dict))
+             for n in (nachrichten or []) if n.get("role") == "user"][-tiefe:]
+    t = "\n".join(texte)
+    return bool(_GESUNDHEIT.search(t)) and not _KEIN_ARZT.search(t)
+
+
+def _letzte_frage_text(nachrichten: list[dict]) -> str:
+    for n in reversed(nachrichten or []):
+        if n.get("role") == "user":
+            c = n.get("content")
+            if isinstance(c, str):
+                return c
+            return " ".join(str(t.get("text", "")) for t in (c or []) if isinstance(t, dict))
+    return ""
 
 
 def _suchrunden_aufbrauchen() -> None:

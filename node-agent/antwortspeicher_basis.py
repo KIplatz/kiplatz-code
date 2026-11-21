@@ -212,6 +212,9 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
     ("2026-11-19a", frozenset(), "Ende-zu-Ende: Fragen und Antworten reisen verschlossen, das fragende Gerät "
      "prüft Unterschrift und Platzordnung selbst, eine Krisenfrage verlässt das Gerät nicht; wie eine Antwort entsteht, ändert sich nicht, "
      "nichts zu verwerfen"),
+    ("2026-11-21a", frozenset(), "Eingefügter Text wie ein Anhang, 1500 Wortstücke für Aufträge zu einem Text, Zusammenfassung auf Wunsch, "
+     "Befund-Regel nur bei Fragen zu einem Befund: ein eingefügter Text kommt nie in den Speicher (über 200 Zeichen), allgemeine Wissensfragen "
+     "antworten wie bisher; nichts zu verwerfen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())

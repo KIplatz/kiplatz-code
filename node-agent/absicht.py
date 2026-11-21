@@ -206,6 +206,24 @@ _KAUF_ODER_TEST = re.compile(r"(?i)preis|kost|günstig|guenstig|billig|kauf|ange
 
 def anhang_aufgabe(text: str) -> bool:
     eigen, mit_anhang = schriftstueck.eigene_worte(text or "")
-    if not mit_anhang or not eigen.strip() or len(eigen.split()) > 25 or _KAUF_ODER_TEST.search(eigen):
+    grenze, frage_zaehlt = 25, False
+    if not mit_anhang:
+        teile = schriftstueck.eingefuegt(text or "")
+        if teile is None:
+            return False
+        if schriftstueck.erkennen(teile[0]) is not None and not _BEZUG_AUF_TEXT.search(teile[0]):
+            return False
+        if teile[1].count("?") >= 2 or _FAKTENCHECK.search(teile[0]) or len(_ICH.findall(teile[1])) >= 3:
+            return False
+        eigen, grenze, frage_zaehlt = teile[0], schriftstueck.EINGEFUEGT_AUFTRAG_WORTE, True
+    if not eigen.strip() or len(eigen.split()) > grenze or _KAUF_ODER_TEST.search(eigen):
         return False
-    return bool(_AUFTRAG.search(eigen) or _AUFGABE_NUMMER.search(eigen))
+    return bool(_AUFTRAG.search(eigen) or _AUFGABE_NUMMER.search(eigen) or (frage_zaehlt and "?" in eigen))
+
+
+_SCHRIFTSTUECK_WORT = (r"(?:text\w*|brief\w*|befund\w*|bescheid\w*|schreiben|mail\w*|e-mail\w*|nachricht\w*|dokument\w*|vertrag\w*|rechnung\w*|"
+                       r"artikel\w*|absatz\w*|abschnitt\w*|zeilen|inhalt\w*|arztbrief\w*|letter|report|document|message|article|paragraph|contract)")
+_BEZUG_AUF_TEXT = re.compile(r"(?i)(?<![^\W\d_])(?:folgend\w*|obige\w*|nachstehend\w*|the following|(?:diese[nrsm]?|this|these|den|dem|im|zum|"
+                             r"aus dem|auf den|the)\s+" + _SCHRIFTSTUECK_WORT + r")(?![^\W\d_])")
+_FAKTENCHECK = re.compile(r"(?i)(?<![^\W\d_])(?:stimmt|wahr|fake|echt|faktencheck|true|fact.?check|richtig\?)(?![^\W\d_])")
+_ICH = re.compile(r"(?i)(?<![^\W\d_])(?:ich|mein\w*|mir|mich|i|my|me)(?![^\W\d_])")

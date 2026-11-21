@@ -146,7 +146,8 @@ SYSTEMTEXT = (
     "Österreichisches Deutsch (Jänner, Umsatzsteuer, Kostenvoranschlag), Umlaute immer als ä, ö, ü, ß. „Hätte“ bei Zeit und Interesse (Hätten Sie Zeit?). "
     "Keine Wörter wie „bedeutend“, „spannend“, „nahtlos“, „beleuchten“, „eintauchen“, „robust“, „entscheidend“. Kein „nicht nur, sondern auch“, "
     "kein Dreierschema (schnell, sicher und einfach), keine Absätze, die mit „Darüber hinaus“ oder „Zusätzlich“ beginnen, wenige Gedankenstriche. "
-    "Kein Fazit und keine Zusammenfassung am Ende, kein „Ich hoffe, das hilft“, kein „Gerne!“. Keine Frage zurück, außer dir fehlt etwas, das du für die Aufgabe brauchst. "
+    "Kein Fazit und keine Zusammenfassung am Ende, außer die Person verlangt sie, kein „Ich hoffe, das hilft“, kein „Gerne!“. "
+    "Keine Frage zurück, außer dir fehlt etwas, das du für die Aufgabe brauchst. "
     "Über dich selbst sagst du nur, was oben steht: KIplatz, eine KI aus Österreich, offen für alle auf der Welt. Du erfindest kein Team, "
     "keine Firma und keine Geschichte dazu."
 )
@@ -188,7 +189,8 @@ SYSTEMTEXT_EN = (
     "Write the way a person writes: short sentences, simple words, the most important thing first. "
     "No words like “crucial”, “seamless”, “delve”, “robust”, “vibrant”. No “not only … but also”, no groups of three (fast, safe and easy), "
     "no paragraphs that start with “Moreover” or “Additionally”, few dashes. "
-    "No conclusion and no summary at the end, no “I hope this helps”, no “Sure!”. No question back, unless you are missing something you need for the task. "
+    "No conclusion and no summary at the end unless the person asks for one, no “I hope this helps”, no “Sure!”. "
+    "No question back, unless you are missing something you need for the task. "
     "About yourself you only say what is written above: KIplatz, an AI from Austria, open to everyone in the world. You don't make up a team, "
     "a company or a story about it."
 )
@@ -1103,6 +1105,7 @@ class Antwort:
     dauer_s: float
     abgebrochen: bool = False
     gekuerzt: bool = False
+    zu_lang: bool = False
 
 
 PLATZ_REST = 96
@@ -1516,7 +1519,7 @@ class KiServer:
         kontext = int(getattr(getattr(self.wahl, "modell", None), "kontext", 0) or 0)
         if kontext <= 0:
             return zusatz, nachrichten, False
-        grenze = kontext - min(max_tokens, kontext // 4) - PLATZ_REST
+        grenze = kontext - min(max_tokens, kontext // 2 if max_tokens > 700 else kontext // 4) - PLATZ_REST
 
         def text_von(n: dict) -> str:
             c = n.get("content")
@@ -1604,7 +1607,8 @@ class KiServer:
                     if not stream:
                         data = json.loads(r.read().decode("utf-8"))
                         text = data["choices"][0]["message"]["content"]
-                        if data["choices"][0].get("finish_reason") == "length":
+                        zu_lang = data["choices"][0].get("finish_reason") == "length"
+                        if zu_lang:
                             text = bis_zum_letzten_satz(text)
                         u = data.get("usage") or {}
                         _messen(art or ("eigen" if system is not None else "antwort"), time.time() - t0, data.get("timings"), max=max_tokens)
@@ -1612,7 +1616,8 @@ class KiServer:
                             tempo_beobachten(getattr(self, "_tempo_schluessel", None), data.get("timings"))
                         if system is None:
                             _mitschneiden(body, text.strip(), False)
-                        return Antwort(text.strip(), int(u.get("prompt_tokens", 0)), int(u.get("completion_tokens", 0)), round(time.time() - t0, 1), gekuerzt=gekuerzt)
+                        return Antwort(text.strip(), int(u.get("prompt_tokens", 0)), int(u.get("completion_tokens", 0)), round(time.time() - t0, 1), gekuerzt=gekuerzt,
+                                       zu_lang=zu_lang)
                     parts: list[str] = []
                     usage: dict = {}
                     timings: dict | None = None
@@ -1667,7 +1672,8 @@ class KiServer:
                         tempo_beobachten(getattr(self, "_tempo_schluessel", None), timings)
                     if system is None:
                         _mitschneiden(body, text.strip(), abgebrochen)
-                    return Antwort(text.strip(), int(usage.get("prompt_tokens", 0)), int(usage.get("completion_tokens", len(parts))), round(time.time() - t0, 1), abgebrochen, gekuerzt)
+                    return Antwort(text.strip(), int(usage.get("prompt_tokens", 0)), int(usage.get("completion_tokens", len(parts))), round(time.time() - t0, 1), abgebrochen, gekuerzt,
+                                   zu_lang=zu_lang and not abgebrochen)
             except urllib.error.HTTPError as exc:
                 try:
                     grund = exc.read(400).decode("utf-8", "replace")
