@@ -91,6 +91,7 @@ import absicht
 import kurse
 import rechnen
 import antwortsprache
+import medizin_abkuerzungen
 import community
 import gemeinschaft
 import wortindex
@@ -2592,8 +2593,10 @@ class Api:
             return self._ki.frage(modell_nachrichten, on_token=on_token, zusatz=auftrag_sprache(zusatz_), max_tokens=max_tokens_ or max_tokens, kurz=kurz)
 
         if gesundheit_im_gespraech(nachrichten):
-            regel = GESUNDHEIT_REGEL_EN if antwortsprache.frage_sprache(_letzte_frage_text(nachrichten)) == "en" else GESUNDHEIT_REGEL
-            zusatz = regel + ("\n\n" + zusatz if zusatz else "")
+            englisch_g = antwortsprache.frage_sprache(_letzte_frage_text(nachrichten)) == "en"
+            regel = GESUNDHEIT_REGEL_EN if englisch_g else GESUNDHEIT_REGEL
+            abk = medizin_abkuerzungen.zusatz(_gespraech_text(nachrichten), englisch=englisch_g)
+            zusatz = regel + ("\n\n" + abk if abk else "") + ("\n\n" + zusatz if zusatz else "")
         self._schritt("schreibt die Antwort …")
         zusatz = mit_auftrag(mit_fokus(zusatz, suchfrage(modell_nachrichten)), modell_nachrichten)
         try:
@@ -2751,6 +2754,9 @@ class Api:
             vergleich_n = sum(1 for g in ek["angebote"] if g.herkunft.startswith("vergleich"))
             lieferschein["quellen"] = (lieferschein.get("quellen", "") + f" Einkauf: {len(ek['angebote'])} Angebote geprüft (Variante neben dem Preis), "
                                        f"{seiten_n} auf der Seite des Händlers, {vergleich_n} laut Preisvergleich, die übrigen im Suchtreffer.").strip()
+        if gesundheit_im_gespraech(nachrichten):
+            antwort_text = befund_ohne_einschaetzung(antwort_text, _letzte_frage_text(nachrichten),
+                                                     englisch=antwortsprache.frage_sprache(_letzte_frage_text(nachrichten)) == "en")
         _woertlich_markieren(antwort_text, quellen, lieferschein)
         weg = getattr(_MESSWEG, "d", None)
         if isinstance(weg, dict):
@@ -7084,6 +7090,65 @@ _GESUNDHEIT = re.compile(r"(?i)(?<![^\W\d_])(?:befund\w*|arztbrief\w*|entlassung
                          r"medical report|discharge (?:letter|summary)|lab results?|blood test|diagnosis|biopsy|mri scan|x-ray|radiology report)(?![^\W\d_])")
 _KEIN_ARZT = re.compile(r"(?i)(?<![^\W\d_])(?:pickerl\w*|sachverständig\w*|gutachter\w*|kfz|fahrzeug\w*|auto|gebäude\w*|statik\w*|"
                         r"schimmel\w*|bauschaden\w*|wasserschaden\w*)(?![^\W\d_])")
+
+
+GESUNDHEIT_SCHWERE = ("Wie ernst das ist, kann ich nicht beurteilen. Das können nur deine Ärztin oder dein Arzt, die dich untersucht haben und "
+                      "deine Vorgeschichte kennen; frag dort nach, und bei akuten Beschwerden ruf gleich an. Was die Wörter im Befund bedeuten:")
+GESUNDHEIT_SCHWERE_EN = ("How serious this is I can't judge. Only your doctor, who examined you and knows your history, can; ask them, and call "
+                         "right away if you have acute symptoms. What the words in the report mean:")
+_SCHWERE_FRAGE = re.compile(r"(?i)(?<![^\W\d_])(?:schlimm\w*|gefährlich\w*|ernst\w*|sorgen?|angst|harmlos\w*|krebs\w*|bösartig\w*|gutartig\w*|"
+                            r"tumor\w*|sterben|bedenklich\w*|serious|worr\w*|dangerous|cancer\w*|malignant|benign|harmless|scared|afraid)(?![^\W\d_])")
+_BERUHIGUNG = re.compile(r"(?i)(?:^|nein,?\s*)nicht unbedingt|kein(?:en)? (?:akute[rn]? |große[rn]? |unmittelbare[rn]? )?(?:grund|anlass) zur "
+                         r"(?:sorge|panik|beunruhigung)|keine (?:große[rn]? )?sorgen?\b|keine panik|nichts schlimmes|unbedenklich|"
+                         r"(?:ist|sind|wirkt|scheint|klingt) (?:\w+ )?harmlos|harmlose[rn]? (?:befund|veränderung)|"
+                         r"(?:ist|sind) (?:\w+ )?nicht (?:gefährlich|schlimm|besorgniserregend|bedrohlich)|sorgen machen muss(?:t)? (?:du|man) (?:dir |sich )?nicht|"
+                         r"(?:musst|brauchst) dir (?:\w+ )?keine|in der regel (?:gutartig|harmlos)|meist(?:ens)? (?:gutartig|harmlos)|"
+                         r"no need to worry|nothing to worry|don't worry|not serious|is harmless|usually (?:benign|harmless)|no cause for concern")
+_SCHUTZ = re.compile(r"(?i)(?<![^\W\d_])(?:ob|kann nur|können nur|ärztin|arzt|doctor|nicht harmlos|nicht gutartig|nicht ungefährlich|not harmless)(?![^\W\d_])")
+_BEFUND_ZEILE = re.compile(r"(?i)^\s*(?:fragestellung|klinik|indikation|befund|beurteilung|diagnosen?|dg\.|anamnese|procedere|"
+                           r"question|clinical (?:information|indication)|findings|impression|diagnosis)\s*:")
+_ICH_SORGE = re.compile(r"(?i)(?<![^\W\d_])(?:ich|mich|mir|i|me)(?![^\W\d_])")
+_SATZ_ENDE = re.compile(r"(?<=[.!?])\s+(?=[A-ZÄÖÜ„–-])")
+_KURZ_VORN = re.compile(r"(?:(?<![^\W\d_])(?:[A-Za-zÄÖÜäöü]\.){1,3}|(?<![^\W\d_])(?:re|li|ca|bzw|bds|vs|Dr|Pat|Dg|St|Wo|Nr)\.|\d\.)$")
+
+
+def _saetze(zeile: str) -> list[str]:
+    teile, aus = _SATZ_ENDE.split(zeile), []
+    for t in teile:
+        if aus and _KURZ_VORN.search(aus[-1]):
+            aus[-1] = aus[-1] + " " + t
+        else:
+            aus.append(t)
+    return aus
+
+
+def befund_ohne_einschaetzung(antwort: str, frage: str, *, englisch: bool = False) -> str:
+    zeilen = []
+    for zeile in (antwort or "").split("\n"):
+        kern = zeile.strip().lstrip("–-•*#").rstrip("*").strip()
+        if kern.endswith("?") and len(kern) <= 80 and _SCHWERE_FRAGE.search(kern) and _ICH_SORGE.search(kern):
+            continue
+        saetze = [s for s in _saetze(zeile) if not (_BERUHIGUNG.search(s) and not _SCHUTZ.search(s))]
+        neu = " ".join(saetze).rstrip()
+        if zeile.strip() and not neu.strip().lstrip("–-•").strip():
+            continue
+        zeilen.append(neu)
+    text = re.sub(r"\n{3,}", "\n\n", "\n".join(zeilen)).strip()
+    teile = schriftstueck.eingefuegt(frage or "")
+    eigen, mit_anhang = (teile[0], False) if teile else schriftstueck.eigene_worte(frage or "")
+    if (not teile and not mit_anhang and len(eigen) > 300) or _BEFUND_ZEILE.match(eigen):
+        eigen = ""
+    if _SCHWERE_FRAGE.search(eigen) and ("?" in eigen or re.search(r"(?i)sorgen? mach|worr", eigen)):
+        satz = GESUNDHEIT_SCHWERE_EN if englisch else GESUNDHEIT_SCHWERE
+        text = satz + "\n\n" + text if text else satz.rstrip(":") + "."
+    return text
+
+
+def _gespraech_text(nachrichten: list[dict], tiefe: int = 3) -> str:
+    texte = [str(n.get("content")) if isinstance(n.get("content"), str)
+             else " ".join(str(x.get("text", "")) for x in (n.get("content") or []) if isinstance(x, dict))
+             for n in (nachrichten or []) if n.get("role") == "user"][-tiefe:]
+    return "\n".join(texte)
 
 
 def gesundheit_im_gespraech(nachrichten: list[dict], tiefe: int = 3) -> bool:
