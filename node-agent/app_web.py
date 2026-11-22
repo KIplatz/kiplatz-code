@@ -1170,8 +1170,15 @@ class Api:
                 sortiert = self._bewertung.sortieren(frage, kandidaten)
         if not live and self.nachschauen_an():
             alles = ergaenzend + orte + server + lokal
+            if sortiert is not None:
+                fw_d = set(wissen.woerter(frage))
+                abgedeckt_ = any(w >= bewertung.SCHWELLE and (t.quelle.privat or (fachgebiete and t.quelle.fachgebiet in fachgebiete)
+                                                               or self._titel_trifft(fw_d, t))
+                                 for t, w in zip(sortiert.treffer, sortiert.werte))
+            else:
+                abgedeckt_ = None
             nach, satz = vorab() if vorab is not None else self._nachschauen(
-                frage, alles, frisch=frisch, nachrichten=nachrichten, abgedeckt=sortiert.deckt_ab if sortiert is not None else None,
+                frage, alles, frisch=frisch, nachrichten=nachrichten, abgedeckt=abgedeckt_,
                 suchen=erdung and (bool(namen) or nachschauen.nicht_im_lexikon(frage)), erden=erdung)
             if nach and sortiert is not None and (art is None or art.art == "suche"):
                 s2 = self._bewertung.sortieren(frage, nach)
@@ -1193,8 +1200,9 @@ class Api:
             sortiert = _fach_vorziehen(sortiert, fachgebiete)
         if sortiert is not None:
             fw_s = set(wissen.woerter(frage))
+            begriff = begriffsfrage(frage)
             rest = [t for t, w in zip(sortiert.treffer, sortiert.werte)
-                    if w >= bewertung.SCHWELLE or t.quelle.privat or (fachgebiete and t.quelle.fachgebiet in fachgebiete)
+                    if (w >= bewertung.SCHWELLE and not begriff) or t.quelle.privat or (fachgebiete and t.quelle.fachgebiet in fachgebiete)
                     or self._titel_trifft(fw_s, t)][:n_rest]
             hinweis = ("Die gespeicherten Fundstellen wurden gelesen und nach Passung sortiert. " if sortiert.treffer
                        else "Keine gespeicherte Fundstelle passte wirklich zur Frage. ") + hinweis
@@ -1202,7 +1210,7 @@ class Api:
             rest = wissen.treffer_mischen(wissen.fachgebiet_gewichten(server, fachgebiete), wissen.fachgebiet_gewichten(lokal, fachgebiete), n=n_rest)
             fw_ = set(wissen.woerter(frage))
             vorher_rest = len(rest)
-            if not erdung or any(t.quelle.art == "nachgeschaut" for t in live):
+            if not erdung or begriffsfrage(frage) or any(t.quelle.art == "nachgeschaut" for t in live):
                 rest = [t for t in rest if t.quelle.privat or (fachgebiete and t.quelle.fachgebiet in fachgebiete) or self._titel_trifft(fw_, t)]
             if len(rest) < vorher_rest:
                 hinweis = f"{vorher_rest - len(rest)} gemerkte Stellen zu einem anderen Thema weggelassen. " + hinweis
@@ -1229,6 +1237,19 @@ class Api:
             if not live_sortiert and len(gesucht) > 1:
                 fw_live = set(wissen.woerter(frage))
                 gesucht.sort(key=lambda t: -len(fw_live & set(wissen.woerter(t.quelle.titel + " " + t.text))))
+                if teile:
+                    dinge = [set(wissen.woerter(ding)) for ding, _f in teile]
+                    je_ding: list[list] = [[] for _ in dinge] + [[]]
+                    for t in gesucht:
+                        w = set(wissen.woerter(t.quelle.titel + " " + t.text))
+                        passend = [i for i, d in enumerate(dinge) if d and d <= w]
+                        je_ding[passend[0] if len(passend) == 1 else len(dinge)].append(t)
+                    gemischt = []
+                    while any(je_ding):
+                        for liste in je_ding:
+                            if liste:
+                                gemischt.append(liste.pop(0))
+                    gesucht = gemischt
             if belege.vergleichsfrage(frage):
                 grenze = LIVE_STELLEN_VERGLEICH
                 gesucht.sort(key=lambda t: -nachschauen.preis_punkte(t.text))
@@ -1302,6 +1323,15 @@ class Api:
                 if (sache and not bisher and 1 <= len(sache.split()) <= 8 and eigen
                         and not any(eigen <= set(wissen.woerter(q)) and len(set(wissen.woerter(q)) - eigen) <= 1 for q in z)):
                     z = [sache] + z[:1]
+                elif (sache or not frueher) and such_sprache(frage) != "en":
+                    rq = nachschauen.suchbegriffe_regel(sache or frage, "") or ""
+                    eigen_rq = set(wissen.woerter(rq))
+                    zeitwort = re.search(r"\b(heute|heutig\w*|(?:über)?morgen|gestern|jetzt|aktuell\w*|derzeit\w*|momentan\w*|gerade|n[äa]chste\w*|"
+                                         r"letzte\w*|zuletzt|heuer|diese[nrms]? (?:woche|monat|jahr)|today|tomorrow|nicht|kein\w*|nie|ohne)\b",
+                                         sache or frage, re.I)
+                    if (rq and eigen_rq and not zeitwort and set(wissen.woerter(sache or frage)) <= eigen_rq and rq.lower() not in {b.lower() for b in bisher}
+                            and not any(eigen_rq <= set(wissen.woerter(q)) and len(set(wissen.woerter(q)) - eigen_rq) <= 1 for q in z)):
+                        z = [rq] + z[:1]
                 if z:
                     return z
             except app_core.AppError as exc:
@@ -7284,6 +7314,31 @@ def _dateifrage(text: str) -> bool:
     return nachschauen.ist_dateifrage(text) and not getattr(_NETZ, "an", False)
 _SUCH_NACH = re.compile(r"^\s*(?:bitte\s+)?(?:such(?:e|t)?(?:\s+(?:mal|bitte|mir|uns|doch|kurz|schnell|jetzt|einmal|nochmal))*\s+nach|(?:please\s+)?search\s+for):?\s+(?P<sache>\S.*?)[\s.!?]*$",
                         re.I)
+
+
+_BEGRIFFSFRAGE = re.compile(r"^\s*(?:(?:und\s+)?was\s+(?:ist|sind|bedeutet|bedeuten|hei(?:ß|ss)t|versteht\s+man\s+unter)\s+(?:(?:ein|eine|einer|der|die|das|den|"
+                            r"eigentlich|genau)\s+)*(?P<begriff>[\w\-äöüÄÖÜß]+(?:\s+[\w\-äöüÄÖÜß]+)?)\s*\??\s*$|(?:erkl[äa]r\w*\s+(?:\w+\s+){0,4})?"
+                            r"(?:\w+\s+){0,3}unterschied\w*\s+zwischen\s+(?:(?:dem|der|den|einem|einer)\s+)?(?P<a>\S+)\s+und\s+(?:(?:dem|der|den|einem|einer)\s+)?"
+                            r"(?P<b>\S+)\s*[?.!]?\s*$)", re.I)
+_KEIN_BEGRIFF = re.compile(r"^(?:von|vom|in|im|aus|für|mit|des|der|unter|bei|zu|zum|zur|nach|über|unterschied\w*|heute|los|gerade|jetzt|neu(?:e[ns]?)?|"
+                           r"passiert|das|dies\w*|es|damit|dabei|genau|eigentlich|denn|so|hier|da)$", re.I)
+
+
+def begriffsfrage(frage: str) -> bool:
+    m = _BEGRIFFSFRAGE.match(" ".join((frage or "").split()))
+    if not m:
+        return False
+    teile = [x.strip("?.!,") for x in (m.group("begriff"), m.group("a"), m.group("b")) if x]
+    for teil in teile:
+        worte = teil.split()
+        if len(worte) == 2 and not worte[0][:1].islower():
+            return False
+        for w in worte:
+            if _KEIN_BEGRIFF.match(w) or sum(c.isupper() for c in w) >= 2 or (w[:1].islower() and re.search(r"ste[nrms]?$", w)):
+                return False
+        if not wissen.woerter(teil):
+            return False
+    return True
 
 
 def genannte_sache(verlauf: list[dict], ab, frage: str) -> str:

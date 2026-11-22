@@ -120,7 +120,7 @@ _KREATIV = re.compile(r"^\s*(?:bitte\s+)?(?:schreib\w*|erzähl\w*|erzaehl\w*|dic
                       r"(?:gedicht\w*|reim|reime|witze?|scherz|geschichte|kurzgeschichte|gutenachtgeschichte|märchen|maerchen|fabel|lied|liedtext|"
                       r"songtext|haiku|limerick|verse?|spruch|sprüche|zungenbrecher|rätsel|raetsel)\b", re.I)
 _THEMA = re.compile(r"\b(über|ueber|zum thema|rund um|zu(?:m|r)? \w+|von (?:einem|einer|einen|dem|der|den)|mit (?:einem|einer|dem|der))\b", re.I)
-_PERSOENLICHER_ANLASS = re.compile(r"\bfür\s+\S|\b(geburtstag\w*|hochzeit\w*|jubiläum\w*|taufe|firmung|kommunion|trauer\w*|begräbnis|"
+_PERSOENLICHER_ANLASS = re.compile(r"\bfür\s+\S|\b(?:über|ueber|von)\s+(?:mein(?:e[mnrs]?)?|unser(?:e[mnrs]?)?|dein(?:e[mnrs]?)?)\b|\b(geburtstag\w*|hochzeit\w*|jubiläum\w*|taufe|firmung|kommunion|trauer\w*|begräbnis|"
                                    r"beerdigung|abschied\w*|pension\w*|ruhestand|muttertag\w*|vatertag\w*|namenstag\w*|valentinstag\w*|"
                                    r"jahrestag\w*|matura\w*|sponsion\w*)\b", re.I)
 _WAS_TUN_WENN = re.compile(r"\bwas soll(?:te)? (?:ich|man|wir) (?:tun|machen)\b,? *(?:wenn|falls|bei)\b", re.I)

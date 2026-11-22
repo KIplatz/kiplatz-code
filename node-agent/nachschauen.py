@@ -48,7 +48,8 @@ _UA = wissen._UA
 LAENDER = {"at": "Österreich", "de": "Deutschland", "ch": "Schweiz", "gb": "Großbritannien", "us": "USA"}
 NAMENSNENNUNG = {"wetter": "Open-Meteo (CC BY 4.0)", "schlagzeilen": "", "suche": ""}
 
-_WETTER_STARK = re.compile(r"\b(wetter|wettervorhersage|wetterbericht|regnet|schneit|weather|raining|snowing)\b", re.I)
+_WETTER_STARK = re.compile(r"\b(wetter|wettervorhersage|wetterbericht|wetteraussicht\w*|wetterprognose\w*|wetterlage|regnet|schneit|"
+                           r"weather|raining|snowing)\b", re.I)
 _WETTER_MESS = re.compile(r"\b(wie warm|wie kalt|wie hei[ßs]|temperatur\w*|grad|how warm|how cold|how hot|temperatures?|degrees)\b", re.I)
 _WETTER_ZEIT = re.compile(r"\b(heute|morgen|[üu]bermorgen|drau[ßs]en|am wochenende|diese woche|n[äa]chste woche|in der nacht|nachts|tags[üu]ber|hat es|haben wir|jetzt|gerade|"
                           r"today|tomorrow|day after tomorrow|outside|this weekend|this week|next week|tonight|right now)\b", re.I)
@@ -58,11 +59,11 @@ _FRAGEFORM = re.compile(r"\b(wird es|ist es|gibt es|kommt|bleibt es|scheint|will
 _KEIN_WETTER = re.compile(r"\b(warum|wieso|weshalb|wie entsteh\w*|wie weit|entfernt|entfernung|sekunden|was ist|was sind|was bedeutet|fahrenheit|in celsius|in grad celsius|"
                           r"why|how (?:do|does) \w+ form|how far|distance|seconds|what is an?|what does|to celsius|in celsius|boil\w*|oven)\b", re.I)
 _ERKLAERFRAGE = re.compile(r"\b(unterschied\w*|wie genau|wie (?:wird|werden) [\w ]{1,30} erstellt|was bedeutet|was hei[ßs]t|warum|wieso|weshalb|wie funktionier\w*|wie entsteh\w*|"
-                           r"woher|erkl[äa]r\w*|definition|difference|why|how (?:does|do|is) [\w ]{1,30}(?:work|made|formed)|explain\w*)\b", re.I)
+                           r"woher|versteht man unter|erkl[äa]r\w*|definition|difference|why|how (?:does|do|is) [\w ]{1,30}(?:work|made|formed)|explain\w*)\b", re.I)
 _SCHREIBEN = re.compile(r"\b(schreib\w*|gedicht|geschichte|erkl[äa]r\w*|was ist ein|was bedeutet|übersetz\w*|uebersetz\w*|write|poem|story|explain\w*|translat\w*)\b", re.I)
 _SCHLAGZEILEN = re.compile(r"\b(schlagzeil|nachrichten|news\b|neuigkeit|was ist (heute |gerade )?(passiert|los)|was gibt es neues|aktuelle meldung|"
                            r"headlines?|what happened today|what(?:'s| is) new today)", re.I)
-_WETTER_WORT = re.compile(r"\b(wetter|wettervorhersage|wetterbericht|weather|forecast)\b", re.I)
+_WETTER_WORT = re.compile(r"\b(wetter|wettervorhersage|wetterbericht|wetteraussicht\w*|wetterprognose\w*|wetterlage|weather|forecast)\b", re.I)
 _WETTER_TAG = re.compile(r"\b(heute|morgen|[üu]bermorgen|am wochenende|diese woche|n[äa]chste woche|in der nacht|today|tomorrow|this weekend|this week|next week|tonight)\b", re.I)
 _RECHNEN = re.compile(r"\b(zu je|je stück|pro stück|stückpreis|zusammen|insgesamt|gesamt|summe|mal\b|prozent|rabatt|umrechn\w*|in meilen|in kilometer|in euro|wie viele tage)\b|\d\s*x\s*\d|[×*]\s*\d|\d\s*[×*]|%", re.I)
 _SUCHE = re.compile(r"\b(wie ?viel|wie hoch|wie teuer|was kostet|kosten|preis|f[öo]rderung|zuschuss|frist|termin|[öo]ffnungszeit|gesetz|steuer|aktuell|derzeit|neu(?:e|en|es)?\b|20(?:2[4-9]|3\d)|wer ist|wann ist|wo ist|wo gibt|"
@@ -390,13 +391,17 @@ def suchbegriffe_regel(text: str, frueher: str = "") -> str:
     vergleich = belege.vergleichsfrage(text)
 
     def worte(t: str) -> list[str]:
-        weg = {m.lower() for m in re.findall(r"\b(?:nicht|kein\w*)\s+(?:(?:von|um|über|nach|mit)\s+)?(?:(?:einer|einem|einen|eine|der|die|das|den|dem)\s+)?([\wäöüÄÖÜß-]+)", t or "", re.I)}
+        weg = {m.lower() for m in re.findall(r"\b(?:nicht|kein\w*)\s+(?:(?:von|um|über|nach|mit)\s+)?(?:(?:einer|einem|einen|eine|der|die|das|den|dem)\s+)?([\wäöüÄÖÜß-]+)", t or "", re.I)
+               if m[:1].isupper()}
+        verneint = {m.lower() for m in re.findall(r"\bnicht\s+([a-zäöüß][\wäöüß-]*)", t or "") if m.lower() not in _NICHT_SUCHEN}
         out = []
         for w in re.findall(r"[\wäöüÄÖÜß-]+(?:/[\wäöüÄÖÜß-]+)*", t or ""):
             if vergleich and _VERGLEICH_WUNSCH.match(w):
                 continue
             if len(w) < 2 or w.lower() in _NICHT_SUCHEN or w.lower() in weg or w.lower() in out:
                 continue
+            if w.lower() in verneint and "nicht" not in out:
+                out.append("nicht")
             out.append(w)
         return out
     eigen = worte(text)

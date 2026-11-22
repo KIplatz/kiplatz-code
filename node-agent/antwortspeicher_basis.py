@@ -234,6 +234,8 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
      "stammen und werden verworfen, Antworten mit Suche bleiben"),
     ("2026-11-22b", frozenset({"ohne_suche"}), "Mit Bewertungsmodell kamen schwach bewertete Stellen zu einem anderen Thema ans Modell "
      "(Brutto und Netto mit Biodiesel, Nachmessung nach 22a); Antworten ohne Suche von vorher werden verworfen"),
+    ("2026-11-22c", frozenset({"ohne_suche"}), "Begriffsfragen nur mit Stellen über den Begriff, eine hoch bewertete fremde Stelle deckt die Frage nicht mehr "
+     "(Staatsbürgerschaft ohne Suche, „Bundesamt für Justiz“); Antworten ohne Suche von vorher werden verworfen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())

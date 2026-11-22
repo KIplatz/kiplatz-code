@@ -1,6 +1,6 @@
 {
- "pruefwert": "a9fd42adfcb595f4f7e1053b",
+ "pruefwert": "4d0cfe55005c59e952c923fe",
  "mindest_bau": "2026-10-26k",
- "erneuert": "2026-11-22b",
- "grund": "2026-11-22b: schwach bewertete Stellen unter SCHWELLE nur mit Titelwort der Frage, auch mit Bewertungsmodell (Nachmessung nach 22a)"
+ "erneuert": "2026-11-22c",
+ "grund": "2026-11-22c: Begriffsfragen nur mit Stellen über den Begriff, Abdeckung nur mit Titelwort, eigene Suchwörter bei der ersten Frage, Verneinung bleibt in der Suche (Zufallsfragen 22.11., gegengelesen)"
 }
