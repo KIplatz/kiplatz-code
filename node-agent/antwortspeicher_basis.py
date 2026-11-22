@@ -250,6 +250,8 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
      "(vorher deutsche Sicht: „Pension ist für Beamte“); Antworten mit Suche von vorher werden verworfen"),
     ("2026-11-22i", frozenset({"ohne_suche"}), "Begriffsfragen zu Abkürzungen („Was ist eine E-Card?“ → „Identitätskarte vom Bundesamt für Justiz“) werden geerdet; "
      "Antworten ohne Suche von vorher werden verworfen"),
+    ("2026-11-22j", frozenset({"suche"}), "Weltweit statt österreichisch: Fragen ohne Land suchten seit 22e auf Österreich zugeschnitten; "
+     "Antworten mit Suche von vorher werden verworfen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())

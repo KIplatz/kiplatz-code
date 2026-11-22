@@ -199,6 +199,9 @@ _NICHT_AT = re.compile(r"\bDeutschland|\bdeutsche[nmrs]?\b|\bBundesrepublik\b|\b
 _SCHUTZ = re.compile(r"https?://\S+|www\.\S+|\b[\w-]+(?:\.[\w-]+)+/\S*|„[^“”\n]*[“”]|\"[^\"\n]*\"|»[^«\n]*«")
 
 
+_OESTERREICH_BEZUG = re.compile(r"(?i)\b(?:österreich\w*|oesterreich\w*|austria\w*)")
+
+
 def auf_oesterreichisch(antwort: str, frage: str = "") -> str:
     t = str(antwort or "")
     f = str(frage or "")
@@ -206,12 +209,13 @@ def auf_oesterreichisch(antwort: str, frage: str = "") -> str:
         return t
     try:
         import region
-        for x in (f, t):
-            r = region.erkennen(x)
-            if r is not None and r.land != "at":
-                return t
+        gebiete = [region.erkennen(x) for x in (f, t)]
     except Exception:
-        pass
+        gebiete = []
+    if any(r is not None and r.land != "at" for r in gebiete):
+        return t
+    if not (any(r is not None and r.land == "at" for r in gebiete) or _OESTERREICH_BEZUG.search(f + " " + t)):
+        return t
     muster = [(m, e) for m, e in _AT_TAUSCH if not m.search(f)]
     if not muster:
         return t

@@ -7099,12 +7099,10 @@ _OESTERREICH = re.compile(r"\b(?:österreich|oesterreich|austria)\w*", re.I)
 
 def laender_frage(frage: str) -> bool:
     f = str(frage or "")
-    if not regel_ohne_ort(f):
+    if not regel_ohne_ort(f) or not _OESTERREICH.search(f):
         return False
     r = region.erkennen(f)
-    if _OESTERREICH.search(f):
-        return r is None or (r.land == "at" and not r.gebiet)
-    return r is None and ohne_land_oesterreich(f)
+    return r is None or (r.land == "at" and not r.gebiet)
 
 
 _REGELVERB = re.compile(r"\b(?:darf|dürfen|darfst|muss|müssen|musst|erlaubt|verboten|pflicht\w*|gilt|gelten|gültig\w*|frist\w*|vorgeschrieben)\b", re.I)
@@ -7438,9 +7436,6 @@ def frage_leitzeilen(frage: str) -> str:
     r = region.erkennen(frage)
     if r is not None:
         zeilen.append(f"Die Frage betrifft {r.text()}. Nimm nur Angaben, die dort gelten.")
-    elif ohne_land_oesterreich(frage):
-        zeilen.append("Die Frage nennt kein Land. Ist eine Angabe je Land verschieden (Fristen, Preise, Regeln), nimm die für Österreich und "
-                      "sag dazu, dass sie für Österreich gilt.")
     ri = nachschauen.richtung(frage)
     if ri == "naechst":
         zeilen.append("Gefragt ist das Nächste ab heute: nimm den ersten Termin nach dem heutigen Datum, nie einen vergangenen.")
@@ -7471,21 +7466,7 @@ def such_sprache(frage: str) -> str:
     if ki_laufzeit.original():
         return "en"
     r = region.erkennen(frage)
-    if r is None and ohne_land_oesterreich(frage):
-        return region.SPRACHE["at"]
     return r.sprache if r else ""
-
-
-def ohne_land_oesterreich(frage: str) -> bool:
-    f = str(frage or "")
-    if region.erkennen(f) is not None or ki_laufzeit.original() or not _DEUTSCH.search(f):
-        return False
-    if woerterbuch_at._NICHT_AT.search(f):
-        return False
-    return bool(belege.regelfrage(f) or nachschauen._LANDABHAENGIG.search(f))
-
-
-_DEUTSCH = re.compile(r"\b(?:der|das|ist|sind|wie|wer|wann|ein|eine|einen|ich|darf|muss|kostet|gilt|lange|viel|nicht|und|für)\b", re.I)
 
 
 def englisch_direkt(frage: str) -> bool:

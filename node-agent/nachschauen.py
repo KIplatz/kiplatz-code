@@ -413,7 +413,7 @@ def vergleich_rueckfrage(nachrichten: list[dict]) -> tuple[str, str] | None:
 
 
 LAND_RUECKFRAGE = "Für welches Land möchtest du das wissen? Das ist von Land zu Land verschieden, etwa in Österreich, Deutschland oder der Schweiz."
-LAND_RUECKFRAGE_EN = "Which country do you want to know this for? It differs from country to country, for example in Austria, Germany or Switzerland."
+LAND_RUECKFRAGE_EN = "Which country do you want to know this for? The rules differ from country to country."
 _LANDABHAENGIG = re.compile(
     r"(?i)\b(?:(?-i:[A-ZÄÖÜ][\wäöüß]*steuer|Steuer)(?!ung|gerät|rad|knüppel|mann|bord|zeichen|leute)\w*|\w*steuer(?:satz|sätze|n|erklärung|ausgleich|klasse\w*|"
     r"freibetrag|bescheid|nummer|berater\w*)\b|abgaben\b|\w+abgabe(?<!stimmabgabe)(?<!wärmeabgabe)\b|\w*beihilfe\w*|familienbonus|kinderbetreuungsgeld|"
@@ -425,18 +425,32 @@ _LANDABHAENGIG = re.compile(
     r"gewerbeanmeldung|kilometergeld|pendler\w*|lohnzettel|abfertigung|zuverdienst\w*|dazuverdien\w*|geringfügig\w*|mutterschutz|vaterschaft\w*|"
     r"scheidung\w*|unterhalt(?:szahlung\w*|spflicht\w*|sanspruch\w*|svorschuss)|erbrecht\w*|erbschaft\w*|absetzen|promille\w*|tempolimit|"
     r"höchstgeschwindigkeit|ab\s+(?:wann|welchem\s+alter)\s+(?:darf|dürfen|darfst|muss|müssen)\s+(?:man|ich|du|jugendliche\w*|kinder)|"
-    r"tax(?:es|ation)?|minimum wage|passport|driving licen[cs]e|citizenship)\b")
-_KEINE_LANDFRAGE = re.compile(r"(?i)^\s*(?:was\s+(?:ist|sind|bedeutet|bedeuten|heißt|war|waren)\b|wer\b|seit\s+wann\b|warum\b|wieso\b|weshalb\b|"
-                              r"welche\w*\s+[\wäöüß-]+\s+(?:hat|hatte|haben|bekam|bekamen)\b)")
+    r"tax(?:es|ation)?|minimum wage|passport|driving licen[cs]e|citizenship|"
+    r"retirement age|state pensions?|pension age|retire|social security|maternity leave|paternity leave|parental leave|sick leave|sick pay|notice period|"
+    r"annual leave|paid leave|paid time off|vacation days|holiday entitlement|overtime|severance|vat|sales tax|stamp duty|child benefit|child support|"
+    r"alimony|custody|unemployment|speed limit|drinking age|legal age|blood alcohol|is it legal to|driver'?s licen[cs]e|health insurance|"
+    r"voting age|age of consent|inheritance (?:tax|law)|divorce (?:law|laws|cost|costs|papers|settlement|rules)|file for divorce|tenant rights?|"
+    r"rent increase|evict\w*|security deposit|work permit|residence permit|naturali[sz]ation|"
+    r"(?:how old do you have to be|what age can you|at what age can you)\s+(?:to\s+)?(?:drive|drink|vote|work|marry|get married|buy|smoke|"
+    r"leave school|retire|get a tattoo|rent a car|gamble))\b")
+_KEINE_LANDFRAGE = re.compile(r"(?i)^(?!.*\b(?:mein\w*|aktuell\w*|derzeit|jetzt|heuer|my|now|current\w*|this year)\b)\s*(?:"
+                              r"was\s+(?:ist|sind|war|waren)\s+(?!der\b|die\b|das\b|den\b|dem\b)|was\s+(?:bedeutet|bedeuten|heißt)\b|"
+                              r"wer\s+(?:hat|war|ist|wurde)\b.*\b(?:erfunden|eingeführt|gegründet|entdeckt|abgeschafft)\b|"
+                              r"seit\s+wann\b|warum\b|wieso\b|weshalb\b|welche\w*\s+[\wäöüß-]+\s+(?:hat|hatte|haben|bekam|bekamen)\b|"
+                              r"what\s+(?:is|are|was|were)\s+(?!the\b)|what\s+does\b|what's\s+(?!the\b)|"
+                              r"who\s+(?:invented|introduced|founded|discovered|abolished|created)\b|why\b|since\s+when\b|when\s+was\b|explain\b)")
 _NUR_AT = re.compile(r"(?i)\b(?:familienbeihilfe|klimaticket|kollektivvertrag\w*|finanzonline|e-card|ögk|ams\b|"
                      r"matura|lehrabschluss|abfertigung neu|pensionsversicherungsanstalt|pva\b)")
 _NUR_DE = re.compile(r"(?i)\b(?:bürgergeld|elterngeld|kindergeld|minijob\w*|abitur|bafög|elster|bundestag\w*|hartz\w*)")
+_NUR_UK_US = re.compile(r"(?i)\b(?:council tax|nhs|hmrc|national insurance|universal credit|stamp duty land tax|401\(?k\)?|irs|social security number|"
+                        r"medicare|medicaid|w-?2|1099)\b")
 
 
 _SCHREIBAUFTRAG = re.compile(r"(?i)^\s*(?:ein(?:en|e)?\s+)?(?:brief|e-?mail|mail|schreiben|antrag|einspruch|beschwerde|kündigungsschreiben|vorlage)\b"
-                             r"|\b(?:formulier\w*|verfass(?:e|en|t|st)|entwirf|entwurf)\b")
+                             r"|\b(?:formulier\w*|verfass(?:e|en|t|st)|entwirf|entwurf|draft|compose|rewrite|proofread)\b")
 _EIGENES_DOKUMENT = re.compile(r"(?i)\b(?:mein|meine[mnrs]?|unser|unsere[mnrs]?)\s+[\wäöüß-]*(?:vertrag|bescheid|zettel|brief|rechnung|abrechnung|"
-                               r"dokument\w*|unterlagen|befund|polizze)\b")
+                               r"dokument\w*|unterlagen|befund|polizze)\b|\b(?:my|our)\s+(?:\w+\s+)?(?:contract|payslip|pay slip|lease|letter|document|"
+                               r"statement|bill|invoice|policy)\b")
 
 
 def ist_land_rueckfrage(text: str) -> bool:
@@ -460,7 +474,8 @@ def land_rueckfrage(nachrichten: list[dict]) -> tuple[str, str] | None:
         return None
     gespraech = " ".join(str(n.get("content", "")) for n in nachrichten if n.get("role") == "user")
     import region
-    if region.erkennen(gespraech) is not None or belege.laender_in(gespraech) or _NUR_AT.search(gespraech) or _NUR_DE.search(gespraech):
+    if (region.erkennen(gespraech) is not None or belege.laender_in(gespraech) or _NUR_AT.search(gespraech) or _NUR_DE.search(gespraech)
+            or _NUR_UK_US.search(gespraech)):
         return None
     return LAND_RUECKFRAGE, LAND_RUECKFRAGE_EN
 
