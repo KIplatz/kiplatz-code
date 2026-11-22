@@ -264,8 +264,64 @@ class _Text(HTMLParser):
         self.titel_liste: list[str] = []
         self._still = 0
         self._in_titel = False
+        self._tabellen: list[dict] = []
+
+    def _zeile(self) -> dict | None:
+        return self._tabellen[-1] if self._tabellen else None
+
+    def _tabelle_start(self, tag, attrs):
+        if tag == "table":
+            self._tabellen.append({"label": "", "zelle": 0, "fang": None, "span": "", "span_rest": 0, "offen": False, "laenge": 0,
+                                   "geerbt": False})
+            return
+        z = self._zeile()
+        if z is None:
+            return
+        if tag == "tr":
+            z["zelle"], z["fang"], z["offen"], z["laenge"], z["geerbt"] = 0, None, False, 0, False
+            if z["span_rest"] > 0:
+                z["label"], z["zelle"], z["geerbt"] = z["span"], 1, True
+                z["span_rest"] -= 1
+            else:
+                z["label"] = ""
+        elif tag in ("td", "th"):
+            self.teile.append(" ")
+            z["zelle"] += 1
+            z["laenge"] = 0
+            a = dict(attrs)
+            if z["zelle"] == 1 and (tag == "td" or (a.get("scope") or "").lower() == "row"):
+                z["fang"] = ""
+                try:
+                    z["span_rest"] = max(0, int(a.get("rowspan") or 1) - 1)
+                except ValueError:
+                    z["span_rest"] = 0
+            elif z["label"] and (z["zelle"] > 2 or z["geerbt"]):
+                z["offen"] = True
+        elif tag in ("p", "br", "div", "li") and z["fang"] is not None:
+            z["fang"] += " "
+        elif (tag in ("p", "br", "div", "li") and z["label"] and z["zelle"] > 1 and z["laenge"] < 1500
+              and (z["zelle"] > 2 or z["geerbt"] or z["laenge"] > 0)):
+            z["offen"] = True
+
+    def _tabelle_ende(self, tag):
+        z = self._zeile()
+        if tag == "table" and z is not None:
+            self._tabellen.pop()
+        elif z is not None and tag in ("td", "th") and z["fang"] is not None:
+            label = " ".join(z["fang"].split()).rstrip(":")
+            z["fang"] = None
+            ok = 0 < len(label) <= 60 and len(label.split()) <= 8 and not re.fullmatch(r"[\d\s.,:;/()%€$+–-]+", label)
+            z["label"] = label if ok else ""
+            z["span"] = z["label"] if z["span_rest"] else ""
+            if not ok:
+                z["span_rest"] = 0
+        elif z is not None and tag == "tr":
+            self.teile.append("\n\n")
+            z["label"], z["zelle"], z["offen"] = "", 0, False
 
     def handle_starttag(self, tag, attrs):
+        if not self._still:
+            self._tabelle_start(tag, attrs)
         if tag in ("script", "style", "noscript", "svg", "nav", "footer", "header", "aside"):
             self._still += 1
         if tag == "title" and not self._still:
@@ -281,11 +337,21 @@ class _Text(HTMLParser):
             self._in_titel = False
         if tag in ("p", "div", "li", "h1", "h2", "h3", "h4", "tr", "section", "article"):
             self.teile.append("\n")
+        if not self._still:
+            self._tabelle_ende(tag)
 
     def handle_data(self, data):
         if self._in_titel:
             self.titel_liste[-1] += data
         elif not self._still:
+            z = self._zeile()
+            if z is not None and z["fang"] is not None:
+                z["fang"] += data
+            elif z is not None and z["offen"] and data.strip():
+                self.teile.append(z["label"] + ": ")
+                z["offen"] = False
+            if z is not None:
+                z["laenge"] += len(data.strip())
             self.teile.append(data)
 
 
@@ -1194,9 +1260,17 @@ def live_lesen(adresse: str, frage: str, *, n: int = TREFFER, oeffner=None, extr
         teile.append(block)
     teile += abschnitte(rest)
     fw = set(woerter(ohne_fragewendung(frage)))
+    def gleich(ww: list[str]) -> tuple[int, float]:
+        n, oft = 0, 0.0
+        for q in fw:
+            k = sum(1 for w in ww if w == q or (len(q) >= 5 and len(w) >= 5 and (w.startswith(q) or (q.startswith(w) and 3 * len(w) >= 2 * len(q)))))
+            n += 1 if k else 0
+            oft += min(k, 3)
+        return n, oft
+    passt = [gleich(woerter(t)) for t in teile]
     mass = mass_punkte(frage) if extra is None else None
     zusatz = [(float(extra(t)) if extra is not None else 0.0) + (mass(t) if mass is not None else 0.0) for t in teile]
-    nach_wort = sorted(range(len(teile)), key=lambda i: -(len(fw & set(woerter(teile[i]))) + 2.0 * zusatz[i]))
+    nach_wort = sorted(range(len(teile)), key=lambda i: (-(passt[i][0] + 2.0 * zusatz[i]), -passt[i][1]))
     gewaehlt: list[int] = []
     vorn_frei = any(zusatz) if mass is None else any(z >= 1.0 for z in zusatz)
     for i in (list(range(min(2, len(teile)))) if not vorn_frei else []) + nach_wort:
@@ -1204,7 +1278,7 @@ def live_lesen(adresse: str, frage: str, *, n: int = TREFFER, oeffner=None, extr
             gewaehlt.append(i)
         if len(gewaehlt) >= n:
             break
-    return q, text, [Treffer(q, teile[i], round(float(len(fw & set(woerter(teile[i])))), 3)) for i in gewaehlt]
+    return q, text, [Treffer(q, teile[i], round(float(passt[i][0]), 3)) for i in gewaehlt]
 
 
 def treffer_mischen(*listen: list[Treffer], n: int = TREFFER) -> list[Treffer]:

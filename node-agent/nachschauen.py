@@ -717,7 +717,8 @@ class Nachschauer:
 
     def suche_runde(self, anfragen: list[str], frage: str, *, sprache: str = "", zeit: str = "", ausser=frozenset(), heute=None,
                     ziel: tuple = (None, None), lesen_max: int = 0, seiten_max: int = 0, warten_s: float = 0.0, liste_immer: bool = False,
-                    preis: bool = False, kern: frozenset[str] | None = None, merk: dict | None = None) -> tuple[list[Ergebnis], list[str], str]:
+                    preis: bool = False, kern: frozenset[str] | None = None, merk: dict | None = None,
+                    stellen: int = 4) -> tuple[list[Ergebnis], list[str], str]:
         from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
         from datetime import date as _date
         heute = heute or _heute_frager()
@@ -757,7 +758,7 @@ class Nachschauer:
 
         def eine(t: dict):
             try:
-                return t, wissen.live_lesen(t["adresse"], frage, n=4, oeffner=self._seiten_oeffner, fuer_frage=True,
+                return t, wissen.live_lesen(t["adresse"], frage, n=stellen, oeffner=self._seiten_oeffner, fuer_frage=True,
                                             extra=(lambda s: sum(f(s) for f in punkte)) if punkte else None)
             except wissen.WissenError:
                 sperren(t["adresse"])
@@ -1383,9 +1384,9 @@ def _rein(s: str) -> str:
     return " ".join(html.unescape(s).split())
 
 
-def als_quelle(e: Ergebnis) -> tuple[wissen.Quelle, list[wissen.Treffer]]:
+def als_quelle(e: Ergebnis, n: int = 4) -> tuple[wissen.Quelle, list[wissen.Treffer]]:
     q = wissen.Quelle(wissen.kennung_fuer("nachgeschaut", e.adresse), "nachgeschaut", e.titel, e.adresse, _jetzt().strftime("%Y-%m-%dT%H:%M:%SZ"), len(e.text), e.gueltig_bis)
-    return q, [wissen.Treffer(q, t, 1.0) for t in wissen.abschnitte(e.text)[:4]]
+    return q, [wissen.Treffer(q, t, 1.0) for t in wissen.abschnitte(e.text)[:n]]
 
 
 __all__ = ["Auftrag", "Ergebnis", "Nachschauer", "NachschauError", "erkennen", "gueltig_bis", "als_quelle", "FEEDS", "WETTER_API", "ORTE_API"]

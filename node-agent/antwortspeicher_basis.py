@@ -236,6 +236,9 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
      "(Brutto und Netto mit Biodiesel, Nachmessung nach 22a); Antworten ohne Suche von vorher werden verworfen"),
     ("2026-11-22c", frozenset({"ohne_suche"}), "Begriffsfragen nur mit Stellen über den Begriff, eine hoch bewertete fremde Stelle deckt die Frage nicht mehr "
      "(Staatsbürgerschaft ohne Suche, „Bundesamt für Justiz“); Antworten ohne Suche von vorher werden verworfen"),
+    ("2026-11-22d", frozenset({"suche"}), "Tabellenzeilen tragen ihre Beschriftung, die Stellen einer gelesenen Seite werden auch nach Wortanfängen gewählt, "
+     "mit Bewertungsmodell bewertet es bis zu 30 gelesene Stellen statt 12 (Ausgehzeit „nur in Begleitung“ aus der Kärnten-Zeile, Staatsbürgerschaft "
+     "„fünf Jahre“); Antworten mit Suche von vorher werden verworfen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())

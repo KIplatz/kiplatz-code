@@ -176,4 +176,50 @@ def treffer(frage: str):
     return [wissen.Treffer(q, t, 9.5 - i * 0.1) for i, t in enumerate(texte)]
 
 
-__all__ = ["WOERTER", "begriffe", "text", "treffer", "QUELLE"]
+_AT_TAUSCH: tuple[tuple[re.Pattern, str], ...] = tuple((re.compile(m), e) for m, e in (
+    (r"\bJanuar\b", "Jänner"),
+    (r"(?<!private )(?<!privaten )(?<!privater )\bRentenversicherung(?=en\b|\b)", "Pensionsversicherung"),
+    (r"\bRentenbeitr(?=ag\b|ages\b|äge\b|ägen\b)", "Pensionsbeitr"),
+    (r"\bRentenalter\b", "Pensionsalter"),
+    (r"\bAltersrente(?=n?\b)", "Alterspension"),
+    (r"\bRentnerinnen\b", "Pensionistinnen"),
+    (r"\bRentnerin\b", "Pensionistin"),
+    (r"\bin Rente(?= (?:gehen|geht|gehst|ging|gingen|gegangen|ist|sind|bin|bist|sein)\b)", "in Pension"),
+    (r"\bMehrwertsteuer(?=satz\b|sätze\b|sätzen\b|\b)", "Umsatzsteuer"),
+))
+_NICHT_AT = re.compile(r"\bDeutschland|\bdeutsche[nmrs]?\b|\bBundesrepublik\b|\bBRD\b|\bBundestag|\bBürgergeld|\bSchweiz|\bschweizer|"
+                       r"\bLiechtenstein|\bSüdtirol|\bGerman|\bSwiss\b|\bSwitzerland\b", re.I)
+_SCHUTZ = re.compile(r"https?://\S+|www\.\S+|\b[\w-]+(?:\.[\w-]+)+/\S*|„[^“”\n]*[“”]|\"[^\"\n]*\"|»[^«\n]*«")
+
+
+def auf_oesterreichisch(antwort: str, frage: str = "") -> str:
+    t = str(antwort or "")
+    f = str(frage or "")
+    if not t or _NICHT_AT.search(t) or _NICHT_AT.search(f):
+        return t
+    try:
+        import region
+        for x in (f, t):
+            r = region.erkennen(x)
+            if r is not None and r.land != "at":
+                return t
+    except Exception:
+        pass
+    muster = [(m, e) for m, e in _AT_TAUSCH if not m.search(f)]
+    if not muster:
+        return t
+    teile, pos = [], 0
+    for m in _SCHUTZ.finditer(t):
+        teile.append((t[pos:m.start()], True))
+        teile.append((m.group(0), False))
+        pos = m.end()
+    teile.append((t[pos:], True))
+    out = []
+    for stueck, frei in teile:
+        if frei:
+            for m, e in muster:
+                stueck = m.sub(e, stueck)
+        out.append(stueck)
+    return "".join(out)
+
+__all__ = ["WOERTER", "begriffe", "text", "treffer", "QUELLE", "auf_oesterreichisch"]

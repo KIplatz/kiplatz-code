@@ -1,6 +1,6 @@
 {
- "pruefwert": "4d0cfe55005c59e952c923fe",
+ "pruefwert": "87cb359435d8fee68a876db3",
  "mindest_bau": "2026-10-26k",
- "erneuert": "2026-11-22c",
- "grund": "2026-11-22c: Begriffsfragen nur mit Stellen über den Begriff, Abdeckung nur mit Titelwort, eigene Suchwörter bei der ersten Frage, Verneinung bleibt in der Suche (Zufallsfragen 22.11., gegengelesen)"
+ "erneuert": "2026-11-22d",
+ "grund": "Bau 22d: Tabellenzeilen mit Beschriftung, Stellenwahl nach Wortanfang, mehr Stellen fürs Bewertungsmodell, österreichische Amtswörter"
 }

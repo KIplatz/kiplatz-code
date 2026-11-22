@@ -1414,7 +1414,7 @@ class Api:
                     lauf["treu_gesucht"] = True
                 sprache = mehr.pop("sprache", "") or such_sprache_frage
                 erg["r"] = self._nachschauer.suche_runde(anfragen, frage, sprache=sprache, zeit=nachschauen.zeitraum(frage),
-                                                          ausser=frozenset(), ziel=zeitziel(frage), merk=lauf, **mehr)
+                                                          ausser=frozenset(), ziel=zeitziel(frage), merk=lauf, stellen=self._live_stellen(), **mehr)
             except BaseException as exc:
                 erg["e"] = exc
 
@@ -1582,7 +1582,8 @@ class Api:
         try:
             ergebnisse, gelesen, woher = neben["holen"]() if neben is not None else self._nachschauer.suche_runde(
                 anfragen, frage, sprache=markt or such_sprache(frage), zeit=nachschauen.zeitraum(frage),
-                ausser=frozenset(lauf["gelesen"]) if lauf else frozenset(), ziel=zeitziel(frage), kern=kern, merk=lauf, **mehr)
+                ausser=frozenset(lauf["gelesen"]) if lauf else frozenset(), ziel=zeitziel(frage), kern=kern, merk=lauf,
+                stellen=self._live_stellen(), **mehr)
         except app_core.AppError as exc:
             _log(self._core, f"ABGELEHNT nachschauen suche: {exc.code}: {exc.detail}")
             if lauf is not None:
@@ -1595,7 +1596,8 @@ class Api:
             lauf["gelesen"] |= set(gelesen)
         je_seite: list[list[wissen.Treffer]] = []
         for e in ergebnisse:
-            _q, tr = nachschauen.als_quelle(e)
+            n_stellen = self._live_stellen()
+            _q, tr = nachschauen.als_quelle(e, n=n_stellen + 2 if n_stellen > 4 else 4)
             je_seite.append(tr)
             self._nachgeschaut_merken(e)
         if lauf is not None and einkauf.ist_einkauf(frage):
@@ -1630,7 +1632,14 @@ class Api:
         anfragen = nachschauen.anfragen_aufteilen([q for q in anfragen if q and q.strip()], frage)[:4] or [frage]
         gelesen = (f"Jetzt im Internet gesucht ({woher}), 1 Seite gelesen, {wohin}." if seiten == 1
                    else f"Jetzt im Internet gesucht ({woher}), {seiten} Seiten gelesen, {wohin}.")
-        return out[:24 if vergleich else 12], f"{gelesen} {gesucht_satz(frage, anfragen, r.land if r else '')}"
+        grenze = 24 if vergleich else (bewertung.MAX_KANDIDATEN if self._live_stellen() > 4 else 12)
+        return out[:grenze], f"{gelesen} {gesucht_satz(frage, anfragen, r.land if r else '')}"
+
+    def _live_stellen(self) -> int:
+        try:
+            return 6 if self._bewertung.bereit() else 4
+        except Exception:
+            return 4
 
     @staticmethod
     def _deckt_ab(frage: str, treffer: list[wissen.Treffer]) -> bool:
@@ -2500,7 +2509,7 @@ class Api:
             "Diese Antwort hat ein PC der Community schon einmal geprüft erarbeitet; sie kam fertig aus dem Antwort-Speicher, aus der Kopie "
             "auf diesem PC.")).strip()
         _log(self._core, "OK antwort aus der Kopie des Antwort-Speichers, ohne Modell")
-        return e["text"], ls
+        return woerterbuch_at.auf_oesterreichisch(e["text"], suchfrage(nachrichten)), ls
 
     def _antwort_fuer_mitglied_ohne_schritt(self, nachrichten: list[dict], auszuege: list[dict], fuer: str, *, frisch: bool = False, teil_melden=None,
                                             skill: dict | None = None, privat: bool | str = False, messen: bool = False,
@@ -2762,6 +2771,7 @@ class Api:
             if fuer != "dich":
                 lieferschein["abschnitte"] = self._abschnitte_mitgeben(quellen)
             antwort_text = ohne_auszuege(ohne_markdown(a.text)) or "(keine Antwort erhalten)"
+            antwort_text = woerterbuch_at.auf_oesterreichisch(antwort_text, suchfrage(nachrichten))
             if lieferschein.get("videos") or re.search(r"youtube\.com/watch\?|youtu\.be/", antwort_text):
                 bisher = list(lieferschein.get("videos") or [])
                 for nummer in nachschauen._VIDEO_NUMMER.findall(antwort_text):
