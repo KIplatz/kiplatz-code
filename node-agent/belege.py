@@ -759,7 +759,7 @@ _HEUTE_GRUND = re.compile(r"(?i)\b(?:feiertag\w*|holiday\w*|wegen|due\s+to|becau
                           r"renovier\w*|umbau\w*|christmas|weihnacht\w*|ostern|easter|neujahr|new\s+year)\b")
 _WOCHENTAGE_DE_EN = (("montag", "monday"), ("dienstag", "tuesday"), ("mittwoch", "wednesday"), ("donnerstag", "thursday"), ("freitag", "friday"),
                      ("samstag", "saturday"), ("sonntag", "sunday"))
-_KEIN_SUBJEKT = {"uhr", "the", "on", "am", "an", "der", "die", "das", "it", "es", "er", "sie", "von", "bis", "from", "to", "and", "und", "other",
+_KEIN_SUBJEKT = {"pm", "uhr", "the", "on", "am", "an", "der", "die", "das", "it", "es", "er", "sie", "von", "bis", "from", "to", "and", "und", "other",
                  "days", "öffnungszeiten", "öffnungszeit", "geschäft", "filiale", "museum", "hours", "opening", "usually", "normally", "sonst",
                  "normalerweise", "its", "ihre", "seine", "jänner", "januar", "februar", "märz", "april", "mai", "juni", "juli", "august", "september",
                  "oktober", "november", "dezember", "january", "february", "march", "may", "june", "july", "october", "december"}

@@ -119,3 +119,13 @@ def test_a33_zwischen_und_aber_keine_aufzaehlung():
 def test_a33_punkte_nur_bei_zahlenfragen():
     assert wissen.bereich_punkte("Rezept für 4 Personen") is None
     assert wissen.bereich_punkte("Wie hoch ist die Pendlerpauschale bei 30 km?") is not None
+
+
+def test_a35_nachmessung_am_pm():
+    a = ("The Louvre is closed today. Normally, it opens from 9:00 AM to 6:00 PM on Sundays, except it stays open until 9:00 PM on Wednesdays "
+         "and Fridays. Entry closes one hour before closing time.")
+    assert belege.heute_widerspruch(a, 6) == ["The Louvre is closed today."]
+
+
+def test_a35_namen_mit_zwei_zeichen_bleiben_gegenstand():
+    assert belege.heute_widerspruch("A1 hat heute geschlossen. Der Magenta-Shop hat am Sonntag von 9:00 bis 18:00 offen.", 6) == []

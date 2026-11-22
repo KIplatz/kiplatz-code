@@ -14,6 +14,9 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-11-22p": [
+        "Sagt eine Antwort „heute geschlossen“, nennt aber selbst Öffnungszeiten für den heutigen Tag, merkt KIplatz das jetzt auch bei englischen Uhrzeiten wie „6:00 PM“.",
+    ],
     "2026-11-22o": [
         "Fragst du nach einem Betrag für eine bestimmte Zahl, etwa die Pendlerpauschale bei 30 km, sucht KIplatz jetzt die Zeile, in deren Bereich deine Zahl fällt, und sagt dazu, aus welcher Tabelle der Betrag stammt. Und sagt eine Antwort „heute geschlossen“, prüft KIplatz das gegen den heutigen Wochentag.",
     ],
