@@ -1514,9 +1514,13 @@ class Api:
             ergebnisse = self._nachschauer.ausfuehren(a)
         except app_core.AppError as exc:
             _log(self._core, f"ABGELEHNT nachschauen {a.art}: {exc.code}: {exc.detail}")
+            ergebnisse = []
+            if (a.art == "wetter" and exc.code == "NACHSCHAU_ORT" and a.ort and not weitere and not nachschauen.wetterwort(frage)
+                    and hasattr(self._nachschauer, "suche_runde")):
+                self._schritt("sucht im Internet …")
+                return self._suchrunde(frage, [nachschauen.suchbegriffe_regel(frage) or " ".join(frage.split())], lauf, treffer, frisch=frisch)
             if not weitere:
                 return [], f"Nachschauen ({a.art}) hat nicht geklappt: {exc.detail}."
-            ergebnisse = []
         for q in weitere:
             self._schritt(f"sucht noch nach „{q}“ …")
             try:
@@ -7087,8 +7091,9 @@ def frage_fokus(frage: str) -> str:
     return " ".join(teile)
 
 
-LAENDER_FOKUS = ("Nennen die Quellen für verschiedene Bundesländer verschiedene Werte, sag das: was in den meisten Bundesländern gilt und welche "
-                 "abweichen, jeweils mit dem Namen des Bundeslands. Nenne nie den Wert eines einzelnen Bundeslands als Regel für ganz Österreich.")
+LAENDER_FOKUS = ("Nennen die Quellen für verschiedene Bundesländer verschiedene Werte, sag das: zuerst, was in den meisten Bundesländern gilt, dann "
+                 "jedes abweichende Bundesland mit genau dem Wert aus seiner eigenen Zeile (Name des Bundeslands, dann sein Wert). Ein Wert gehört nur zu dem "
+                 "Bundesland, vor dem er steht. Nenne nie den Wert eines einzelnen Bundeslands als Regel für ganz Österreich.")
 _OESTERREICH = re.compile(r"\b(?:österreich|oesterreich|austria)\w*", re.I)
 
 

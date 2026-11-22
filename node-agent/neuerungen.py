@@ -14,6 +14,9 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-11-22f": [
+        "Fragen zum Backofen, zum Kochen oder zum Haushalt mit „Grad“ hält KIplatz nicht mehr für Wetterfragen, und kennt es einen Ort fürs Wetter nicht, sucht es im Internet, statt aufzugeben. Weichen Bundesländer voneinander ab, nennt KIplatz jedes mit genau seinem Wert.",
+    ],
     "2026-11-22e": [
         "Hängt die Antwort vom Land ab, etwa bei Steuern, Beihilfen, Pension, Ausweisen oder Altersgrenzen, und du nennst keines, fragt KIplatz zuerst, für welches Land du es wissen willst. Ist etwas in den Bundesländern verschieden, sagt KIplatz, was meistens gilt und wo es abweicht. Beträge aus Tabellen liest KIplatz jetzt in derselben Zeile wie ihre Beschriftung, so passt der Betrag zum richtigen Alter. Und wer fragt, wie man etwas wird oder bekommt, bekommt die Voraussetzungen.",
     ],

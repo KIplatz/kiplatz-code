@@ -54,15 +54,23 @@ _WETTER_MESS = re.compile(r"\b(wie warm|wie kalt|wie hei[ßs]|temperatur\w*|grad
 _WETTER_ZEIT = re.compile(r"\b(heute|morgen|[üu]bermorgen|drau[ßs]en|am wochenende|diese woche|n[äa]chste woche|in der nacht|nachts|tags[üu]ber|hat es|haben wir|jetzt|gerade|"
                           r"today|tomorrow|day after tomorrow|outside|this weekend|this week|next week|tonight|right now)\b", re.I)
 _WETTER_SCHWACH = re.compile(r"\b(regen|schnee|sonnig|sonne|gewitter|wind|wolk\w*|bew[öo]lkt|nebel|hitze|frost)\b", re.I)
-_WETTER_MIT_ZEIT = re.compile(r"\b(regnen|schneien|rain|snow|sunny|sun|thunderstorms?|storms?|windy|cloud\w*|fog|foggy|heat|frosty|forecast)\b", re.I)
+_WETTER_MIT_ZEIT = re.compile(r"\b(regnen|schneien|gefriert|gefrieren|glatteis|rain|snow|sunny|sun|thunderstorms?|storms?|windy|cloud\w*|fog|foggy|heat|frosty|forecast)\b", re.I)
 _FRAGEFORM = re.compile(r"\b(wird es|ist es|gibt es|kommt|bleibt es|scheint|will it|is it|is there|going to|does it|will there be)\b", re.I)
 _KEIN_WETTER = re.compile(r"\b(warum|wieso|weshalb|wie entsteh\w*|wie weit|entfernt|entfernung|sekunden|was ist|was sind|was bedeutet|fahrenheit|in celsius|in grad celsius|"
-                          r"why|how (?:do|does) \w+ form|how far|distance|seconds|what is an?|what does|to celsius|in celsius|boil\w*|oven)\b", re.I)
+                          r"why|how (?:do|does) \w+ form|how far|distance|seconds|what is an?|what does|to celsius|in celsius|boil\w*|oven|"
+                          r"ofen|backofen|backrohr|herd|umluft|oberhitze|unterhitze|heißluft|backen|gebacken|garen|braten|kochen|kerntemperatur|"
+                          r"grillrost|grillgut|siedet|sieden|siedepunkt|gefrierschrank|gefrierfach|gefriertruhe|gefrierpunkt|tiefkühl\w*|kühlschrank|"
+                          r"waschmaschine|bügel\w*|sauna|fieber|körpertemperatur|wassertemperatur|bake|baking|roast\w*|fridge|freezer|fever)\b", re.I)
 _ERKLAERFRAGE = re.compile(r"\b(unterschied\w*|wie genau|wie (?:wird|werden) [\w ]{1,30} erstellt|was bedeutet|was hei[ßs]t|warum|wieso|weshalb|wie funktionier\w*|wie entsteh\w*|"
                            r"woher|versteht man unter|erkl[äa]r\w*|definition|difference|why|how (?:does|do|is) [\w ]{1,30}(?:work|made|formed)|explain\w*)\b", re.I)
 _SCHREIBEN = re.compile(r"\b(schreib\w*|gedicht|geschichte|erkl[äa]r\w*|was ist ein|was bedeutet|übersetz\w*|uebersetz\w*|write|poem|story|explain\w*|translat\w*)\b", re.I)
 _SCHLAGZEILEN = re.compile(r"\b(schlagzeil|nachrichten|news\b|neuigkeit|was ist (heute |gerade )?(passiert|los)|was gibt es neues|aktuelle meldung|"
                            r"headlines?|what happened today|what(?:'s| is) new today)", re.I)
+def wetterwort(frage: str) -> bool:
+    f = str(frage or "")
+    return bool(_WETTER_STARK.search(f) or _WETTER_SCHWACH.search(f) or _WETTER_MIT_ZEIT.search(f) or _WETTER_WORT.search(f))
+
+
 _WETTER_WORT = re.compile(r"\b(wetter|wettervorhersage|wetterbericht|wetteraussicht\w*|wetterprognose\w*|wetterlage|weather|forecast)\b", re.I)
 _WETTER_TAG = re.compile(r"\b(heute|morgen|[üu]bermorgen|am wochenende|diese woche|n[äa]chste woche|in der nacht|today|tomorrow|this weekend|this week|next week|tonight)\b", re.I)
 _RECHNEN = re.compile(r"\b(zu je|je stück|pro stück|stückpreis|zusammen|insgesamt|gesamt|summe|mal\b|prozent|rabatt|umrechn\w*|in meilen|in kilometer|in euro|wie viele tage)\b|\d\s*x\s*\d|[×*]\s*\d|\d\s*[×*]|%", re.I)
@@ -141,6 +149,22 @@ WETTERCODE = {0: "klar", 1: "meist klar", 2: "teils bewölkt", 3: "bedeckt", 45:
               71: "leichter Schneefall", 73: "Schneefall", 75: "starker Schneefall", 77: "Schneegriesel", 80: "leichte Regenschauer", 81: "Regenschauer", 82: "heftige Regenschauer",
               85: "Schneeschauer", 86: "starke Schneeschauer", 95: "Gewitter", 96: "Gewitter mit Hagel", 99: "Gewitter mit starkem Hagel"}
 WOCHENTAGE = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
+_WOCHENTAG_EN = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+
+
+def wochentag_tag(text: str) -> int:
+    t = str(text or "").lower()
+    for i, (de, en) in enumerate(zip(WOCHENTAGE, _WOCHENTAG_EN)):
+        if re.search(r"\b(?:" + de.lower() + "|" + en + r")\b", t):
+            return (i - _heute_frager().weekday()) % 7
+    return 0
+
+
+def wetter_tag_wort(tag: int) -> str:
+    if tag < 3:
+        return ["heute", "morgen", "übermorgen"][max(0, tag)]
+    from datetime import timedelta as _td
+    return "am " + WOCHENTAGE[(_heute_frager() + _td(days=tag)).weekday()]
 
 
 class NachschauError(wissen.WissenError):
@@ -164,7 +188,7 @@ class Auftrag:
     @property
     def titel(self) -> str:
         if self.art == "wetter":
-            return f"Wetter {['heute', 'morgen', 'übermorgen'][self.tag]} in {self.ort}"
+            return f"Wetter {wetter_tag_wort(self.tag)} in {self.ort}"
         if self.art == "schlagzeilen":
             return f"Schlagzeilen {land_name(self.land)}"
         return ""
@@ -246,7 +270,7 @@ def erkennen(frage: str) -> Auftrag | None:
     if (_WETTER_STARK.search(f) or mess_wetter or mit_zeit or (_WETTER_SCHWACH.search(f) and _FRAGEFORM.search(f))) and not _SCHLAGZEILEN.search(f) \
             and not (_KEIN_WETTER.search(f) and not _WETTER_WORT.search(f) and not _WETTER_TAG.search(f)) \
             and not (_ERKLAERFRAGE.search(f) and not ort_genannt and not _WETTER_ZEIT.search(f)):
-        tag = 2 if re.search(r"[üu]bermorgen|day after tomorrow", unten) else (1 if re.search(r"\b(?:morgen|tomorrow)\b", unten) else 0)
+        tag = 2 if re.search(r"[üu]bermorgen|day after tomorrow", unten) else (1 if re.search(r"\b(?:morgen|tomorrow)\b", unten) else wochentag_tag(unten))
         ort = ""
         for m in _ORT.finditer(f):
             kandidat = m.group(1).strip(" .,;:!?")
@@ -631,7 +655,7 @@ class Nachschauer:
         land = str(ort.get("country") or "")
         zone = str(ort.get("timezone") or "Europe/Vienna")
         adresse = WETTER_API + "?" + urllib.parse.urlencode({
-            "latitude": ort.get("latitude"), "longitude": ort.get("longitude"), "timezone": zone, "forecast_days": 3,
+            "latitude": ort.get("latitude"), "longitude": ort.get("longitude"), "timezone": zone, "forecast_days": max(3, min(7, a.tag + 1)),
             "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max"})
         w = _json(adresse, oeffner=self._oeffner)
         d = w.get("daily") or {}
@@ -640,7 +664,7 @@ class Nachschauer:
             zeilen = [frage_kennung(a.frage), f"Wettervorhersage für {name}" + (f" ({land})" if land else "") + ", nachgeschaut bei Open-Meteo am " + self._jetzt().strftime("%d.%m.%Y um %H:%M UTC") + ":"]
             for i, tag in enumerate(tage):
                 dt = datetime.strptime(tag, "%Y-%m-%d")
-                wann = ["Heute", "Morgen", "Übermorgen"][i] if i < 3 else tag
+                wann = ["Heute", "Morgen", "Übermorgen"][i] if i < 3 else f"In {i} Tagen"
                 code = int(d["weather_code"][i]) if d["weather_code"][i] is not None else -1
                 mm = round(float(d["precipitation_sum"][i] or 0), 1)
                 regen = "kein Regen" if mm == 0 else f"Regen {str(mm).replace('.', ',')} mm"
@@ -650,7 +674,7 @@ class Nachschauer:
                               + f", Wind bis {round(float(d['wind_speed_10m_max'][i]))} km/h.")
         except (KeyError, IndexError, TypeError, ValueError):
             raise NachschauError("NACHSCHAU_ANTWORT", "die Wetterdaten sind unvollständig") from None
-        titel = f"Wetter {['heute', 'morgen', 'übermorgen'][a.tag]} in {name}"
+        titel = f"Wetter {wetter_tag_wort(a.tag)} in {name}"
         return Ergebnis("wetter", titel, adresse, "\n".join(zeilen), gueltig_bis("wetter", self._jetzt()), "Wetter bei Open-Meteo nachgeschaut")
 
 

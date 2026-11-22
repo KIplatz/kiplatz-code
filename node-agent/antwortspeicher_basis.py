@@ -242,6 +242,8 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
     ("2026-11-22e", frozenset({"suche", "zahl"}), "Tabellenwerte in derselben Zeile wie ihre Beschriftung (Familienbeihilfe „148 Euro“ statt 171,80), "
      "Länderregeln nicht als Regel für ganz Österreich (Ausgehzeit „bis 24 Uhr“), Fragen ohne Land nach Österreich (Reisepass „unter 24 Jahren 6 Jahre“); "
      "Antworten mit Suche oder mit einer Zahl von vorher werden verworfen"),
+    ("2026-11-22f", frozenset({"suche"}), "Kochen und Haushalt sind kein Wetter, ein unbekannter Wetter-Ort sucht im Internet, abweichende Bundesländer nur mit "
+     "dem Wert aus ihrer eigenen Zeile; Antworten mit Suche von vorher werden verworfen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())
