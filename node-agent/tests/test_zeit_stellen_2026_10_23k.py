@@ -35,7 +35,7 @@ def _lauf(tmp_path, monkeypatch, frage: str, n: int):
 def test_nur_die_besten_gelesenen_stellen_gehen_ans_modell(tmp_path, monkeypatch):
     live, hinweis = _lauf(tmp_path, monkeypatch, "Was gibt es an der Seepromenade in Gmunden?", 12)
     assert len(live) == app_web.LIVE_STELLEN
-    assert f"bekam das Modell die ersten {app_web.LIVE_STELLEN}, {12 - app_web.LIVE_STELLEN} weitere nicht" in hinweis
+    assert f"bekam das Modell die {app_web.LIVE_STELLEN} mit den meisten Wörtern der Frage, {12 - app_web.LIVE_STELLEN} weitere nicht" in hinweis
     wenig, hinweis2 = _lauf(tmp_path / "b", monkeypatch, "Was gibt es an der Seepromenade in Gmunden?", 3)
     assert len(wenig) == 3 and "weitere nicht" not in hinweis2
     zwei, _ = _lauf(tmp_path / "c", monkeypatch, "Was haben Gmunden und Wels an Sehenswürdigkeiten?", 14)

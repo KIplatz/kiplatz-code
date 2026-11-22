@@ -113,6 +113,16 @@ def _wissensfrage(f: str) -> bool:
 _ANLEITUNG = re.compile(r"^\s*(wie (schreibe|formuliere|verfasse|erstelle|gestalte|beginne|beende) ich\b.*\?\s*$|wie schreibt man\b|schreibt man\b|wie wird .{1,40} geschrieben\b)|\bschreibweise\b|\brichtig geschrieben\b|\be-?mail-?(adresse|konto|account|postfach)\b", re.I)
 _AUFTRAG_VORN = re.compile(r"^\s*(?:bitte\s+)?(?:schreib\w*|verfass\w*|formulier\w*|entwirf|entwerfe)\s+(?:mir\s+|uns\s+)?(?:bitte\s+)?(?:eine?n?|die|den|das)\s+"
                            r"(?:e-?mail|mail|brief|nachricht|antwort|absage|zusage|kündigung|kuendigung|bewerbung|einladung|beschwerde|entschuldigung)\b", re.I)
+_KREATIV = re.compile(r"^\s*(?:bitte\s+)?(?:schreib\w*|erzähl\w*|erzaehl\w*|dicht\w*|reim\w*|denk\w* dir|mach\w*|"
+                      r"(?:kannst|könntest|koenntest|magst|würdest|wuerdest) du|ich (?:hätte|haette|möchte|moechte|will|wünsche mir|hätt) (?:gerne?)?)[\s,]+"
+                      r"(?:(?:mir|uns|bitte|mal|ein|eine|einen|ein paar|paar|zwei|drei|vier|fünf|kurze\w*|lustige\w*|kleine\w*|schöne\w*|nette\w*|"
+                      r"witzige\w*|lange\w*|neue\w*|lieb\w*|spannende\w*|traurige\w*|gute\w*)[\s,]+){0,5}"
+                      r"(?:gedicht\w*|reim|reime|witze?|scherz|geschichte|kurzgeschichte|gutenachtgeschichte|märchen|maerchen|fabel|lied|liedtext|"
+                      r"songtext|haiku|limerick|verse?|spruch|sprüche|zungenbrecher|rätsel|raetsel)\b", re.I)
+_THEMA = re.compile(r"\b(über|ueber|zum thema|rund um|zu(?:m|r)? \w+|von (?:einem|einer|einen|dem|der|den)|mit (?:einem|einer|dem|der))\b", re.I)
+_PERSOENLICHER_ANLASS = re.compile(r"\bfür\s+\S|\b(geburtstag\w*|hochzeit\w*|jubiläum\w*|taufe|firmung|kommunion|trauer\w*|begräbnis|"
+                                   r"beerdigung|abschied\w*|pension\w*|ruhestand|muttertag\w*|vatertag\w*|namenstag\w*|valentinstag\w*|"
+                                   r"jahrestag\w*|matura\w*|sponsion\w*)\b", re.I)
 _WAS_TUN_WENN = re.compile(r"\bwas soll(?:te)? (?:ich|man|wir) (?:tun|machen)\b,? *(?:wenn|falls|bei)\b", re.I)
 
 
@@ -127,6 +137,8 @@ def erkennen(frage: str) -> Aufgabe | None:
         if re.match(r"^\s*(was|wer|wie|wann|wo|warum|welche\w*)\b", f, re.I) and "?" in f and not re.search(r"\b(schreib|erstell|formulier|entwirf|verfass)", f, re.I):
             return None
         if _VORHANDEN.search(f) and not _NEU.search(f):
+            return None
+        if _KREATIV.search(f) and _THEMA.search(f) and not _PERSOENLICHER_ANLASS.search(f):
             return None
         if mit_anhang and not _NEU.search(f):
             return None

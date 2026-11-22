@@ -14,6 +14,9 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-11-22a": [
+        "Fragst du nach dem Unterschied zwischen Wetter und Klima, erklärt KIplatz es jetzt, statt nach deinem Ort zu fragen. Ein Gedicht, einen Witz oder eine Geschichte mit Thema schreibt es gleich, ohne Rückfragen. Auf schwächeren PCs nimmt KIplatz keine Fundstellen mehr, die nur nebenbei dieselben Wörter tragen, und gibt dem Modell bei einer Suche zuerst die Stellen, die zur Frage passen.",
+    ],
     "2026-11-21c": [
         "Zu einem Befund streicht KIplatz jetzt auch beruhigende Sätze wie „nicht alarmierend“, selbst wenn daneben die Ärztin oder der Arzt erwähnt wird. Fragen zu einem Befund, einer Diagnose oder einem Medikament beantwortet immer ein PC neu, nie eine gespeicherte Antwort.",
     ],
@@ -1377,6 +1380,11 @@ ZURUECKGEHALTEN: dict[str, list[str]] = {
 }
 
 KURZ_JE_TAG: dict[str, list[str]] = {
+    "2026-11-22": [
+        "Den Unterschied zwischen Wetter und Klima erklärt KIplatz jetzt, statt nach deinem Ort zu fragen",
+        "Ein Gedicht oder einen Witz mit Thema schreibt KIplatz gleich, ohne Rückfragen",
+        "Auf schwächeren PCs nimmt KIplatz nur noch Fundstellen, die wirklich zur Frage passen",
+    ],
     "2026-11-21": [
         "Einen eingefügten Befund oder Brief liest KIplatz jetzt wie einen Anhang und beantwortet jeden verlangten Teil",
         "Zu einem Befund sagt KIplatz nicht, wie schlimm etwas ist, und verweist auf deine Ärztin oder deinen Arzt",

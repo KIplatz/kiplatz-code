@@ -129,6 +129,7 @@ UPDATE_ANTWORT_HOECHSTENS_S = 600
 ABHOLEN_FEHLVERSUCHE = 2
 KNAPP_TREFFER = 2
 KNAPP_ZEICHEN = 500
+_NUR_FRAGEWORT = frozenset(("erkla", "erklar", "unterschied", "zwisch", "bedeut", "beispiel", "funktion", "funktioniert", "einfach", "genau"))
 LIVE_STELLEN = 6
 LIVE_STELLEN_LISTE = 8
 LIVE_STELLEN_VERGLEICH = 10
@@ -1196,6 +1197,12 @@ class Api:
                        else "Keine gespeicherte Fundstelle passte wirklich zur Frage. ") + hinweis
         else:
             rest = wissen.treffer_mischen(wissen.fachgebiet_gewichten(server, fachgebiete), wissen.fachgebiet_gewichten(lokal, fachgebiete), n=n_rest)
+            fw_ = set(wissen.woerter(frage))
+            vorher_rest = len(rest)
+            if not erdung or any(t.quelle.art == "nachgeschaut" for t in live):
+                rest = [t for t in rest if t.quelle.privat or (fachgebiete and t.quelle.fachgebiet in fachgebiete) or self._titel_trifft(fw_, t)]
+            if len(rest) < vorher_rest:
+                hinweis = f"{vorher_rest - len(rest)} gemerkte Stellen zu einem anderen Thema weggelassen. " + hinweis
         if knapp:
             rest = [wissen.Treffer(t.quelle, t.text[:KNAPP_ZEICHEN], t.punkte) for t in rest]
         if fachgebiete and any(t.quelle.fachgebiet in fachgebiete for t in rest):
@@ -1216,6 +1223,9 @@ class Api:
             gesucht = [t for t in live if t.quelle.art == "nachgeschaut"]
             teile = nachschauen.teilfragen(frage)
             grenze = (min(2, len(teile)) * LIVE_STELLEN if teile else LIVE_STELLEN_LISTE if nachschauen.listenfrage(frage) else LIVE_STELLEN)
+            if not live_sortiert and len(gesucht) > 1:
+                fw_live = set(wissen.woerter(frage))
+                gesucht.sort(key=lambda t: -len(fw_live & set(wissen.woerter(t.quelle.titel + " " + t.text))))
             if belege.vergleichsfrage(frage):
                 grenze = LIVE_STELLEN_VERGLEICH
                 gesucht.sort(key=lambda t: -nachschauen.preis_punkte(t.text))
@@ -1226,7 +1236,11 @@ class Api:
                 weg = {id(t) for t in gesucht[grenze:]}
                 live = [t for t in live if id(t) not in weg]
                 hinweis = ((f"Von den passenden gelesenen Stellen bekam das Modell die {grenze} besten, {len(weg)} weitere nicht. " if live_sortiert
-                            else f"Von den gelesenen Stellen bekam das Modell die ersten {grenze}, {len(weg)} weitere nicht. ") + hinweis)
+                            else f"Von den gelesenen Stellen bekam das Modell die {grenze} mit den meisten Wörtern der Frage, {len(weg)} weitere nicht. ") + hinweis)
+            if not live_sortiert and len(gesucht) > 1:
+                plaetze = {id(t) for t in gesucht}
+                reihe = iter([t for t in gesucht if any(t is x for x in live)])
+                live = [next(reihe, t) if id(t) in plaetze else t for t in live]
         schon = {(t.quelle.kennung, t.text[:80]) for t in live}
         zusatz, quellen = wissen.kontext_bauen(live + [t for t in rest if (t.quelle.kennung, t.text[:80]) not in schon], live=schon_live)
         if selbst and zusatz:
@@ -1591,7 +1605,17 @@ class Api:
         if not fw:
             return True
         noetig = max(2, -(-len(fw) * 3 // 5))
-        return any(len(fw & set(wissen.woerter(t.quelle.titel + " " + t.text))) >= noetig for t in treffer)
+        return any(len(fw & set(wissen.woerter(t.quelle.titel + " " + t.text))) >= noetig and Api._titel_trifft(fw, t) for t in treffer)
+
+    @staticmethod
+    def _titel_trifft(fw: set[str], t: wissen.Treffer) -> bool:
+        if t.quelle.privat:
+            return True
+        sache = {q for q in fw if len(q) >= 4 and q not in _NUR_FRAGEWORT}
+        if not sache:
+            return True
+        tw = [w for w in wissen.woerter(t.quelle.titel) if len(w) >= 4]
+        return any(q in w or w in q for q in sache for w in tw)
 
     def _nachgeschaut_merken(self, e: nachschauen.Ergebnis) -> None:
         if not getattr(_EIGEN, "an", True):

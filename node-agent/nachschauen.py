@@ -57,6 +57,8 @@ _WETTER_MIT_ZEIT = re.compile(r"\b(regnen|schneien|rain|snow|sunny|sun|thunderst
 _FRAGEFORM = re.compile(r"\b(wird es|ist es|gibt es|kommt|bleibt es|scheint|will it|is it|is there|going to|does it|will there be)\b", re.I)
 _KEIN_WETTER = re.compile(r"\b(warum|wieso|weshalb|wie entsteh\w*|wie weit|entfernt|entfernung|sekunden|was ist|was sind|was bedeutet|fahrenheit|in celsius|in grad celsius|"
                           r"why|how (?:do|does) \w+ form|how far|distance|seconds|what is an?|what does|to celsius|in celsius|boil\w*|oven)\b", re.I)
+_ERKLAERFRAGE = re.compile(r"\b(unterschied\w*|wie genau|wie (?:wird|werden) [\w ]{1,30} erstellt|was bedeutet|was hei[ßs]t|warum|wieso|weshalb|wie funktionier\w*|wie entsteh\w*|"
+                           r"woher|erkl[äa]r\w*|definition|difference|why|how (?:does|do|is) [\w ]{1,30}(?:work|made|formed)|explain\w*)\b", re.I)
 _SCHREIBEN = re.compile(r"\b(schreib\w*|gedicht|geschichte|erkl[äa]r\w*|was ist ein|was bedeutet|übersetz\w*|uebersetz\w*|write|poem|story|explain\w*|translat\w*)\b", re.I)
 _SCHLAGZEILEN = re.compile(r"\b(schlagzeil|nachrichten|news\b|neuigkeit|was ist (heute |gerade )?(passiert|los)|was gibt es neues|aktuelle meldung|"
                            r"headlines?|what happened today|what(?:'s| is) new today)", re.I)
@@ -241,7 +243,8 @@ def erkennen(frage: str) -> Auftrag | None:
     ort_genannt = any(m.group(1).strip(" .,;:!?") not in _ORT_NICHT for m in _ORT.finditer(f))
     mit_zeit = bool(_WETTER_MIT_ZEIT.search(f)) and bool(_WETTER_ZEIT.search(f) or ort_genannt)
     if (_WETTER_STARK.search(f) or mess_wetter or mit_zeit or (_WETTER_SCHWACH.search(f) and _FRAGEFORM.search(f))) and not _SCHLAGZEILEN.search(f) \
-            and not (_KEIN_WETTER.search(f) and not _WETTER_WORT.search(f) and not _WETTER_TAG.search(f)):
+            and not (_KEIN_WETTER.search(f) and not _WETTER_WORT.search(f) and not _WETTER_TAG.search(f)) \
+            and not (_ERKLAERFRAGE.search(f) and not ort_genannt and not _WETTER_ZEIT.search(f)):
         tag = 2 if re.search(r"[üu]bermorgen|day after tomorrow", unten) else (1 if re.search(r"\b(?:morgen|tomorrow)\b", unten) else 0)
         ort = ""
         for m in _ORT.finditer(f):

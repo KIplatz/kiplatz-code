@@ -229,6 +229,9 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
      "Befund, die nicht in den Speicher kommen (ich/mein, über 200 Zeichen); nichts zu verwerfen"),
     ("2026-11-21c", frozenset(), "Beruhigung neben dem Verweis auf den Arzt gestrichen; Fragen zu Befund, Diagnose oder Medikament nutzen den "
      "Speicher gar nicht mehr (frage_taugt), auch ältere Antworten dazu werden nie mehr ausgeliefert; nichts zu verwerfen"),
+    ("2026-11-22a", frozenset({"ohne_suche"}), "Ohne Bewertungsmodell galten Fundstellen zu einem anderen Thema als Abdeckung (Brutto und Netto mit "
+     "Biodiesel, „10 Bundesländer“ aus dem Gedächtnis, weil eine Visa-Berichtigung „deckte“); Antworten ohne Suche von vorher können daraus "
+     "stammen und werden verworfen, Antworten mit Suche bleiben"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())
