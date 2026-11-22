@@ -7094,6 +7094,11 @@ def frage_fokus(frage: str) -> str:
         teile.append(LAENDER_FOKUS)
     if _OEFFNUNG.search(f):
         teile.append(OEFFNUNG_FOKUS_EN if antwortsprache.frage_sprache(f) == "en" else OEFFNUNG_FOKUS)
+    if belege.zahlenfrage(f) or belege.preisfrage(f):
+        teile.append(TABELLE_FOKUS_EN if antwortsprache.frage_sprache(f) == "en" else TABELLE_FOKUS)
+    if wissen.bereich_zahl(f) is not None and (belege.zahlenfrage(f) or belege.preisfrage(f)):
+        z = " ".join(wissen._FRAGE_ZAHL.search(f).group(0).split())
+        teile.append((BEREICH_FOKUS_EN if antwortsprache.frage_sprache(f) == "en" else BEREICH_FOKUS).format(zahl=z))
     begriff = nachschauen.land_aus_begriff(f)
     if begriff:
         if antwortsprache.frage_sprache(f) == "en":
@@ -7105,6 +7110,14 @@ def frage_fokus(frage: str) -> str:
 
 _OEFFNUNG = re.compile(r"(?i)\b(?:[öo]ffnungszeit\w*|(?:hat|haben|ist|sind)\s+(?!.{0,40}\b(?:datei|dokument|file)\b).{0,40}\bge[öo]ffnet|offen\s+hat|aufsperr\w*|opening\s+(?:hours|times)|open(?:s|ing)?\s+(?:at|until|today|on)|"
                        r"what\s+time\s+does\s+.+\s+(?:open|close)|when\s+(?:does|is)\s+.+\s+open)\b")
+TABELLE_FOKUS = ("Steht hinter einer Zeile in den Quellen in Klammern, zu welcher Tabelle und Spalte sie gehört, nenne das bei jeder Zahl mit, "
+                 "und mische keine Zahlen aus verschiedenen Tabellen in einer Liste.")
+TABELLE_FOKUS_EN = ("If a row in the sources says in brackets which table and column it belongs to, name that with every number, and do not mix "
+                    "numbers from different tables in one list.")
+BEREICH_FOKUS = ("Die Frage nennt {zahl}. Steht in den Quellen eine Zeile mit einem Bereich, der {zahl} enthält, nimm deren Wert und nenne ihn mit "
+                 "dem Namen der Tabelle und der Spalte; „mehr als 20“ schließt die 20 selbst aus.")
+BEREICH_FOKUS_EN = ("The question names {zahl}. If the sources have a row whose range contains {zahl}, take its value and give it with the table "
+                    "and column names; “more than 20” does not include 20 itself.")
 OEFFNUNG_FOKUS = ("Gefragt sind Öffnungszeiten: nenne die Uhrzeiten von bis, wie sie in den Quellen stehen, für jeden Tag oder jede Gruppe von Tagen, "
                   "dazu Ruhetage und längere Abende.")
 OEFFNUNG_FOKUS_EN = ("The question asks for opening hours: give the times from and to as the sources state them, for each day or group of days, "
@@ -8093,6 +8106,13 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
         notizen.append("1 Satz, der einer Quelle etwas aus einer anderen Quelle zuschreibt, vom Programm gestrichen." if len(raus_misch) == 1
                        else f"{len(raus_misch)} Sätze, die einer Quelle etwas aus einer anderen Quelle zuschreiben, vom Programm gestrichen.")
     angehaengt = belege.angehaengte_saetze(geprueft)
+    heute_falsch = belege.heute_widerspruch(geprueft, ki_laufzeit.heute().weekday())
+    if heute_falsch:
+        geprueft, raus_heute = belege.saetze_streichen(geprueft, lambda s: s in heute_falsch)
+        raus = raus + raus_heute
+        namen_fall = namen_fall and not raus_heute
+        if raus_heute:
+            notizen.append("1 Satz „heute geschlossen“ oder „heute geöffnet“, dem die Antwort für den heutigen Wochentag widersprach, vom Programm gestrichen.")
     weg_angehaengt: list[str] = []
     if angehaengt:
         geprueft, weg_angehaengt = belege.saetze_streichen(geprueft, lambda s: s in angehaengt)

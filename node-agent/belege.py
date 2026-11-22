@@ -135,11 +135,8 @@ def _saetze(absatz: str) -> list[str]:
     return [s for s in pruefung._SATZ_ENDE.split(absatz) if s]
 
 
-_SEIT = re.compile(r"\b(?:seit|ab)\s+(?:(?:dem|\d{1,2}\.|[A-Za-zÄÖÜäöü]+)\s+){0,3}20\d\d\b", re.I)
-
-
 def seit_belegt(satz: str, gelesen: str) -> bool:
-    if not (gelesen or "").strip() or not _SEIT.search(satz or ""):
+    if not (gelesen or "").strip() or not _SEIT_WORT.search(satz or ""):
         return False
     werte = zahlenwerte(gelesen)
     s = _ohne_daten(satz)
@@ -747,6 +744,54 @@ def angehaengte_saetze(antwort: str) -> list[str]:
             neue_zahl = set(re.findall(r"\d+(?:[.,]\d+)*", satz)) - set(re.findall(r"\d+(?:[.,]\d+)*", davor))
             if not neue_zahl and not {w for w in wissen.woerter(satz) if len(w) >= 5} - set(wissen.woerter(davor + " question frage")):
                 weg.append(satz)
+    return weg
+
+
+_HEUTE_ZU = re.compile(r"(?i)\b(?:closed\s+today|today\s+(?:it\s+is\s+|it's\s+)?closed|heute\s+(?:ist\s+)?(?:\w+\s+)?(?:geschlossen|ruhetag)|"
+                       r"(?:ist|hat)\s+heute\s+(?:geschlossen|ruhetag)|heute\s+(?:ist\s+|hat\s+)?(?:\w+\s+)?zu(?=\s*(?:$|[.,;!]|und\b))|"
+                       r"(?:ist|hat)\s+heute\s+zu(?=\s*(?:$|[.,;!]|und\b)))\b")
+_HEUTE_OFFEN = re.compile(r"(?i)\b(?:open\s+today|today\s+(?:it\s+is\s+|it's\s+)?open|heute\s+(?:ist\s+)?(?:\w+\s+)?(?:geöffnet|offen)|"
+                          r"(?:ist|hat)\s+heute\s+(?:geöffnet|offen))\b")
+_HEUTE_UHRZEIT = re.compile(r"(?i)\b\d{1,2}:\d{2}\b|\b\d{1,2}(?:[.:]\d{2})?\s*uhr\b|\b\d{1,2}\.\d{2}\s*[–-]\s*\d{1,2}\.\d{2}\b|"
+                            r"\b\d{1,2}(?::\d{2})?\s*(?:am|pm)(?=\s*(?:$|[-–,.;)]|to\b|bis\b|and\b|und\b))")
+_HEUTE_ZU_WORT = re.compile(r"(?i)\b(?:closed|geschlossen|ruhetag)\b")
+_HEUTE_GRUND = re.compile(r"(?i)\b(?:feiertag\w*|holiday\w*|wegen|due\s+to|because|streik\w*|strike|ausnahmsweise|betriebsurlaub|urlaub|"
+                          r"renovier\w*|umbau\w*|christmas|weihnacht\w*|ostern|easter|neujahr|new\s+year)\b")
+_WOCHENTAGE_DE_EN = (("montag", "monday"), ("dienstag", "tuesday"), ("mittwoch", "wednesday"), ("donnerstag", "thursday"), ("freitag", "friday"),
+                     ("samstag", "saturday"), ("sonntag", "sunday"))
+_KEIN_SUBJEKT = {"uhr", "the", "on", "am", "an", "der", "die", "das", "it", "es", "er", "sie", "von", "bis", "from", "to", "and", "und", "other",
+                 "days", "öffnungszeiten", "öffnungszeit", "geschäft", "filiale", "museum", "hours", "opening", "usually", "normally", "sonst",
+                 "normalerweise", "its", "ihre", "seine", "jänner", "januar", "februar", "märz", "april", "mai", "juni", "juli", "august", "september",
+                 "oktober", "november", "dezember", "january", "february", "march", "may", "june", "july", "october", "december"}
+
+
+def _subjekte(satz: str) -> set[str]:
+    tage = {w for paar in _WOCHENTAGE_DE_EN for w in paar}
+    woerter = re.findall(r"\b[A-ZÄÖÜ][\wäöüß-]+", satz)
+    return {w.lower() for w in woerter if w.lower().rstrip("s") not in tage and w.lower() not in tage and w.lower() not in _KEIN_SUBJEKT}
+
+
+def heute_widerspruch(antwort: str, wochentag: int) -> list[str]:
+    saetze = [x for absatz in (antwort or "").split("\n") for x in _saetze(absatz) if x.strip()]
+    tag = re.compile(r"(?i)\b(?:" + "|".join(_WOCHENTAGE_DE_EN[wochentag]) + r")s?\b")
+    ausser_tag = re.compile(r"(?i)\b(?:außer|ausser|except)\s+(?:am\s+|an\s+|on\s+)?(?:" + "|".join(_WOCHENTAGE_DE_EN[wochentag]) + r")s?\b")
+    weg = []
+    for x in saetze:
+        if tag.search(x) or _HEUTE_GRUND.search(x):
+            continue
+        heute_zu, heute_offen = bool(_HEUTE_ZU.search(x)), bool(_HEUTE_OFFEN.search(x))
+        if not (heute_zu or heute_offen):
+            continue
+        eigen = _subjekte(x)
+        for y in saetze:
+            fremd = _subjekte(y)
+            if y is x or not tag.search(y) or ((fremd - eigen) and (eigen - fremd)):
+                continue
+            offen_y = bool(_HEUTE_UHRZEIT.search(y)) and not _HEUTE_ZU_WORT.search(y) and not ausser_tag.search(y)
+            zu_y = (bool(_HEUTE_ZU_WORT.search(y)) or bool(ausser_tag.search(y))) and not _HEUTE_UHRZEIT.search(y)
+            if (heute_zu and offen_y) or (heute_offen and zu_y):
+                weg.append(x)
+                break
     return weg
 
 
@@ -1495,12 +1540,12 @@ def zeitpunkte(satz: str, heute: date) -> list[date]:
     return out
 
 
-_SEIT = re.compile(r"(?i)(?<![^\W\d_])(?:seit|since|depuis|desde|dal|dalla|sinds|od|siden|sedan|alkaen)(?![^\W\d_])|以来")
+_SEIT_WORT = re.compile(r"(?i)(?<![^\W\d_])(?:seit|since|depuis|desde|dal|dalla|sinds|od|siden|sedan|alkaen)(?![^\W\d_])|以来")
 
 
 def zukunft_vorbei(satz: str, heute: date) -> bool:
     zp = zeitpunkte(satz, heute)
-    return bool(zp) and max(zp) < heute and bool(_ZUKUNFT.search(satz)) and not _SEIT.search(satz)
+    return bool(zp) and max(zp) < heute and bool(_ZUKUNFT.search(satz)) and not _SEIT_WORT.search(satz)
 
 
 ZEITFORM_DE = ("Heute ist der {heute}. Jeder nummerierte Satz nennt ein Datum, das schon vorbei ist, spricht aber so, als käme es noch. Schreib "

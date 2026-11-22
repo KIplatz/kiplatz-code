@@ -261,6 +261,8 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
      "Antworten mit Suche von vorher werden verworfen"),
     ("2026-11-22n", frozenset({"suche"}), "Tabellen ab drei Spalten tragen Tabelle und Spalte je Zelle (Pendlerpauschale klein/groß), Schätzseiten "
      "gekennzeichnet, angehängte Widerspruchssätze gestrichen; Antworten mit Suche von vorher werden verworfen"),
+    ("2026-11-22o", frozenset({"suche"}), "Zahl der Frage findet ihre Tabellenzeile („30 km“ → „20 bis 40 km“), Beträge mit Tabellenname, „heute "
+     "geschlossen“ gegen den Wochentag geprüft; Antworten mit Suche von vorher werden verworfen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())

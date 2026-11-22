@@ -36,9 +36,6 @@ MAX_PROJEKT = 60
 FARBEN = {"blau": ("Blau", "#2f7fd8"), "gruen": ("Grün", "#2e9e5b"), "gelb": ("Gelb", "#d4a106"), "orange": ("Orange", "#e07a1f"),
           "rot": ("Rot", "#d64541"), "violett": ("Violett", "#8b5cc7"), "rosa": ("Rosa", "#d9579a"), "grau": ("Grau", "#8a949c")}
 PROJEKT_FARBEN = "projekte.json"
-FARBEN = {"blau": ("Blau", "#2f7fd8"), "gruen": ("Grün", "#2e9e5b"), "gelb": ("Gelb", "#d4a106"), "orange": ("Orange", "#e07a1f"),
-          "rot": ("Rot", "#d64541"), "violett": ("Violett", "#8b5cc7"), "rosa": ("Rosa", "#d9579a"), "grau": ("Grau", "#8a949c")}
-PROJEKT_FARBEN = "projekte.json"
 
 
 @dataclass

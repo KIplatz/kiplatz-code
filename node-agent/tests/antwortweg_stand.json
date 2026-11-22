@@ -1,6 +1,6 @@
 {
- "pruefwert": "0258f1450ce3eb87fff7df82",
+ "pruefwert": "6bf9331e44ce8dfe0cb5b7e3",
  "mindest_bau": "2026-10-26k",
- "erneuert": "2026-11-22n",
- "grund": "Gesammelte Befunde: Suchwörter, Tabellenspalten, Unterschiedsfragen, Zeitumstellung, Öffnungszeiten, Stand-Zeile, angehängte Sätze, Schätzseiten"
+ "erneuert": "2026-11-22o",
+ "grund": "Maßstab wie Claude: Bereich der Frage, Tabellenname bei Zahlen, heute geschlossen gegen Wochentag, Sperre doppelte Namen"
 }

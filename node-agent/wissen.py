@@ -329,6 +329,13 @@ class _Text(HTMLParser):
             return ""
         if len(kopf) > 60:
             kopf = kopf[:60].rsplit(" ", 1)[0] + " …"
+        monat = r"(?:(?:jänner|januar|februar|märz|april|mai|juni|juli|august|september|oktober|november|dezember)\s+)?"
+        rest = t[len(kopf):] if not kopf.endswith(" …") else t
+        zeit = (re.search(monat + r"20\d\d\s*(?:bis|–|-)\s*" + monat + r"20\d\d", rest, re.I)
+                or re.search(r"\b(?:zeitraum|ab|seit|gültig\w*|gilt|für\s+das\s+jahr|from|since|valid\s+\w+)\s+(?:dem\s+)?(?:\d{1,2}\.\s*)?"
+                             + monat + r"20\d\d", rest, re.I))
+        if zeit and zeit.group(0) not in kopf and len(kopf) >= 4:
+            kopf = f"{kopf}, {zeit.group(0)}"
         return kopf if len(kopf) >= 4 else ""
 
     @staticmethod
@@ -1316,6 +1323,86 @@ class Wissensspeicher:
         return kontext_bauen(self.suchen(frage, n=n, privat_erlaubt=privat_erlaubt))
 
 
+_BEREICH_EINHEIT = r"(km|kilometer|m|meter|kg|kilo|jahre?n?|years?|monate?n?|months?|tage?n?|days?|stunden|hours?|euro|€|prozent|%|personen|kinder)"
+_EINHEIT_ENDE = r"(?![\wäöüß])"
+_ZAHL_ROH = r"(\d+(?:[.,]\d+)*)"
+_FRAGE_ZAHL = re.compile(r"(?i)(?<![\d.,])" + _ZAHL_ROH + r"\s*" + _BEREICH_EINHEIT + _EINHEIT_ENDE)
+_STELLE_BEREICH = re.compile(r"(?i)(?P<art>ab|mehr\s+als|über|ueber|from|over|more\s+than|mindestens|at\s+least|zwischen|between)?\s*" + _ZAHL_ROH
+                             + r"\s*" + _BEREICH_EINHEIT + r"?" + _EINHEIT_ENDE + r"\s*(?P<vb>bis|to|–|-|und|and)\s*(?:zu\s+|unter\s+|under\s+)?"
+                             + _ZAHL_ROH + r"\s*" + _BEREICH_EINHEIT + _EINHEIT_ENDE)
+_STELLE_OFFEN = re.compile(r"(?i)(?P<art>ab|mehr\s+als|über|ueber|from|over|more\s+than|mindestens|at\s+least|bis|unter|under|up\s+to|höchstens)\s+"
+                           + _ZAHL_ROH + r"\s*" + _BEREICH_EINHEIT + _EINHEIT_ENDE + r"(?!\s*(?:bis|to|–|-)\s*\d)")
+
+
+def _bereich_zahl_lesen(x: str) -> float | None:
+    import belege
+    try:
+        return belege._anh_zahl(x)
+    except ValueError:
+        return None
+
+
+def _bereich_einheit(e: str) -> str:
+    e = (e or "").lower()
+    for k, ws in (("km", ("km", "kilometer")), ("m", ("m", "meter")), ("kg", ("kg", "kilo")), ("jahr", ("jahr", "year")),
+                  ("monat", ("monat", "month")), ("tag", ("tag", "day")), ("stunde", ("stunde", "hour")), ("geld", ("euro", "€")),
+                  ("prozent", ("prozent", "%")), ("person", ("person",)), ("kind", ("kind",))):
+        if any(e == w or e.startswith(w) and len(w) > 2 for w in ws):
+            return k
+    return e
+
+
+def bereich_zahl(frage: str) -> tuple[float, str] | None:
+    m = _FRAGE_ZAHL.search(frage or "")
+    if not m:
+        return None
+    z = _bereich_zahl_lesen(m.group(1))
+    return (z, _bereich_einheit(m.group(2))) if z is not None else None
+
+
+_EXKLUSIV = re.compile(r"(?i)^(?:mehr\s+als|über|ueber|over|more\s+than)$")
+
+
+def bereich_zeile(text: str, zahl: float, einheit: str) -> str:
+    for zeile in (text or "").split("\n"):
+        def echt(m) -> bool:
+            return m.group("vb").lower() not in ("und", "and") or (m.group("art") or "").lower() in ("zwischen", "between")
+        bereiche = [(m.start(), m.end()) for m in _STELLE_BEREICH.finditer(zeile) if echt(m)]
+        for m in _STELLE_BEREICH.finditer(zeile):
+            if not echt(m):
+                continue
+            e = _bereich_einheit(m.group(6))
+            if e != einheit or (m.group(3) and _bereich_einheit(m.group(3)) != einheit):
+                continue
+            lo, hi = _bereich_zahl_lesen(m.group(2)), _bereich_zahl_lesen(m.group(5))
+            if lo is None or hi is None:
+                continue
+            unten = lo < zahl if _EXKLUSIV.match(" ".join((m.group("art") or "").split())) else lo <= zahl
+            if unten and zahl <= hi:
+                return " ".join(zeile.split())
+        for m in _STELLE_OFFEN.finditer(zeile):
+            if any(a <= m.start() < b for a, b in bereiche):
+                continue
+            if _bereich_einheit(m.group(3)) != einheit:
+                continue
+            g = _bereich_zahl_lesen(m.group(2))
+            art = " ".join(m.group("art").lower().split())
+            if g is None:
+                continue
+            if (art in ("mehr als", "über", "ueber", "over", "more than") and zahl > g) or (art in ("ab", "from", "mindestens", "at least") and zahl >= g) \
+                    or (art in ("unter", "under") and zahl < g) or (art in ("bis", "up to", "höchstens") and zahl <= g):
+                return " ".join(zeile.split())
+    return ""
+
+
+def bereich_punkte(frage: str):
+    z = bereich_zahl(frage)
+    import belege
+    if z is None or not (belege.zahlenfrage(frage) or belege.preisfrage(frage)):
+        return None
+    return lambda text: 1.0 if bereich_zeile(text, *z) else 0.0
+
+
 def live_lesen(adresse: str, frage: str, *, n: int = TREFFER, oeffner=None, extra=None, fuer_frage: bool = False) -> tuple[Quelle, str, list[Treffer]]:
     endgueltig, titel, text = seite_holen(adresse, oeffner=oeffner, fuer_frage=fuer_frage)
     q = Quelle(hashlib.sha256(("seite|" + endgueltig).encode("utf-8")).hexdigest()[:12], "seite", titel, endgueltig, _jetzt(), len(text))
@@ -1334,7 +1421,9 @@ def live_lesen(adresse: str, frage: str, *, n: int = TREFFER, oeffner=None, extr
         return n, oft
     passt = [gleich(woerter(t)) for t in teile]
     mass = mass_punkte(frage) if extra is None else None
-    zusatz = [(float(extra(t)) if extra is not None else 0.0) + (mass(t) if mass is not None else 0.0) for t in teile]
+    bereich = bereich_punkte(frage) if extra is None else None
+    zusatz = [(float(extra(t)) if extra is not None else 0.0) + (mass(t) if mass is not None else 0.0) + (bereich(t) if bereich is not None else 0.0)
+              for t in teile]
     nach_wort = sorted(range(len(teile)), key=lambda i: (-(passt[i][0] + 2.0 * zusatz[i]), -passt[i][1]))
     gewaehlt: list[int] = []
     vorn_frei = any(zusatz) if mass is None else any(z >= 1.0 for z in zusatz)
