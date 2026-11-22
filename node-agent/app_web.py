@@ -2108,6 +2108,7 @@ class Api:
                 vorrang = getattr(self._rechen, "vorrang", None)
                 _VERMISCHT.liste = []
                 _GESTRICHEN.liste = []
+                _ANHANG.liste, _ANHANG.zeit = [], 0.0
                 _PRUEFRUNDE.an = True
                 _MESSWEG.d = {}
                 ablauf: list[tuple[float, str]] = []
@@ -2125,6 +2126,7 @@ class Api:
                 finally:
                     vermischt_liste, _VERMISCHT.liste = list(getattr(_VERMISCHT, "liste", None) or []), None
                     gestrichen_liste, _GESTRICHEN.liste = list(getattr(_GESTRICHEN, "liste", None) or []), None
+                    anhang_liste, _ANHANG.liste = list(getattr(_ANHANG, "liste", None) or []), None
                     _PRUEFRUNDE.an = False
                     weg, _MESSWEG.d = getattr(_MESSWEG, "d", None), None
                     anfragen = ki_laufzeit.mitschnitt_ende()
@@ -2151,13 +2153,13 @@ class Api:
                 geschont += 1
                 continue
             pr = schein.get("pruefung") if isinstance(schein.get("pruefung"), dict) else {}
-            gewartet = getattr(self, "_mess_gewartet", 0.0)
+            gewartet = getattr(self, "_mess_gewartet", 0.0) + float(getattr(_ANHANG, "zeit", 0.0) or 0.0)
             if isinstance(weg, dict):
                 weg["schritte"] = ohne_suchbremse(schritte_summe(ablauf, time.time() - t0), gewartet)
             eintrag = {"kennung": kennung, "antwort": text, "dauer_s": round(max(0.0, time.time() - t0 - gewartet), 1),
                        "pruefung": {k: pr.get(k, 0) for k in ("gruen", "gelb", "rot")}, "belege": list(schein.get("belege") or [])[:5],
                        "quellen": str(schein.get("quellen", ""))[:600],
-                       "notiz": notiz_zusammen(vermischt_notiz(vermischt_liste) + gestrichen_notiz(gestrichen_liste),
+                       "notiz": notiz_zusammen(vermischt_notiz(vermischt_liste) + gestrichen_notiz(gestrichen_liste) + anhang_notiz(anhang_liste),
                                                pruefstand.notiz_aus(schein.get("quellen", ""))),
                        "weg": mess_weg(schein, weg)}
             zs.anhaengen(kennung, str(f.get("frage", "")), eintrag)
@@ -2939,6 +2941,18 @@ class Api:
                                             umschreiben=self._umschreiber() if nochmal is not None else None,
                                             richter=richter if not schreiben else None,
                                             einspruch=pruefer is not None and not schreiben and not (belege.preisfrage(frage) or belege.regelfrage(frage)))
+        if getattr(_PRUEFRUNDE, "an", False) and isinstance(getattr(_ANHANG, "liste", None), list) and richter is not None and not schreiben:
+            _ANHANG.liste[:] = []
+            texte = [str(q.get("text", "")) for q in quellen if q.get("text")]
+            t_schatten = time.time()
+            for satz in (belege.anhang_kandidaten(neu_text, frage)[:ANHANG_HOECHSTENS] if texte else []):
+                try:
+                    wert = richter(satz, texte)
+                except Exception:
+                    wert = None
+                if wert is not None:
+                    _ANHANG.liste.append((satz, wert))
+            _ANHANG.zeit = getattr(_ANHANG, "zeit", 0.0) + (time.time() - t_schatten)
         if notizen:
             _log(self._core, "INFO belege: " + " ".join(notizen))
             lieferschein["belege"] = notizen
@@ -6499,6 +6513,8 @@ _VERMISCHT = threading.local()
 
 
 _GESTRICHEN = threading.local()
+_ANHANG = threading.local()
+ANHANG_HOECHSTENS = 2
 
 _PRUEFRUNDE = threading.local()
 EINSPRUCH_HOECHSTENS = 6
@@ -6595,6 +6611,12 @@ def gestrichen_notiz(liste) -> str:
     teile = [f"„{' '.join(str(s).split())[:50].replace('.', ',')}…“ [{', '.join(str(w).replace('.', ',') for w in list(woerter)[:3])[:40]}]"
              for s, woerter in list(liste or [])[:2]]
     return f"Gestrichen: {'; '.join(teile)}. " if teile else ""
+
+
+def anhang_notiz(liste) -> str:
+    teile = [f"„{' '.join(str(s).split())[:45].replace('.', ',').replace(';', ',')}…“ R{str(w).replace('.', ',').rstrip('0').rstrip(',') or '0'}"
+             for s, w in list(liste or [])[:ANHANG_HOECHSTENS]]
+    return f"Anhang: {'; '.join(teile)}. " if teile else ""
 
 
 def vermischt_notiz(liste) -> str:

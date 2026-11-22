@@ -795,6 +795,20 @@ def heute_widerspruch(antwort: str, wochentag: int) -> list[str]:
     return weg
 
 
+def anhang_kandidaten(antwort: str, frage: str = "") -> list[str]:
+    saetze = [x for absatz in (antwort or "").split("\n") for x in _saetze(absatz) if x.strip()]
+    gefragt = {w.lower() for w in re.findall(r"[\wäöüß-]+", frage or "")}
+    out = []
+    for satz in reversed(saetze[1:]):
+        if re.search(r"(?i)^\s*(?:stand:|quelle|source)", satz):
+            continue
+        sicher, verdacht = namen(satz)
+        neue_namen = [n for n in sicher + verdacht if not set(n.lower().split()) <= gefragt]
+        if neue_namen or re.search(r"\d", satz):
+            out.append(satz)
+    return out
+
+
 def saetze_streichen(antwort: str, weg, *, mitnehmen: bool = False) -> tuple[str, list[str]]:
     raus: list[str] = []
     absaetze = []
