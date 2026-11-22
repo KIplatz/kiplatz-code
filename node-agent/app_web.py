@@ -7373,7 +7373,10 @@ _KEIN_BEGRIFF = re.compile(r"^(?:von|vom|in|im|aus|für|mit|des|der|unter|bei|zu
                            r"dir|mir|dich|mich|uns|euch|ihm|ihr|ihnen|man)$", re.I)
 
 
-def begriffsfrage(frage: str) -> bool:
+_BEKANNTE_KUERZEL = frozenset("KI AI PDF ABC WLAN LAN USB LOL OK PC TV CD DVD SMS GPS USA EU UNO NATO DNA CO2 HTML URL WWW IT".split())
+
+
+def begriffsfrage(frage: str, *, fuer_erdung: bool = False) -> bool:
     m = _BEGRIFFSFRAGE.match(" ".join((frage or "").split()))
     if not m:
         return False
@@ -7383,7 +7386,9 @@ def begriffsfrage(frage: str) -> bool:
         if len(worte) == 2 and not worte[0][:1].islower():
             return False
         for w in worte:
-            if _KEIN_BEGRIFF.match(w) or sum(c.isupper() for c in w) >= 2 or (w[:1].islower() and re.search(r"ste[nrms]?$", w)):
+            abk = sum(c.isupper() for c in w) >= 2
+            if (_KEIN_BEGRIFF.match(w) or (abk and (not fuer_erdung or w.upper().strip("-") in _BEKANNTE_KUERZEL))
+                    or (w[:1].islower() and re.search(r"ste[nrms]?$", w))):
                 return False
         if not wissen.woerter(teil):
             return False
@@ -7409,7 +7414,7 @@ def erdung_noetig(frage: str, nachrichten: list[dict] | None = None) -> bool:
         return False
     if nachrichten and absicht.ohne_suche(absicht.letzte(nachrichten)):
         return False
-    return wissensfrage(frage, frage_zeichen=True) or nachschauen.nicht_im_lexikon(frage) or begriffsfrage(frage)
+    return wissensfrage(frage, frage_zeichen=True) or nachschauen.nicht_im_lexikon(frage) or begriffsfrage(frage, fuer_erdung=True)
 
 
 _NUR_SCHREIBEN = re.compile(r"\b(?:schreib\w*|gedicht|geschichte|übersetz\w*|uebersetz\w*|write|poem|story|translat\w*)\b", re.I)
@@ -7417,7 +7422,7 @@ _NUR_SCHREIBEN = re.compile(r"\b(?:schreib\w*|gedicht|geschichte|übersetz\w*|ue
 
 def suche_denkbar(frage: str) -> bool:
     f = " ".join((frage or "").split())
-    if (len(wissen.woerter(f)) < 2 and not begriffsfrage(f)) or _NUR_GESPRAECH.match(f):
+    if (len(wissen.woerter(f)) < 2 and not begriffsfrage(f, fuer_erdung=True)) or _NUR_GESPRAECH.match(f):
         return False
     if nachschauen._IM_NETZ.search(f.lower()):
         return True
