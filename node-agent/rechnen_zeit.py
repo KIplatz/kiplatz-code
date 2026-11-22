@@ -162,7 +162,7 @@ def _zeit_lesen(h: str, m: str | None, u: str | None) -> tuple[int, int, bool]:
 def loesen(text: str) -> Ergebnis | None:
     t = " ".join(text.split()).strip()
     t = re.sub(r"[\s?!.]+$", "", t)
-    for stufe in (_zonen, _jetzt_in, _dauer, _plus_minus):
+    for stufe in (_zonen, _jetzt_in, _zone_von, _dauer, _plus_minus):
         r = stufe(t)
         if r is not None:
             return r
@@ -248,6 +248,45 @@ def _jetzt_in(t: str) -> Ergebnis | None:
     tag_de, tag_en = _TAGE_DE[dort.weekday()], _TAGE_EN[dort.weekday()]
     return Ergebnis(f"In {z[0]} ist es jetzt {_uhr(dort.hour, dort.minute, False)} ({tag_de}), nach der Uhr dieses Geräts und den Sommerzeit-Regeln.",
                     f"It is {_uhr(dort.hour, dort.minute, True, True)} in {z[1]} right now ({tag_en}), by this device's clock and daylight saving rules.")
+
+
+def _utc_text(minuten: int) -> str:
+    h, m = divmod(abs(minuten), 60)
+    return "UTC" + ("-" if minuten < 0 else "+") + str(h) + (f":{m:02d}" if m else "")
+
+
+_ZONE_VON = re.compile(
+    rf"(?:(?:what|which)\s+time\s*zone\s+(?:is|does|do|has)\s+(?P<o1>{_NAMEN_RE})(?:\s+(?:in|use|have|on))?"
+    rf"|(?:what|which|what's|whats)\s+(?:is\s+)?(?:the\s+)?time\s*zone\s+(?:of|in|for)\s+(?P<o2>{_NAMEN_RE})"
+    rf"|time\s*zone\s+(?:of|in|for)\s+(?P<o3>{_NAMEN_RE})"
+    rf"|welche\s+zeitzone\s+(?:hat|gilt\s+(?:in|für|fuer)|ist\s+in|herrscht\s+in|gibt\s+es\s+in|haben)\s+(?:die\s+|der\s+)?(?P<o4>{_NAMEN_RE})"
+    rf"|in\s+welcher\s+zeitzone\s+(?:liegt|ist|befindet\s+sich|liegen)\s+(?P<o5>{_NAMEN_RE})"
+    rf"|zeitzone\s+(?:von|in|für|fuer)\s+(?P<o6>{_NAMEN_RE}))", re.I)
+
+
+def _zone_von(t: str) -> Ergebnis | None:
+    m = _ZONE_VON.fullmatch(t)
+    if not m:
+        return None
+    ort = next(g for g in m.groups() if g)
+    if ort.lower() in ("utc", "gmt", "weltzeit", "australien", "australia", "brasilien", "brazil", "mexiko", "mexico", "spanien", "spain"):
+        return None
+    z = _zone(ort)
+    utc = jetzt_utc()
+    dort = ortszeit(z, utc)
+    std, regel = z[2], z[3]
+    jetzt_v = versatz(z, utc)
+    tag_de, tag_en = _TAGE_DE[dort.weekday()], _TAGE_EN[dort.weekday()]
+    if not regel:
+        de_z, en_z = f"{z[0]} hat {_utc_text(std)}, ohne Sommerzeit.", f"{z[1]} uses {_utc_text(std)}, with no daylight saving time."
+    elif jetzt_v != std:
+        de_z = f"{z[0]} hat gerade Sommerzeit, {_utc_text(jetzt_v)}; sonst gilt {_utc_text(std)}."
+        en_z = f"{z[1]} is on daylight saving time right now, {_utc_text(jetzt_v)}; standard time is {_utc_text(std)}."
+    else:
+        de_z = f"{z[0]} hat gerade Normalzeit, {_utc_text(std)}; in der Sommerzeit gilt {_utc_text(std + 60)}."
+        en_z = f"{z[1]} is on standard time right now, {_utc_text(std)}; during daylight saving time it is {_utc_text(std + 60)}."
+    return Ergebnis(f"{de_z} Dort ist es jetzt {_uhr(dort.hour, dort.minute, False)} ({tag_de}), nach der Uhr dieses Geräts.",
+                    f"{en_z} It is {_uhr(dort.hour, dort.minute, True, True)} there right now ({tag_en}), by this device's clock.")
 
 
 def _dauer(t: str) -> Ergebnis | None:

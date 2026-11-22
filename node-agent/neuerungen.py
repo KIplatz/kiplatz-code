@@ -14,6 +14,9 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-11-22l": [
+        "Fragst du, in welcher Zeitzone ein Ort liegt, rechnet KIplatz das jetzt selbst, mit Sommerzeit und der Uhrzeit dort. Bei einer Umrechnung von Fahrenheit in Celsius steht der Rechenweg dabei. Und fragst du nach etwas, das es nur in einem Land gibt, etwa dem Kindergeld, sagt KIplatz dazu, für welches Land die Antwort gilt. Fragst du, wie jemand in einem Amt heißt, etwa der Bundeskanzler, sucht KIplatz nach dem heutigen Stand.",
+    ],
     "2026-11-22k": [
         "Antwortest du auf eine englische Rückfrage nur mit einem Land oder einem Namen, etwa „United Kingdom“, antwortet KIplatz weiter auf Englisch.",
     ],

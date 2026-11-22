@@ -100,6 +100,15 @@ _JETZT_PRAKTISCH = re.compile(r"\b(preis(?:e)?|kostet|kosten|tarif\w*|ticket\w*|
 
 
 _AMT_WER = re.compile(r"(?i)\b(?:wer (?:ist|sind)|who (?:is|are|'s))\b|\bwho's\b")
+_AMT_WIE_HEISST = re.compile(
+    r"(?i)\b(?:wie\s+hei(?:ß|ss)(?:t|en)\s+(?:der|die)\s+(?:aktuelle[nr]?\s+|derzeitige[nr]?\s+|jetzige[nr]?\s+|neue[nr]?\s+)?"
+    r"(?:bundeskanzler(?:in)?|kanzler(?:in)?|bundespräsident(?:in)?|präsident(?:in)?|staatspräsident(?:in)?|premierminister(?:in)?|"
+    r"ministerpräsident(?:in)?|\w*minister(?:in)?|bürgermeister(?:in)?|landeshauptmann|landeshauptfrau|regierungschef(?:in)?|papst|"
+    r"könig(?:in)?|kaiser(?:in)?|trainer(?:in)?|ceo|chef(?:in)?|vorsitzende[r]?|gouverneur(?:in)?)\s+(?:von|vom|in|im|der|des)\b"
+    r"|what(?:\s+is|'s)\s+the\s+name\s+of\s+the\s+(?:current\s+|new\s+)?(?:president|prime\s+minister|chancellor|\w*\s*minister|mayor|"
+    r"governor|king|queen|pope|ceo|coach|chair(?:man|woman|person)?)\s+(?:of|in)\b)")
+_AMT_FIKTION = re.compile(r"(?i)\b(?:film\w*|serie\w*|buch|roman|spiel|movie|series|book|novel|game|star wars|auf (?:englisch|latein|deutsch)|"
+                          r"in (?:english|latin|german)|mit vollem namen|full name|der löwen|lion king)\b")
 _AMT_DIREKT = re.compile(r"(?i)\b(?:wer regiert|wer führt|who (?:governs|rules|runs|leads))\b")
 _AMT_ROLLE = re.compile(r"(?i)\b(?:\w*präsident\w*|\w*kanzler\w*|premier\w*|\w*minister\w*|regierungschef\w*|staatsoberhaupt|\w*bürgermeister\w*|"
                         r"landeshauptm[äa]nn\w*|landeshauptfrau|gouverneur\w*|könig\w*|kaiser\w*|papst|vorsitzende\w*|parteichef\w*|ceo|"
@@ -112,6 +121,8 @@ def amtsfrage(frage: str) -> bool:
     f = frage or ""
     if _AMT_FRUEHER.search(f):
         return False
+    if _AMT_WIE_HEISST.search(f) and not _AMT_FIKTION.search(f):
+        return True
     return bool(_AMT_DIREKT.search(f) or (_AMT_WER.search(f) and _AMT_ROLLE.search(f)))
 
 
@@ -451,6 +462,23 @@ _SCHREIBAUFTRAG = re.compile(r"(?i)^\s*(?:ein(?:en|e)?\s+)?(?:brief|e-?mail|mail
 _EIGENES_DOKUMENT = re.compile(r"(?i)\b(?:mein|meine[mnrs]?|unser|unsere[mnrs]?)\s+[\wäöüß-]*(?:vertrag|bescheid|zettel|brief|rechnung|abrechnung|"
                                r"dokument\w*|unterlagen|befund|polizze)\b|\b(?:my|our)\s+(?:\w+\s+)?(?:contract|payslip|pay slip|lease|letter|document|"
                                r"statement|bill|invoice|policy)\b")
+
+
+def land_aus_begriff(frage: str) -> tuple[str, str] | None:
+    f = str(frage or "")
+    import region
+    if region.erkennen(f) is not None or belege.laender_in(f):
+        return None
+    if (_NUR_AT.search(f) is not None) == (_NUR_DE.search(f) is not None):
+        return None
+    at, de = _EINDEUTIG_AT.search(f), _EINDEUTIG_DE.search(f)
+    if bool(at) == bool(de):
+        return None
+    return (at.group(0), "Österreich") if at else (de.group(0), "Deutschland")
+
+
+_EINDEUTIG_AT = re.compile(r"(?i)\b(?:familienbeihilfe|klimaticket|finanzonline|ögk|pensionsversicherungsanstalt)\b")
+_EINDEUTIG_DE = re.compile(r"(?i)\b(?:bürgergeld|elterngeld|kindergeld|minijobs?|bafög|abitur|bundestag)\b")
 
 
 def ist_land_rueckfrage(text: str) -> bool:

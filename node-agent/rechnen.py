@@ -613,7 +613,9 @@ def _temperatur(q: tuple[Fraction, str], ziele: list[str]) -> Ergebnis:
     qd = f"Gas Mark {zahl_text(zahl)}" if von == "G" else f"{zahl_text(zahl)}{_TEMP_ZEICHEN[von]}"
     qe = f"gas mark {zahl_text(zahl, True)}" if von == "G" else f"{zahl_text(zahl, True)}{_TEMP_ZEICHEN[von]}"
     if len(de) == 1:
-        return Ergebnis(f"{qd} sind {de[0]}.", f"{qe} is {en[0]}.")
+        weg = {("F", "C"): (" Gerechnet: (°F − 32) × 5 ÷ 9.", " Formula: (°F − 32) × 5 ÷ 9."),
+               ("C", "F"): (" Gerechnet: °C × 9 ÷ 5 + 32.", " Formula: °C × 9 ÷ 5 + 32.")}.get((von, einzig[0]), ("", ""))
+        return Ergebnis(f"{qd} sind {de[0]}.{weg[0]}", f"{qe} is {en[0]}.{weg[1]}")
     return Ergebnis(f"{qd} sind:\n" + "\n".join("– " + x for x in de), f"{qe} equals:\n" + "\n".join("– " + x for x in en))
 
 

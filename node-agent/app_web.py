@@ -7089,7 +7089,17 @@ def frage_fokus(frage: str) -> str:
         teile.append(NEUHEIT_FOKUS.format(heute=ki_laufzeit.heute().strftime("%d.%m.%Y")))
     if laender_frage(f):
         teile.append(LAENDER_FOKUS)
+    begriff = nachschauen.land_aus_begriff(f)
+    if begriff:
+        if antwortsprache.frage_sprache(f) == "en":
+            teile.append(BEGRIFF_LAND_FOKUS_EN.format(wort=begriff[0], land={"Österreich": "Austria", "Deutschland": "Germany"}[begriff[1]]))
+        else:
+            teile.append(BEGRIFF_LAND_FOKUS.format(wort=begriff[0], land=begriff[1]))
     return " ".join(teile)
+
+
+BEGRIFF_LAND_FOKUS = "Die Frage nennt kein Land; mit „{wort}“ ist meist die Leistung in {land} gemeint. Sag im ersten Satz, dass deine Antwort für {land} gilt."
+BEGRIFF_LAND_FOKUS_EN = "The question names no country; “{wort}” usually means the one in {land}. Say in your first sentence that your answer is for {land}."
 
 
 LAENDER_FOKUS = ("Nennen die Quellen für verschiedene Bundesländer verschiedene Werte, sag das: zuerst, was in den meisten Bundesländern gilt, dann "
@@ -7530,6 +7540,9 @@ def _frueher_gefragt(nachrichten: list[dict] | None) -> bool:
 _AUSGABE_ZEITWORT = re.compile(r"\b(?:letzte[nrms]?|zuletzt|vorige[nrms]?|vergangene[nrms]?|last|latest|most recent|previous)\b", re.I)
 
 
+_AMT_ZURUECK = re.compile(r"(?i)\b(?:dort|da|davon|dessen|deren|sein\w*|ihr\w*|there|its|their|his|her)\b|^\s*(?:und|and)\b")
+
+
 def suchwoerter_ordnen(liste: list[str], frage: str, frueher: str = "", heute=None) -> list[str]:
     from datetime import date
     h = heute or ki_laufzeit.heute()
@@ -7539,6 +7552,14 @@ def suchwoerter_ordnen(liste: list[str], frage: str, frueher: str = "", heute=No
     bezug = eigen | alt
     out: list[str] = []
     ausgabe = nachschauen.ereignis_tag(frage, h) is None and nachschauen.juengstes_ereignis(frage)
+    if nachschauen.amtsfrage(frage):
+        zurueck = frueher if _AMT_ZURUECK.search(frage) else ""
+        regel = " ".join((nachschauen.suchbegriffe_regel(frage, zurueck) or frage).split())[:120]
+        if re.search(r"\b(?:19|20)\d\d\b", frage):
+            liste = [regel]
+        else:
+            ohne_jahr = " ".join(re.sub(r"\b20\d\d(?:/\d\d)?\b", " ", regel).split()) or regel
+            liste = [f"{ohne_jahr} {h.year}", ohne_jahr]
     for q in liste:
         if bezug and not _verwandt(set(wissen.woerter(q)), bezug):
             continue
