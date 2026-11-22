@@ -14,6 +14,9 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-11-22h": [
+        "Fragst du nach dem Unterschied zwischen Pension und Rente, erklärt KIplatz es jetzt so, wie es in Österreich gilt. Und wer fragt, wie lange man für eine Pension oder eine Beihilfe arbeiten oder wohnen muss, bekommt die Voraussetzungen.",
+    ],
     "2026-11-22g": [
         "Fragst du, was ein Begriff bedeutet, etwa „Was ist ein Kollektivvertrag?“, schaut KIplatz jetzt in Quellen nach, statt aus dem Gedächtnis zu antworten. Fragst du nach dem Wetter an einem bestimmten Tag, steht dieser Tag für die Antwort ganz vorne.",
     ],

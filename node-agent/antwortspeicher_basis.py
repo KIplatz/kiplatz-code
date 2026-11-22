@@ -246,6 +246,8 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
      "dem Wert aus ihrer eigenen Zeile; Antworten mit Suche von vorher werden verworfen"),
     ("2026-11-22g", frozenset({"ohne_suche"}), "Begriffsfragen („Was ist ein Kollektivvertrag?“) werden geerdet statt aus dem Gedächtnis beantwortet (zweimal ein "
      "falscher Satz); Antworten ohne Suche von vorher werden verworfen"),
+    ("2026-11-22h", frozenset({"suche"}), "„Wie lange muss man … für eine Pension“ sucht mit „Voraussetzungen“, Pension und Rente im österreichischen Wörterbuch "
+     "(vorher deutsche Sicht: „Pension ist für Beamte“); Antworten mit Suche von vorher werden verworfen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())

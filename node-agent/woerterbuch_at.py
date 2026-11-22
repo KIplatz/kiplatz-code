@@ -78,6 +78,13 @@ WOERTER: dict[str, tuple[str, str]] = {
     "feber": ("Februar", "February"),
     "heuer": ("dieses Jahr", "this year"),
     "matura": ("Abitur, die Reifeprüfung am Ende der höheren Schule", "school-leaving exam"),
+    "pension": ("die Altersversorgung aus der gesetzlichen Pensionsversicherung, die in Österreich alle bekommen, die genug Versicherungsjahre "
+                "gesammelt haben; was in Österreich Pension heißt, heißt in Deutschland Rente, und dort ist Pension nur die Versorgung der Beamten. "
+                "„Rente“ sagt man in Österreich für andere laufende Zahlungen, etwa eine Unfallrente oder Leibrente. Eine Pension ist auch ein kleines Gasthaus",
+                "the state old-age pension from the statutory pension insurance that everyone in Austria gets after enough insurance years; in "
+                "Germany it is called Rente and Pension there means a civil servant's pension. In Austria Rente is used for other regular "
+                "payments such as an accident annuity. A Pension is also a small guesthouse"),
+    "pensionist": ("Rentner, jemand, der eine Pension bezieht", "pensioner, retiree"),
     "krankenstand": ("Krankschreibung, die Zeit, in der jemand krank von der Arbeit fernbleibt", "sick leave"),
     "trafik": ("Tabakladen, in dem es auch Zeitungen, Fahrscheine und Lotto gibt", "tobacconist and newsagent"),
     "bim": ("Straßenbahn", "tram"),

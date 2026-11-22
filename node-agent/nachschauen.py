@@ -493,7 +493,8 @@ def suchbegriffe_regel(text: str, frueher: str = "") -> str:
     eigen = worte(text)
     if len(eigen) < 3 and frueher:
         eigen = [w for w in worte(frueher) if w.lower() not in {e.lower() for e in eigen}][:4] + eigen
-    if (_WIE_WIRD_MAN.search(text or "") or (_WAS_BRAUCHT_MAN.search(text or "") and belege.regelfrage(text or ""))) \
+    anspruch = bool(_WIE_LANGE_FUER.search(text or "") and (_LANDABHAENGIG.search(text or "") or re.search(r"(?i)\bpension\b", text or "")))
+    if (_WIE_WIRD_MAN.search(text or "") or anspruch or (_WAS_BRAUCHT_MAN.search(text or "") and belege.regelfrage(text or ""))) \
             and not any(w.lower().startswith("voraussetzung") for w in eigen):
         eigen = eigen[:7] + ["Voraussetzungen"] if len(eigen) >= 8 else eigen + ["Voraussetzungen"]
     return " ".join(eigen[:8])
@@ -503,6 +504,9 @@ _WIE_WIRD_MAN = re.compile(r"(?i)^\s*wie\s+(?:(?:wird|werde|werden)\s+(?:man|ich
                            r"|(?:bekommt|bekomme|kriegt|kriege|erhält|erhalte)\s+(?:man|ich|du)\s+(?:(?:in|als)\s+[\wäöüÄÖÜß-]+\s+)?"
                            r"(?:ein|eine|einen|den|die|das)\s+)(?-i:[A-ZÄÖÜ])[\wäöüß-]+\s*\??\s*$")
 _WAS_BRAUCHT_MAN = re.compile(r"(?i)\bwas\s+(?:braucht|brauche)\s+(?:man|ich)\s+(?:für|um)\b")
+_WIE_LANGE_FUER = re.compile(r"(?i)\bwie\s+(?:lange|viele\s+jahre)\s+(?:muss|müssen|musst)\s+(?:man|ich|du|wir)\b(?=.*\b(?:für|um)\b)"
+                             r"(?=.*\b(?:arbeiten|gearbeitet|einzahlen|eingezahlt|versichert|beschäftigt|angestellt|wohnen|gewohnt|leben|gelebt|"
+                             r"verheiratet)\b)")
 _NAME_VOR_MAN = frozenset("iron spider pac bat super ant isle of ein einen der dem den die".split())
 _NAME_NACH_MAN = frozenset("city utd united tge tgx tgs tgl lkw bus truck group".split())
 
