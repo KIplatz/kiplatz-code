@@ -2431,7 +2431,8 @@ class Api:
             englisch = None
             ab0 = absicht.letzte(nachrichten)
             _ABSICHT.wert = ab0
-            en_frage = antwortsprache.frage_sprache(antwortsprache.letzte_frage(nachrichten)) == "en"
+            en_frage = antwortsprache.gespraech_sprache(nachrichten) == "en"
+            ursprung = suchfrage(nachrichten) if en_frage else antwortsprache.letzte_frage(nachrichten)
             laeuft = self._ki.server.laeuft()
             vorab = self._antwort_vorab(nachrichten, ab=ab0, en_frage=en_frage, krisenhilfe_an=fenster is None,
                                         waehrung=not skill and not zuhause and laeuft, bezug_an=not skill and not zuhause and not fenster and not auszuege,
@@ -2446,9 +2447,9 @@ class Api:
                     self._schritt("schreibt die Antwort auf Englisch …")
                     return antwortsprache.antwort_uebersetzen(self._ki.server.frage, text_v, schein, teil_melden, log=lambda z: _log(self._core, z))
                 return text_v, schein
-            direkt = en_frage and not ab0.antwort and laeuft and englisch_direkt(antwortsprache.letzte_frage(nachrichten))
+            direkt = en_frage and not ab0.antwort and laeuft and englisch_direkt(ursprung)
             if direkt:
-                ki_laufzeit.original_setzen(antwortsprache.letzte_frage(nachrichten))
+                ki_laufzeit.original_setzen(ursprung)
             elif en_frage and not ab0.antwort and self._ki.server.laeuft():
                 self._schritt("liest die Frage …")
                 try:
@@ -2456,7 +2457,7 @@ class Api:
                 except Exception as exc:
                     _log(self._core, f"FEHLER frage_auf_deutsch: {type(exc).__name__}")
                 if englisch:
-                    ki_laufzeit.original_setzen(antwortsprache.letzte_frage(nachrichten))
+                    ki_laufzeit.original_setzen(ursprung)
             text, schein = self._antwort_fuer_mitglied_ohne_schritt(englisch or nachrichten, auszuege, fuer, frisch=frisch,
                                                                     teil_melden=None if englisch else teil_melden, skill=skill, privat=privat,
                                                                     messen=messen, englisch=direkt)
@@ -2670,7 +2671,7 @@ class Api:
             return self._ki.frage(modell_nachrichten, on_token=on_token, zusatz=auftrag_sprache(zusatz_), max_tokens=max_tokens_ or max_tokens, kurz=kurz)
 
         if gesundheit_im_gespraech(nachrichten):
-            englisch_g = antwortsprache.frage_sprache(_letzte_frage_text(nachrichten)) == "en"
+            englisch_g = antwortsprache.gespraech_sprache(nachrichten) == "en"
             regel = GESUNDHEIT_REGEL_EN if englisch_g else GESUNDHEIT_REGEL
             abk = medizin_abkuerzungen.zusatz(_gespraech_text(nachrichten), englisch=englisch_g)
             zusatz = regel + ("\n\n" + abk if abk else "") + ("\n\n" + zusatz if zusatz else "")
@@ -4898,7 +4899,7 @@ class Api:
                 on_token = satzweise.Sammler(lambda text: self._js(f"app.token({json.dumps(text, ensure_ascii=False)})"), mit=zaehlen)
             am_prozessor = wahl is not None and wahl.geraet is None and not fern
             max_tokens = 320 if am_prozessor else None
-            englisch_gefragt = not fern and antwortsprache.frage_sprache(str(text)) == "en"
+            englisch_gefragt = not fern and antwortsprache.gespraech_sprache(g.fuer_modell() + [{"role": "user", "content": str(text)}]) == "en"
             nachrichten_de = None
             direkt = False
 

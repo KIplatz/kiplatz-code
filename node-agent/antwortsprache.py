@@ -96,6 +96,30 @@ def frage_sprache(text: str) -> str:
     return "de"
 
 
+def gespraech_sprache(nachrichten: list[dict]) -> str:
+    letzte = letzte_frage(nachrichten)
+    s = frage_sprache(letzte)
+    if s == "en" or absicht.erkennen(letzte or "").art == "sprache":
+        return s
+    if _sprachzeichen(letzte):
+        return s
+    for n in reversed((nachrichten or [])[:-1]):
+        if n.get("role") != "user":
+            continue
+        t = str(n.get("content") or "")
+        if len(_WORT.findall(t)) > 30:
+            return s
+        if _sprachzeichen(t):
+            return frage_sprache(t)
+    return s
+
+
+def _sprachzeichen(text: str) -> bool:
+    woerter = [w.lower() for w in _WORT.findall(text or "")]
+    return (frage_sprache(text) == "en" or any(w in _DE for w in woerter) or bool(re.search(r"[äöüßÄÖÜ]", text or ""))
+            or len(woerter) > 4)
+
+
 def letzte_frage(nachrichten: list[dict]) -> str:
     for n in reversed(nachrichten or []):
         if n.get("role") == "user":

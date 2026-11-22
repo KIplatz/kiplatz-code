@@ -252,6 +252,8 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
      "Antworten ohne Suche von vorher werden verworfen"),
     ("2026-11-22j", frozenset({"suche"}), "Weltweit statt österreichisch: Fragen ohne Land suchten seit 22e auf Österreich zugeschnitten; "
      "Antworten mit Suche von vorher werden verworfen"),
+    ("2026-11-22k", frozenset(), "Die Sprache gilt für das ganze Gespräch („United Kingdom“ auf die englische Rückfrage bleibt englisch); gespeicherte "
+     "Antworten betrifft das nicht, nichts zu verwerfen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())

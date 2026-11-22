@@ -14,6 +14,9 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-11-22k": [
+        "Antwortest du auf eine englische Rückfrage nur mit einem Land oder einem Namen, etwa „United Kingdom“, antwortet KIplatz weiter auf Englisch.",
+    ],
     "2026-11-22j": [
         "KIplatz nimmt nicht mehr an, dass du aus Österreich fragst. Hängt die Antwort vom Land ab, etwa beim Mindestlohn, beim Mutterschutz oder beim Reisepass, fragt KIplatz auf Deutsch und auf Englisch zuerst, für welches Land du es wissen willst.",
     ],
