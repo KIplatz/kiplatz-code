@@ -2737,7 +2737,10 @@ class Api:
                                               and not quellen and not vorspann and erdung_noetig(suchfrage(nachrichten), nachrichten)
                                               and (massfrage(suchfrage(nachrichten)) or belege.zahlenfrage(suchfrage(nachrichten))))
         if nur_mit_beleg and not getattr(a, "abgebrochen", False) and pr.gruen == 0 and not _WEISS_NICHT.search(ohne_markdown(a.text or "")):
-            a = dataclasses.replace(a, text=_satz(_GESUCHT_NICHTS_SATZ, _GESUCHT_NICHTS_SATZ_EN))
+            if im_netz_gesucht(nachgeholt, quellen, lauf) == "nicht_erreicht":
+                a = dataclasses.replace(a, text=_satz(_NICHT_ERREICHT_SATZ, _NICHT_ERREICHT_SATZ_EN))
+            else:
+                a = dataclasses.replace(a, text=_satz(_GESUCHT_NICHTS_SATZ, _GESUCHT_NICHTS_SATZ_EN))
             pr = pruefung.pruefen(a.text, [])
             strom.neu()
         verworfen = False
@@ -7540,6 +7543,8 @@ def _frueher_gefragt(nachrichten: list[dict] | None) -> bool:
 _AUSGABE_ZEITWORT = re.compile(r"\b(?:letzte[nrms]?|zuletzt|vorige[nrms]?|vergangene[nrms]?|last|latest|most recent|previous)\b", re.I)
 
 
+_JAHR_GEWOLLT = re.compile(r"(?i)\b(?:steuer\w*|arbeitnehmerveranlagung|veranlagung|abrechnung\w*|jahresabschluss|ausgleich|tax\w*|"
+                           r"wahl\w*|election\w*|abschluss|bilanz\w*)\b")
 _AMT_ZURUECK = re.compile(r"(?i)\b(?:dort|da|davon|dessen|deren|sein\w*|ihr\w*|there|its|their|his|her)\b|^\s*(?:und|and)\b")
 
 
@@ -7564,6 +7569,15 @@ def suchwoerter_ordnen(liste: list[str], frage: str, frueher: str = "", heute=No
         if bezug and not _verwandt(set(wissen.woerter(q)), bezug):
             continue
         w = [x for x in q.split() if not (fremd and set(wissen.woerter(x)) and set(wissen.woerter(x)) <= fremd)]
+        if (not ausgabe and belege.regelfrage(frage) and not _JAHR_GEWOLLT.search(f"{frage} {frueher}")
+                and not re.search(r"\b(?:19|20)\d\d\b", f"{frage} {frueher}")):
+            def alt(i: int, x: str) -> bool:
+                m = re.fullmatch(r"\(?(20\d\d)(?:[–/-](\d{2,4}))?\)?[,.;]?", x)
+                if not m or i == 0 or re.fullmatch(r"[A-ZÄÖÜ0-9-]{2,}|[A-Z][a-z]*[A-Z]\w*", w[i - 1]):
+                    return False
+                ende = int(m.group(2)) if m.group(2) and len(m.group(2)) == 4 else (2000 + int(m.group(2)) if m.group(2) else int(m.group(1)))
+                return h.year - 3 <= int(m.group(1)) and ende < h.year
+            w = [x for i, x in enumerate(w) if not alt(i, x)]
         q2 = " ".join(w)
         if len(q2.split()) < 2:
             q2 = " ".join(frage.split())[:120]

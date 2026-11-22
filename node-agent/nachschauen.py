@@ -503,9 +503,28 @@ def land_rueckfrage(nachrichten: list[dict]) -> tuple[str, str] | None:
     gespraech = " ".join(str(n.get("content", "")) for n in nachrichten if n.get("role") == "user")
     import region
     if (region.erkennen(gespraech) is not None or belege.laender_in(gespraech) or _NUR_AT.search(gespraech) or _NUR_DE.search(gespraech)
-            or _NUR_UK_US.search(gespraech)):
+            or _NUR_UK_US.search(gespraech) or ort_genannt(gespraech)):
         return None
     return LAND_RUECKFRAGE, LAND_RUECKFRAGE_EN
+
+
+_KEIN_ORT_EN = {"The", "A", "An", "My", "Our", "Your", "This", "That", "These", "Those", "General", "Total", "Order", "Case", "Short", "Fact",
+                "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December",
+                "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "English", "German", "Euro", "Euros", "Dollars", "I",
+                "Bitcoin", "Crypto", "Google", "Amazon", "Apple", "Tesla", "Uber", "Microsoft", "Excel", "Christmas", "Easter", "Ramadan", "Summer",
+                "Winter", "Spring", "Autumn", "Fall", "Cash", "Stocks", "Shares", "Retirement", "Advance", "Total", "Person", "Writing", "Advance"}
+
+
+def ort_genannt(text: str) -> bool:
+    t = str(text or "")
+    import rechnen_zeit
+    for m in re.finditer(rf"(?i)(?<![\wäöüß])({rechnen_zeit._NAMEN_RE})(?![\wäöüß])", t):
+        if m.group(1)[:1].isupper() and m.group(1).lower() not in ("utc", "gmt", "weltzeit", "essen", "halle", "wels"):
+            return True
+    import antwortsprache
+    if antwortsprache.frage_sprache(t) != "en" or t.istitle():
+        return False
+    return any(m.group(1) not in _KEIN_ORT_EN for m in re.finditer(r"(?<!^)\bin\s+(?:the\s+)?([A-Z][a-z]{2,})\b", t.strip()))
 
 
 def ohne_vergleichswunsch(anfrage: str) -> str:

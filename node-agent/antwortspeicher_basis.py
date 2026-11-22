@@ -257,6 +257,8 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
     ("2026-11-22l", frozenset({"suche"}), "Fragen ohne Land mit einem Wort, das nur ein Land kennt („Kindergeld“), nennen das Land; Zeitzonen und "
      "Temperatur-Rechenweg rechnet das Programm; Amtsfragen suchen ohne vermuteten Namen („Olaf Scholz“); Antworten mit Suche von vorher "
      "werden verworfen"),
+    ("2026-11-22m", frozenset({"suche"}), "Regelfragen suchen ohne veraltetes Jahr des Modells („Spain 2024“), Städte wie Dubai nennen das Land; "
+     "Antworten mit Suche von vorher werden verworfen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())
