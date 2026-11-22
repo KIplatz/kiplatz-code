@@ -692,6 +692,64 @@ def _neu_nummeriert(zeilen: list[str]) -> list[str]:
     return out
 
 
+_ZUSAMMEN_ANFANG = re.compile(r"(?i)^\s*(?:overall|in total|all in all|altogether|in summary|insgesamt|alles in allem|zusammengefasst|unterm strich|"
+                              r"the (?:whole|overall|entire|total) (?:process|time|duration)|der (?:ganze|gesamte) (?:vorgang|ablauf|prozess))\b")
+_ANH_EINHEIT = (r"(jahre?n?|years?|monate?n?|months?|wochen|weeks?|tage?n?|days?|stunden|hours?|minuten|minutes?|euro|€|franken|chf|dollar|\$|"
+            r"prozent|%|kilometer|km|kalorien|kcal|calories)")
+_ANH_SPANNE = re.compile(r"(?i)(?:between\s+|zwischen\s+)?(\d+(?:[.,]\d+)*)\s*(?:bis|und|and|to|–|-)\s*(\d+(?:[.,]\d+)*)\s*" + _ANH_EINHEIT + r"\b")
+_ANH_WERT = re.compile(r"(?i)(?<![\d.,])(\d+(?:[.,]\d+)*)\s*" + _ANH_EINHEIT + r"\b")
+_ANH_JE = re.compile(r"(?i)\b(?:pro|je|per|each|monatlich\w*|jährlich\w*|wöchentlich\w*|täglich\w*|monthly|yearly|weekly|daily|a month|a year)\b")
+_LEER_ANFANG = re.compile(r"(?i)^\s*(?:again|once again|as (?:mentioned|said|noted)(?: above| before)?|since the question (?:asks|is)|"
+                          r"wie (?:bereits |schon )?(?:gesagt|erwähnt)|nochmals|noch einmal|da (?:die|deine) frage)\b")
+
+
+def _anh_einheit(e: str) -> str:
+    e = e.lower()
+    for k, ws in (("jahr", ("jahr", "year")), ("monat", ("monat", "month")), ("woche", ("woche", "week")), ("tag", ("tag", "day")),
+                  ("stunde", ("stunde", "hour")), ("minute", ("minute",)), ("geld", ("euro", "€", "franken", "chf", "dollar", "$")),
+                  ("prozent", ("prozent", "%")), ("km", ("kilometer", "km")), ("kcal", ("kalorien", "kcal", "calorie"))):
+        if any(e.startswith(w) for w in ws):
+            return k
+    return e
+
+
+def _anh_zahl(x: str) -> float | None:
+    teile = re.split(r"[.,]", x)
+    try:
+        if len(teile) > 1 and len(teile[-1]) in (1, 2):
+            return float("".join(teile[:-1]) + "." + teile[-1])
+        if len(teile) > 1 and teile[0] != "0" and all(len(t) == 3 for t in teile[1:]):
+            return float("".join(teile))
+        return float(x.replace(",", ".")) if len(teile) <= 2 else None
+    except ValueError:
+        return None
+
+
+def angehaengte_saetze(antwort: str) -> list[str]:
+    saetze = [x for absatz in (antwort or "").split("\n") for x in _saetze(absatz) if x.strip()]
+    weg = []
+    for i, satz in enumerate(saetze):
+        if i == 0:
+            continue
+        davor = " ".join(saetze[:i])
+        if _ZUSAMMEN_ANFANG.search(satz) and not _ANH_JE.search(satz):
+            werte = [(_anh_zahl(m.group(1)), _anh_einheit(m.group(2))) for m in _ANH_WERT.finditer(davor)]
+            werte = [(w, e) for w, e in werte if w is not None]
+            for m in _ANH_SPANNE.finditer(satz):
+                lo, hi, einheit = _anh_zahl(m.group(1)), _anh_zahl(m.group(2)), _anh_einheit(m.group(3))
+                if lo is None or hi is None:
+                    continue
+                if any(e == einheit and w > hi for w, e in werte):
+                    weg.append(satz)
+                    break
+        if satz not in weg and _LEER_ANFANG.search(satz):
+            import wissen
+            neue_zahl = set(re.findall(r"\d+(?:[.,]\d+)*", satz)) - set(re.findall(r"\d+(?:[.,]\d+)*", davor))
+            if not neue_zahl and not {w for w in wissen.woerter(satz) if len(w) >= 5} - set(wissen.woerter(davor + " question frage")):
+                weg.append(satz)
+    return weg
+
+
 def saetze_streichen(antwort: str, weg, *, mitnehmen: bool = False) -> tuple[str, list[str]]:
     raus: list[str] = []
     absaetze = []

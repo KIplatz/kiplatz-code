@@ -162,7 +162,7 @@ def _zeit_lesen(h: str, m: str | None, u: str | None) -> tuple[int, int, bool]:
 def loesen(text: str) -> Ergebnis | None:
     t = " ".join(text.split()).strip()
     t = re.sub(r"[\s?!.]+$", "", t)
-    for stufe in (_zonen, _jetzt_in, _zone_von, _dauer, _plus_minus):
+    for stufe in (_zonen, _jetzt_in, _zone_von, _umstellung, _dauer, _plus_minus):
         r = stufe(t)
         if r is not None:
             return r
@@ -287,6 +287,94 @@ def _zone_von(t: str) -> Ergebnis | None:
         en_z = f"{z[1]} is on standard time right now, {_utc_text(std)}; during daylight saving time it is {_utc_text(std + 60)}."
     return Ergebnis(f"{de_z} Dort ist es jetzt {_uhr(dort.hour, dort.minute, False)} ({tag_de}), nach der Uhr dieses Geräts.",
                     f"{en_z} It is {_uhr(dort.hour, dort.minute, True, True)} there right now ({tag_en}), by this device's clock.")
+
+
+_UMSTELLUNG = re.compile(
+    r"(?i)^(?:wann\s+(?:ist|wird|kommt|beginnt|endet|startet|fängt|faengt|hört|hoert)\s+(?:die\s+|der\s+)?(?:nächste\s+|naechste\s+)?"
+    r"(?:zeitumstellung|zeitumstellung|sommerzeit|winterzeit|uhr\s+umgestellt|uhrumstellung|normalzeit)(?:\s+(?:an|auf|um|zurück|vor|zu\s+ende))?"
+    r"|wann\s+(?:wird|werden)\s+(?:die\s+)?uhr(?:en)?\s+(?:umgestellt|zurückgestellt|vorgestellt)"
+    r"|when\s+(?:does|do|is|will)\s+(?:the\s+)?(?:daylight\s+saving(?:s)?(?:\s+time)?|dst|summer\s+time|clocks?|time\s+change|clock\s+change)"
+    r"(?:\s+(?:end|start|begin|change|go\s+back|go\s+forward|spring\s+forward|fall\s+back))?)"
+    rf"(?:\s+(?:in|im|für|fuer|for)\s+(?:the\s+)?(?P<o>{_NAMEN_RE}|europa|europe|eu|us|usa|united\s+states|amerika))?"
+    r"(?:\s+(?P<j>this\s+year|next\s+year|next|heuer|dieses\s+jahr|nächstes\s+jahr|naechstes\s+jahr|2\d{3}))?$")
+
+
+def _naechster_wechsel(regel: str, std: int, ab: datetime) -> tuple[datetime, bool] | None:
+    if not regel:
+        return None
+    t = ab.replace(minute=0, second=0, microsecond=0)
+    jetzt = sommerzeit(regel, std, t)
+    for _ in range(400 * 24):
+        t += timedelta(hours=1)
+        s = sommerzeit(regel, std, t)
+        if s != jetzt:
+            return t, s
+    return None
+
+
+def _umstellung(t: str) -> Ergebnis | None:
+    m = _UMSTELLUNG.match(t)
+    if not m:
+        return None
+    import rechnen_datum
+    gefragt = (m.group("o") or "").lower()
+    if gefragt in ("australien", "australia"):
+        return None
+    usa = gefragt in ("us", "usa", "united states", "amerika")
+    europa = gefragt in ("europa", "europe", "eu")
+    englisch = bool(re.match(r"(?i)when\b", t))
+    if gefragt and not (usa or europa):
+        orte = [(gefragt, None, None)]
+    elif usa:
+        orte = [("new york", "den USA", "the US")]
+    elif europa or not englisch:
+        orte = [("wien", "Europa (EU und Schweiz)", "Europe (EU and Switzerland)")]
+    else:
+        orte = [("wien", "Europa (EU und Schweiz)", "Europe (EU and Switzerland)"), ("new york", "den USA", "the US")]
+    utc = jetzt_utc()
+    j = (m.group("j") or "").lower()
+    jahr = int(j) if j.isdigit() else (utc.year if j in ("this year", "heuer", "dieses jahr") else
+                                       utc.year + 1 if j in ("next year", "nächstes jahr", "naechstes jahr") else None)
+    if jahr is not None:
+        utc = datetime(jahr, 1, 1, tzinfo=timezone.utc)
+    de, en = [], []
+    for ort, name_de, name_en in orte:
+        z = _zone(ort)
+        name_de, name_en = name_de or z[0], name_en or z[1]
+        w1 = _naechster_wechsel(z[3], z[2], utc)
+        if w1 is None:
+            de.append(f"In {name_de} gibt es keine Sommerzeit, die Uhr bleibt das ganze Jahr bei {_utc_text(z[2])}.")
+            en.append(f"{name_en} has no daylight saving time; it stays on {_utc_text(z[2])} all year.")
+            continue
+        w2 = _naechster_wechsel(z[3], z[2], w1[0])
+        wechsel = [w1, w2]
+        winter = bool(re.search(r"(?i)\b(?:winterzeit|normalzeit|standard\s+time)\b", t))
+        verb_ende = bool(re.search(r"(?i)\b(?:endet|enden|ends?|zu\s+ende)\b", t))
+        verb_beginn = bool(re.search(r"(?i)\b(?:beginnt|beginnen|startet|fängt|faengt|starts?|begins?)\b", t))
+        zurueck = bool(re.search(r"(?i)\b(?:zurück\w*|back|fall)\b", t))
+        vor = bool(re.search(r"(?i)\b(?:vorgestellt|vorstellen|forward|spring)\b", t))
+        will_ende = zurueck or (verb_beginn if winter else verb_ende)
+        will_beginn = vor or (verb_ende if winter else verb_beginn)
+        will_ende, will_beginn = will_ende and not will_beginn, will_beginn and not will_ende
+        if (will_ende and w1[1]) or (will_beginn and not w1[1]):
+            wechsel.reverse()
+        teile = []
+        for wann, beginnt in wechsel:
+            vorher = ortszeit(z, wann - timedelta(minutes=1)) + timedelta(minutes=1)
+            tag = vorher.date()
+            nach_h = vorher.hour + (1 if beginnt else -1)
+            if not (0 <= nach_h <= 23):
+                return None
+            von, nach = str(vorher.hour), str(nach_h)
+            teile.append((beginnt, von, nach,
+                          f"{_TAGE_DE[tag.weekday()]}, {tag.day}. {rechnen_datum.MONATE_DE[tag.month - 1]} {tag.year}",
+                          f"{_TAGE_EN[tag.weekday()]}, {rechnen_datum.MONATE_EN[tag.month - 1]} {tag.day}, {tag.year}"))
+        (b1, v1, n1, d1, e1), (b2, v2, n2, d2, e2) = teile
+        de.append(f"In {name_de} {'beginnt' if b1 else 'endet'} die Sommerzeit am {d1}: die Uhr wird um {v1} Uhr auf {n1} Uhr "
+                  f"{'vorgestellt' if b1 else 'zurückgestellt'}. {'Davor' if wechsel[0] is not w1 else 'Danach'} {'beginnt' if b2 else 'endet'} sie am {d2} ({v2} Uhr auf {n2} Uhr).")
+        en.append(f"In {name_en}, daylight saving time {'starts' if b1 else 'ends'} on {e1}, when clocks go {'forward' if b1 else 'back'} "
+                  f"from {v1} am to {n1} am. {'Before that' if wechsel[0] is not w1 else 'After that'} it {'starts' if b2 else 'ends'} on {e2} ({v2} am to {n2} am).")
+    return Ergebnis(" ".join(de) + " Gerechnet nach den geltenden Regeln.", " ".join(en) + " Worked out from the current rules.")
 
 
 def _dauer(t: str) -> Ergebnis | None:

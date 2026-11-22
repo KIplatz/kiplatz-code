@@ -1541,7 +1541,7 @@ class Api:
         woher = ergebnisse[0].woher if ergebnisse else ""
         wohin = _wohin_gemerkt()
         if ergebnisse:
-            self._letzter_stand = {"art": a.art, "titel": ergebnisse[0].titel, "nachgeschaut": wissen._jetzt(), "gilt_bis": ergebnisse[0].gueltig_bis, "aus_gedaechtnis": False}
+            self._letzter_stand = {"art": a.art, "titel": ergebnisse[0].titel, "nachgeschaut": _gelesen_um(ergebnisse[0]), "gilt_bis": ergebnisse[0].gueltig_bis, "aus_gedaechtnis": False}
         return out[:10], f"Jetzt {woher}, {wohin}." + (f" {gesucht_satz(frage, [a.frage] + weitere)}" if a.art == "suche" else "") + (
             (" 1 Seite mit einem älteren Stand (frühere Saison oder früheres Jahr) aussortiert." if alt_raus == 1 else
              f" {alt_raus} Seiten mit einem älteren Stand (frühere Saison oder früheres Jahr) aussortiert." if alt_raus else ""))
@@ -1631,7 +1631,7 @@ class Api:
             ek["portale"] = list(dict.fromkeys(ek["portale"] + einkauf.vergleichsseiten(roh, ergebnisse)))[:3]
         out = [tr[i] for i in range(max((len(x) for x in je_seite), default=0)) for tr in je_seite if i < len(tr)]
         wohin = _wohin_gemerkt()
-        self._letzter_stand = {"art": "suche", "titel": ergebnisse[0].titel, "nachgeschaut": wissen._jetzt(), "gilt_bis": ergebnisse[0].gueltig_bis, "aus_gedaechtnis": False}
+        self._letzter_stand = {"art": "suche", "titel": ergebnisse[0].titel, "nachgeschaut": _gelesen_um(ergebnisse[0]), "gilt_bis": ergebnisse[0].gueltig_bis, "aus_gedaechtnis": False}
         seiten = sum(1 for e in ergebnisse if not e.titel.startswith("Suchergebnisse"))
         anfragen = nachschauen.anfragen_aufteilen([q for q in anfragen if q and q.strip()], frage)[:4] or [frage]
         gelesen = (f"Jetzt im Internet gesucht ({woher}), 1 Seite gelesen, {wohin}." if seiten == 1
@@ -7092,6 +7092,8 @@ def frage_fokus(frage: str) -> str:
         teile.append(NEUHEIT_FOKUS.format(heute=ki_laufzeit.heute().strftime("%d.%m.%Y")))
     if laender_frage(f):
         teile.append(LAENDER_FOKUS)
+    if _OEFFNUNG.search(f):
+        teile.append(OEFFNUNG_FOKUS_EN if antwortsprache.frage_sprache(f) == "en" else OEFFNUNG_FOKUS)
     begriff = nachschauen.land_aus_begriff(f)
     if begriff:
         if antwortsprache.frage_sprache(f) == "en":
@@ -7099,6 +7101,14 @@ def frage_fokus(frage: str) -> str:
         else:
             teile.append(BEGRIFF_LAND_FOKUS.format(wort=begriff[0], land=begriff[1]))
     return " ".join(teile)
+
+
+_OEFFNUNG = re.compile(r"(?i)\b(?:[öo]ffnungszeit\w*|(?:hat|haben|ist|sind)\s+(?!.{0,40}\b(?:datei|dokument|file)\b).{0,40}\bge[öo]ffnet|offen\s+hat|aufsperr\w*|opening\s+(?:hours|times)|open(?:s|ing)?\s+(?:at|until|today|on)|"
+                       r"what\s+time\s+does\s+.+\s+(?:open|close)|when\s+(?:does|is)\s+.+\s+open)\b")
+OEFFNUNG_FOKUS = ("Gefragt sind Öffnungszeiten: nenne die Uhrzeiten von bis, wie sie in den Quellen stehen, für jeden Tag oder jede Gruppe von Tagen, "
+                  "dazu Ruhetage und längere Abende.")
+OEFFNUNG_FOKUS_EN = ("The question asks for opening hours: give the times from and to as the sources state them, for each day or group of days, "
+                     "plus closing days and late openings.")
 
 
 BEGRIFF_LAND_FOKUS = "Die Frage nennt kein Land; mit „{wort}“ ist meist die Leistung in {land} gemeint. Sag im ersten Satz, dass deine Antwort für {land} gilt."
@@ -7545,6 +7555,21 @@ _AUSGABE_ZEITWORT = re.compile(r"\b(?:letzte[nrms]?|zuletzt|vorige[nrms]?|vergan
 
 _JAHR_GEWOLLT = re.compile(r"(?i)\b(?:steuer\w*|arbeitnehmerveranlagung|veranlagung|abrechnung\w*|jahresabschluss|ausgleich|tax\w*|"
                            r"wahl\w*|election\w*|abschluss|bilanz\w*)\b")
+def _gelesen_um(ergebnis) -> str:
+    from datetime import datetime as _dt
+    bis = str(getattr(ergebnis, "gueltig_bis", "") or "")
+    dauer = nachschauen.GUELTIG.get(str(getattr(ergebnis, "art", "") or ""))
+    jetzt = wissen._jetzt()
+    try:
+        if bis and dauer is not None:
+            von = _dt.strptime(bis, "%Y-%m-%dT%H:%M:%SZ") - dauer
+            if 0 <= (_dt.strptime(jetzt, "%Y-%m-%dT%H:%M:%SZ") - von).total_seconds() <= 600:
+                return von.strftime("%Y-%m-%dT%H:%M:%SZ")
+    except (ValueError, TypeError):
+        pass
+    return jetzt
+
+
 _AMT_ZURUECK = re.compile(r"(?i)\b(?:dort|da|davon|dessen|deren|sein\w*|ihr\w*|there|its|their|his|her)\b|^\s*(?:und|and)\b")
 
 
@@ -8067,6 +8092,13 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
         namen_fall = namen_fall and not raus_misch
         notizen.append("1 Satz, der einer Quelle etwas aus einer anderen Quelle zuschreibt, vom Programm gestrichen." if len(raus_misch) == 1
                        else f"{len(raus_misch)} Sätze, die einer Quelle etwas aus einer anderen Quelle zuschreiben, vom Programm gestrichen.")
+    angehaengt = belege.angehaengte_saetze(geprueft)
+    weg_angehaengt: list[str] = []
+    if angehaengt:
+        geprueft, weg_angehaengt = belege.saetze_streichen(geprueft, lambda s: s in angehaengt)
+    if weg_angehaengt:
+        notizen.append("1 angehängter Satz (Widerspruch zu den Zahlen davor oder nur Wiederholung) vom Programm gestrichen." if len(weg_angehaengt) == 1
+                       else f"{len(weg_angehaengt)} angehängte Sätze (Widerspruch oder Wiederholung) vom Programm gestrichen.")
     if raus and geprueft != wn and not belege.brauchbar(geprueft):
         notizen.append("Nach dem Streichen blieb kein ganzer Satz; der Rest wurde nicht ausgegeben.")
         geprueft = wn

@@ -14,6 +14,9 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-11-22n": [
+        "Fragst du nach Beträgen aus einer Tabelle, etwa der Pendlerpauschale, weiß KIplatz jetzt, zu welcher Tabelle und Spalte ein Betrag gehört, also ob kleine oder große Pauschale, Monat oder Jahr. Die Zeitumstellung rechnet es selbst aus, und bei Öffnungszeiten nennt es die Uhrzeiten. Ein Schlusssatz, der den Zahlen davor widerspricht, fällt weg.",
+    ],
     "2026-11-22m": [
         "Fragst du nach einer Regel in einer Stadt, etwa nach der Einkommensteuer in Dubai, weiß KIplatz jetzt, welches Land gemeint ist, und fragt nicht mehr nach. Regeln sucht es mit dem heutigen Stand statt mit dem Jahr, das das Modell im Kopf hat. Und ist die Suche gerade gebremst, sagt KIplatz das, statt „nichts gefunden“.",
     ],

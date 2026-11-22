@@ -265,20 +265,30 @@ class _Text(HTMLParser):
         self._still = 0
         self._in_titel = False
         self._tabellen: list[dict] = []
+        self._block = ""
+        self._vorher = ""
 
     def _zeile(self) -> dict | None:
         return self._tabellen[-1] if self._tabellen else None
 
     def _tabelle_start(self, tag, attrs):
         if tag == "table":
+            kontext = self._kontext_kurz(self._block.strip() or self._vorher) if not self._tabellen else ""
             self._tabellen.append({"label": "", "zelle": 0, "fang": None, "span": "", "span_rest": 0, "offen": False, "laenge": 0,
-                                   "geerbt": False})
+                                   "geerbt": False, "kontext": kontext if len(kontext) >= 4 else "", "kopf": {}, "kopf_neu": {},
+                                   "nur_th": True, "th": None, "kopf_gut": True})
             return
         z = self._zeile()
         if z is None:
             return
+        if tag == "caption":
+            z["caption"] = ""
+            return
         if tag == "tr":
+            if z.get("caption") is not None:
+                z["kontext"], z["caption"] = self._kontext_kurz(z["caption"]) or z["kontext"], None
             z["zelle"], z["fang"], z["offen"], z["laenge"], z["geerbt"] = 0, None, False, 0, False
+            z["nur_th"], z["kopf_neu"], z["th"] = True, {}, None
             if z["span_rest"] > 0:
                 z["label"], z["zelle"], z["geerbt"] = z["span"], 1, True
                 z["span_rest"] -= 1
@@ -289,6 +299,14 @@ class _Text(HTMLParser):
             z["zelle"] += 1
             z["laenge"] = 0
             a = dict(attrs)
+            if tag == "td":
+                z["nur_th"] = False
+                if z["zelle"] >= 2 and ((a.get("colspan") or "1") != "1" or (a.get("rowspan") or "1") != "1"):
+                    z["kopf_gut"], z["kopf"] = False, {}
+            else:
+                z["th"] = ""
+                if (a.get("colspan") or "1") != "1":
+                    z["kopf_gut"] = False
             if z["zelle"] == 1 and (tag == "td" or (a.get("scope") or "").lower() == "row"):
                 z["fang"] = ""
                 try:
@@ -303,8 +321,29 @@ class _Text(HTMLParser):
               and (z["zelle"] > 2 or z["geerbt"] or z["laenge"] > 0)):
             z["offen"] = True
 
+    @staticmethod
+    def _kontext_kurz(text: str) -> str:
+        t = " ".join(str(text or "").split())
+        kopf = re.split(r"[,:;(]", t, maxsplit=1)[0].strip()
+        if re.search(r"(?i)\b(?:kein\w*|nicht|ohne|no|not|without)\b", kopf):
+            return ""
+        if len(kopf) > 60:
+            kopf = kopf[:60].rsplit(" ", 1)[0] + " …"
+        return kopf if len(kopf) >= 4 else ""
+
+    @staticmethod
+    def _zusatz(z: dict) -> str:
+        if not 3 <= len(z.get("kopf") or {}) <= 6:
+            return ""
+        teile = [x for x in (z.get("kontext") or "", z["kopf"].get(z["zelle"], "")) if x and x.lower() not in z["label"].lower()]
+        return f" ({', '.join(teile)})" if teile else ""
+
     def _tabelle_ende(self, tag):
         z = self._zeile()
+        if tag == "caption" and z is not None and z.get("caption") is not None:
+            kurz = self._kontext_kurz(z["caption"])
+            z["kontext"], z["caption"] = kurz or z["kontext"], None
+            return
         if tag == "table" and z is not None:
             self._tabellen.pop()
         elif z is not None and tag in ("td", "th") and z["fang"] is not None:
@@ -315,7 +354,12 @@ class _Text(HTMLParser):
             z["span"] = z["label"] if z["span_rest"] else ""
             if not ok:
                 z["span_rest"] = 0
-        elif z is not None and tag == "tr":
+        elif z is not None and tag == "th" and z["th"] is not None:
+            z["kopf_neu"][z["zelle"]] = " ".join(z["th"].split()).rstrip(":")
+            z["th"] = None
+        if z is not None and tag == "tr":
+            if z["nur_th"] and len(z["kopf_neu"]) >= 2 and z["kopf_gut"]:
+                z["kopf"] = {k: v for k, v in z["kopf_neu"].items() if 0 < len(v) <= 40}
             self.teile.append("\n\n")
             z["label"], z["zelle"], z["offen"] = "", 0, False
 
@@ -337,6 +381,10 @@ class _Text(HTMLParser):
             self._in_titel = False
         if tag in ("p", "div", "li", "h1", "h2", "h3", "h4", "tr", "section", "article"):
             self.teile.append("\n")
+        if tag in ("p", "div", "li", "h1", "h2", "h3", "h4", "h5", "h6", "caption", "section", "article") and not self._tabellen:
+            if self._block.strip():
+                self._vorher = self._block
+            self._block = ""
         if not self._still:
             self._tabelle_ende(tag)
 
@@ -345,17 +393,28 @@ class _Text(HTMLParser):
             self.titel_liste[-1] += data
         elif not self._still:
             z = self._zeile()
+            if z is None:
+                self._block += data
+            elif z.get("caption") is not None:
+                z["caption"] += data
+            elif z["th"] is not None:
+                z["th"] += data
             if z is not None and z["fang"] is not None:
                 z["fang"] += data
             elif z is not None and z["offen"] and data.strip():
-                self.teile.append(z["label"] + ": ")
+                self.teile.append(z["label"] + self._zusatz(z) + ": ")
                 z["offen"] = False
             elif z is not None and z["label"] and z["zelle"] == 2 and not z["geerbt"] and z["laenge"] == 0 and data.strip():
                 while self.teile and not self.teile[-1].strip():
                     self.teile.pop()
                 if self.teile:
                     self.teile[-1] = self.teile[-1].rstrip()
-                self.teile.append(" " if self.teile and self.teile[-1].rstrip().endswith(":") else ": ")
+                zusatz = self._zusatz(z)
+                if zusatz:
+                    self.teile[-1] = self.teile[-1].rstrip().rstrip(":")
+                    self.teile.append(zusatz + ": ")
+                else:
+                    self.teile.append(" " if self.teile and self.teile[-1].rstrip().endswith(":") else ": ")
             if z is not None:
                 z["laenge"] += len(data.strip())
             self.teile.append(data)

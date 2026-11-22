@@ -446,6 +446,8 @@ _LANDABHAENGIG = re.compile(
     r"leave school|retire|get a tattoo|rent a car|gamble))\b")
 _KEINE_LANDFRAGE = re.compile(r"(?i)^(?!.*\b(?:mein\w*|aktuell\w*|derzeit|jetzt|heuer|my|now|current\w*|this year)\b)\s*(?:"
                               r"was\s+(?:ist|sind|war|waren)\s+(?!der\b|die\b|das\b|den\b|dem\b)|was\s+(?:bedeutet|bedeuten|heißt)\b|"
+                              r"(?:was\s+ist\s+der\s+|wo\s+liegt\s+der\s+)?unterschied\s+zwischen\b|"
+                              r"(?:what\s+is|what's|whats)\s+the\s+difference\s+between\b|difference\s+between\b|"
                               r"wer\s+(?:hat|war|ist|wurde)\b.*\b(?:erfunden|eingeführt|gegründet|entdeckt|abgeschafft)\b|"
                               r"seit\s+wann\b|warum\b|wieso\b|weshalb\b|welche\w*\s+[\wäöüß-]+\s+(?:hat|hatte|haben|bekam|bekamen)\b|"
                               r"what\s+(?:is|are|was|were)\s+(?!the\b)|what\s+does\b|what's\s+(?!the\b)|"
@@ -546,7 +548,9 @@ def suchbegriffe_regel(text: str, frueher: str = "") -> str:
                 continue
             fuell_man = (w == "man" and not (i > 0 and alle[i - 1].lower() in _NAME_VOR_MAN)
                          and not (i + 1 < len(alle) and alle[i + 1].lower() in _NAME_NACH_MAN))
-            if len(w) < 2 or w.lower() in _NICHT_SUCHEN or w.lower() in weg or w.lower() in out or fuell_man:
+            frageteil = w.lower() in _FRAGEWORT_TEIL and i > 0 and alle[i - 1].lower() in ("wie", "how")
+            name_ziffer = w.isdigit() and len(w) == 1 and i > 0 and alle[i - 1][:1].isupper() and alle[i - 1].lower() not in _NICHT_SUCHEN
+            if (len(w) < 2 and not name_ziffer) or w.lower() in _NICHT_SUCHEN or w.lower() in weg or w.lower() in out or fuell_man or frageteil:
                 continue
             if w.lower() in verneint and "nicht" not in out:
                 out.append("nicht")
@@ -569,6 +573,7 @@ _WAS_BRAUCHT_MAN = re.compile(r"(?i)\bwas\s+(?:braucht|brauche)\s+(?:man|ich)\s+
 _WIE_LANGE_FUER = re.compile(r"(?i)\bwie\s+(?:lange|viele\s+jahre)\s+(?:muss|müssen|musst)\s+(?:man|ich|du|wir)\b(?=.*\b(?:für|um)\b)"
                              r"(?=.*\b(?:arbeiten|gearbeitet|einzahlen|eingezahlt|versichert|beschäftigt|angestellt|wohnen|gewohnt|leben|gelebt|"
                              r"verheiratet)\b)")
+_FRAGEWORT_TEIL = frozenset("viel viele vielen much many".split())
 _NAME_VOR_MAN = frozenset("iron spider pac bat super ant isle of ein einen der dem den die".split())
 _NAME_NACH_MAN = frozenset("city utd united tge tgx tgs tgl lkw bus truck group".split())
 
@@ -1315,7 +1320,23 @@ def gefunden_zeile(titel: str, adresse: str, tag: str, seitentext: str) -> str:
     zeile = f"Gefunden über die Suche, Seite „{titel}“ ({adresse}), gelesen am {tag}."
     if vermittler(seitentext, adresse):
         return zeile + " " + VERMITTLER_SATZ
-    return zeile + " " + PREISVERGLEICH_SATZ if preisvergleich(seitentext) else zeile
+    if preisvergleich(seitentext):
+        return zeile + " " + PREISVERGLEICH_SATZ
+    return zeile + " " + SCHAETZ_SATZ if schaetzseite(titel, adresse) else zeile
+
+
+_SCHAETZ_HOST = re.compile(r"(?i)(?:calculator|rechner|costhelper|thepricer|pricelisto|howmuchis|kostencheck)")
+_SCHAETZ_TITEL = re.compile(r"(?i)\b(?:flugzeit|flugdauer|reisezeit|fahrzeit|entfernung\w*|flight\s+(?:time|duration)|travel\s+time|distance)"
+                            r"[\w\s-]{0,20}(?:rechner|calculator)\b")
+
+
+def schaetzseite(titel: str, adresse: str) -> bool:
+    host = re.sub(r"^[a-z]+://", "", str(adresse or "").lower()).split("/", 1)[0]
+    return not amtlich(adresse) and bool(_SCHAETZ_HOST.search(host) or _SCHAETZ_TITEL.search(str(titel or "")))
+
+
+SCHAETZ_SATZ = ("Diese Seite rechnet oder schätzt Zeiten und Preise selbst, sie ist nicht die Seite des Anbieters: nimm ihre Zahlen nur, wenn keine "
+                "andere Quelle sie nennt, und sag dann dazu, dass es eine Schätzung dieser Seite ist.")
 
 
 _GELDBETRAG = re.compile(r"(?<![\d.,])(\d{1,3}(?:[.  ]\d{3})+|\d+)[.,](\d{2})(?!\d)\s*(?:€|eur\b|euro\b|\$|usd\b|chf\b|£)"
