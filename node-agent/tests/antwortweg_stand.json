@@ -1,6 +1,6 @@
 {
- "pruefwert": "6c8d9ce73fed8a5b3e3d28d2",
+ "pruefwert": "ba8c8be7d072dcfd3ad8c0ee",
  "mindest_bau": "2026-10-26k",
- "erneuert": "2026-11-22f",
- "grund": "Bau 22f: Kochen ist kein Wetter, unbekannter Wetter-Ort sucht, Wochentage beim Wetter, Länderwerte je Zeile"
+ "erneuert": "2026-11-22g",
+ "grund": "Bau 22g: Begriffsfragen geerdet, gefragter Wettertag als eigene Zeile"
 }

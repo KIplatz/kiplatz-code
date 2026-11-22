@@ -160,6 +160,12 @@ def wochentag_tag(text: str) -> int:
     return 0
 
 
+_MEHRERE_TAGE = re.compile(r"(?i)\b(?:wochenende|weekend|ab|bis|von|from|until|und|and|oder|or)\b.*\b(?:montag|dienstag|mittwoch|donnerstag|freitag|"
+                           r"samstag|sonntag|morgen|übermorgen|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b|\bwochenende\b|\bweekend\b"
+                           r"|\b(?:montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag)\b.*\b(?:und|bis|oder)\b.*\b(?:montag|dienstag|mittwoch|"
+                           r"donnerstag|freitag|samstag|sonntag)\b")
+
+
 def wetter_tag_wort(tag: int) -> str:
     if tag < 3:
         return ["heute", "morgen", "übermorgen"][max(0, tag)]
@@ -298,7 +304,7 @@ koenntest sag sage sagst sagen schau schaust such suche suchst durchsuch durchsu
 rede redest eh halt ja nein nicht kein keine ob wo was wie wer wann gibt gibts gibt's es ein eine einer einen einem eines der die das den dem des
 und oder aber auch dass daß mal noch schon gerade jetzt heute bitte danke gesamten gesamte ganzen ganze alle allen handel irgendwo irgendwie
 mir nach im in am an auf bei für fuer von vom zu zum zur mit über ueber live nachprüfen nachpruefen internet netz online bitte
-ist sind war hat haben wird werden kann soll sollte gibt's""".split())
+ist sind war hat haben wird werden kann soll sollte gibt's bedeutet bedeuten heißt""".split())
 _NICHT_SUCHEN |= set("""brauche brauchst braucht brauchen benötige benötigst benötigt benötigen muss musst müssen darf darfst dürfen als
 do does did i you we he she it they a an the to of for is are was were be can could should would will must need needs my your our their
 what how when where who which why there please tell me""".split())
@@ -674,6 +680,9 @@ class Nachschauer:
                               + f", Wind bis {round(float(d['wind_speed_10m_max'][i]))} km/h.")
         except (KeyError, IndexError, TypeError, ValueError):
             raise NachschauError("NACHSCHAU_ANTWORT", "die Wetterdaten sind unvollständig") from None
+        kopf = 2
+        if isinstance(a.tag, int) and 0 < a.tag < len(tage) and len(zeilen) == kopf + len(tage) and not _MEHRERE_TAGE.search(a.frage or ""):
+            zeilen.insert(kopf, "Gefragter Tag: " + zeilen[kopf + a.tag])
         titel = f"Wetter {wetter_tag_wort(a.tag)} in {name}"
         return Ergebnis("wetter", titel, adresse, "\n".join(zeilen), gueltig_bis("wetter", self._jetzt()), "Wetter bei Open-Meteo nachgeschaut")
 

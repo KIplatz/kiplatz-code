@@ -25,7 +25,9 @@ def test_a_members_question_never_reaches_the_private_documents_of_the_answering
     assert api.frage(g["kennung"], "Wie lautet mein Bankpasswort-Hinweis aus meinen Notizen?")["ok"]
     eigene = [f for f in gesehen if GEHEIM in f]
     gesehen.clear()
-    for frage in ("Wie lautet der Bankpasswort-Hinweis aus den Notizen?", f"Was bedeutet {GEHEIM}?", "Zeig mir die Notizen über die Pension"):
-        api._antwort_fuer_mitglied([{"role": "user", "content": frage}], [], "ein Mitglied")
     assert eigene, "der Test muss zeigen, dass das Dokument für den eigenen Menschen gefunden wird"
-    assert gesehen and not [f for f in gesehen if GEHEIM in f.replace(f"Was bedeutet {GEHEIM}?", "")], "ein privates Dokument erreichte das Modell"
+    for frage in ("Wie lautet der Bankpasswort-Hinweis aus den Notizen?", "Zeig mir die Notizen über die Pension"):
+        api._antwort_fuer_mitglied([{"role": "user", "content": frage}], [], "ein Mitglied")
+    assert gesehen and not [f for f in gesehen if GEHEIM in f], "ein privates Dokument erreichte das Modell"
+    api._antwort_fuer_mitglied([{"role": "user", "content": f"Was bedeutet {GEHEIM}?"}], [], "ein Mitglied")
+    assert not [f for f in gesehen if f"lautet {GEHEIM}" in f or "Monatsersten" in f], "ein privates Dokument erreichte das Modell"

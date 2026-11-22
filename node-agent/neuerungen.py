@@ -14,6 +14,9 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-11-22g": [
+        "Fragst du, was ein Begriff bedeutet, etwa „Was ist ein Kollektivvertrag?“, schaut KIplatz jetzt in Quellen nach, statt aus dem Gedächtnis zu antworten. Fragst du nach dem Wetter an einem bestimmten Tag, steht dieser Tag für die Antwort ganz vorne.",
+    ],
     "2026-11-22f": [
         "Fragen zum Backofen, zum Kochen oder zum Haushalt mit „Grad“ hält KIplatz nicht mehr für Wetterfragen, und kennt es einen Ort fürs Wetter nicht, sucht es im Internet, statt aufzugeben. Weichen Bundesländer voneinander ab, nennt KIplatz jedes mit genau seinem Wert.",
     ],

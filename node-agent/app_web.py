@@ -7369,7 +7369,8 @@ _BEGRIFFSFRAGE = re.compile(r"^\s*(?:(?:und\s+)?was\s+(?:ist|sind|bedeutet|bedeu
                             r"(?:\w+\s+){0,3}unterschied\w*\s+zwischen\s+(?:(?:dem|der|den|einem|einer)\s+)?(?P<a>\S+)\s+und\s+(?:(?:dem|der|den|einem|einer)\s+)?"
                             r"(?P<b>\S+)\s*[?.!]?\s*$)", re.I)
 _KEIN_BEGRIFF = re.compile(r"^(?:von|vom|in|im|aus|für|mit|des|der|unter|bei|zu|zum|zur|nach|über|unterschied\w*|heute|los|gerade|jetzt|neu(?:e[ns]?)?|"
-                           r"passiert|das|dies\w*|es|damit|dabei|genau|eigentlich|denn|so|hier|da)$", re.I)
+                           r"passiert|das|dies\w*|es|damit|dabei|genau|eigentlich|denn|so|hier|da|"
+                           r"dir|mir|dich|mich|uns|euch|ihm|ihr|ihnen|man)$", re.I)
 
 
 def begriffsfrage(frage: str) -> bool:
@@ -7408,16 +7409,19 @@ def erdung_noetig(frage: str, nachrichten: list[dict] | None = None) -> bool:
         return False
     if nachrichten and absicht.ohne_suche(absicht.letzte(nachrichten)):
         return False
-    return wissensfrage(frage, frage_zeichen=True) or nachschauen.nicht_im_lexikon(frage)
+    return wissensfrage(frage, frage_zeichen=True) or nachschauen.nicht_im_lexikon(frage) or begriffsfrage(frage)
+
+
+_NUR_SCHREIBEN = re.compile(r"\b(?:schreib\w*|gedicht|geschichte|übersetz\w*|uebersetz\w*|write|poem|story|translat\w*)\b", re.I)
 
 
 def suche_denkbar(frage: str) -> bool:
     f = " ".join((frage or "").split())
-    if len(wissen.woerter(f)) < 2 or _NUR_GESPRAECH.match(f):
+    if (len(wissen.woerter(f)) < 2 and not begriffsfrage(f)) or _NUR_GESPRAECH.match(f):
         return False
     if nachschauen._IM_NETZ.search(f.lower()):
         return True
-    if nachschauen._SCHREIBEN.search(f) and not re.search(r"\b(?:wer|wann|wo|welche[rsmn]?|wie viel|wieviel|was kostet)\b", f, re.I):
+    if _NUR_SCHREIBEN.search(f) and not re.search(r"\b(?:wer|wann|wo|welche[rsmn]?|wie viel|wieviel|was kostet)\b", f, re.I):
         return False
     if (nachschauen._RECHNEN.search(f) and re.search(r"\d", f)) or belege.rechenaufgabe(f):
         return False
