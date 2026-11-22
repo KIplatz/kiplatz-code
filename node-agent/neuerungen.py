@@ -14,6 +14,9 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-11-22b": [
+        "Auch auf PCs mit Bewertungsmodell kommen schwach passende Fundstellen nur noch ans Modell, wenn sie wirklich vom Thema der Frage handeln. So erklärt KIplatz Brutto und Netto wieder mit dem Lohn statt mit Biodiesel.",
+    ],
     "2026-11-22a": [
         "Fragst du nach dem Unterschied zwischen Wetter und Klima, erklärt KIplatz es jetzt, statt nach deinem Ort zu fragen. Ein Gedicht, einen Witz oder eine Geschichte mit Thema schreibt es gleich, ohne Rückfragen. Auf schwächeren PCs nimmt KIplatz keine Fundstellen mehr, die nur nebenbei dieselben Wörter tragen, und gibt dem Modell bei einer Suche zuerst die Stellen, die zur Frage passen.",
     ],

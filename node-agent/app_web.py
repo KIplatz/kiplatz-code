@@ -1192,7 +1192,10 @@ class Api:
         if fachgebiete and sortiert is not None:
             sortiert = _fach_vorziehen(sortiert, fachgebiete)
         if sortiert is not None:
-            rest = sortiert.treffer[:n_rest]
+            fw_s = set(wissen.woerter(frage))
+            rest = [t for t, w in zip(sortiert.treffer, sortiert.werte)
+                    if w >= bewertung.SCHWELLE or t.quelle.privat or (fachgebiete and t.quelle.fachgebiet in fachgebiete)
+                    or self._titel_trifft(fw_s, t)][:n_rest]
             hinweis = ("Die gespeicherten Fundstellen wurden gelesen und nach Passung sortiert. " if sortiert.treffer
                        else "Keine gespeicherte Fundstelle passte wirklich zur Frage. ") + hinweis
         else:

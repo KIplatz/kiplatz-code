@@ -232,6 +232,8 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
     ("2026-11-22a", frozenset({"ohne_suche"}), "Ohne Bewertungsmodell galten Fundstellen zu einem anderen Thema als Abdeckung (Brutto und Netto mit "
      "Biodiesel, „10 Bundesländer“ aus dem Gedächtnis, weil eine Visa-Berichtigung „deckte“); Antworten ohne Suche von vorher können daraus "
      "stammen und werden verworfen, Antworten mit Suche bleiben"),
+    ("2026-11-22b", frozenset({"ohne_suche"}), "Mit Bewertungsmodell kamen schwach bewertete Stellen zu einem anderen Thema ans Modell "
+     "(Brutto und Netto mit Biodiesel, Nachmessung nach 22a); Antworten ohne Suche von vorher werden verworfen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())

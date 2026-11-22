@@ -1,6 +1,6 @@
 {
- "pruefwert": "93f085df652f1359c7d62add",
+ "pruefwert": "a9fd42adfcb595f4f7e1053b",
  "mindest_bau": "2026-10-26k",
- "erneuert": "2026-11-22a",
- "grund": "2026-11-22a: Fundstellen ohne Bewertungsmodell nach Titel und Passung, Fachgebiete der Person bleiben (Zufallsfragen 22.11., zweimal gegengelesen)"
+ "erneuert": "2026-11-22b",
+ "grund": "2026-11-22b: schwach bewertete Stellen unter SCHWELLE nur mit Titelwort der Frage, auch mit Bewertungsmodell (Nachmessung nach 22a)"
 }
