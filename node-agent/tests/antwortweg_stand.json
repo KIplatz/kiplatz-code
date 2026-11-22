@@ -1,6 +1,6 @@
 {
- "pruefwert": "87cb359435d8fee68a876db3",
+ "pruefwert": "2d1cae0bc1e931e73cd731ce",
  "mindest_bau": "2026-10-26k",
- "erneuert": "2026-11-22d",
- "grund": "Bau 22d: Tabellenzeilen mit Beschriftung, Stellenwahl nach Wortanfang, mehr Stellen fürs Bewertungsmodell, österreichische Amtswörter"
+ "erneuert": "2026-11-22e",
+ "grund": "Bau 22e: Rückfrage nach dem Land, Tabellenwert in derselben Zeile, Länderregeln, Voraussetzungen in der Suche"
 }

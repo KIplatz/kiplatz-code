@@ -2606,6 +2606,13 @@ class Api:
             return vr[0], {"modell": "nachgefragt, ohne Modell", "geraet": geraet, "dauer_s": 0.0, "wortstuecke": 0, "gelesen": 0,
                            "quellen": "keine Quelle nötig, das Programm fragt nach.", "quellen_liste": [], "gemacht": "nachgefragt",
                            "erfunden": "nichts, es wurde nur nachgefragt", "pruefung": pruefung.pruefen("", []).kurz(), "_en": vr[1]}, None
+        lr = (nachschauen.land_rueckfrage(nachrichten) if (not fern and not ohne_suche and not skill_name and nachsuche_erlaubt and not messen
+                                                             and not frisch
+                                                             and not _dateifrage(suchfrage(nachrichten))) else None)
+        if lr is not None:
+            return lr[0], {"modell": "nachgefragt, ohne Modell", "geraet": geraet, "dauer_s": 0.0, "wortstuecke": 0, "gelesen": 0,
+                           "quellen": "keine Quelle nötig, das Programm fragt nach.", "quellen_liste": [], "gemacht": "nachgefragt",
+                           "erfunden": "nichts, es wurde nur nachgefragt", "pruefung": pruefung.pruefen("", []).kurz(), "_en": lr[1]}, None
         if kopie and not (messen or frisch):
             fertig = self._fertig_aus_kopie(nachrichten, fuer_andere=(kopie == "andere"))
             if fertig is not None:
@@ -6737,7 +6744,8 @@ def suchfrage(nachrichten: list[dict]) -> str:
         return f"{frueher} {rest}" if neu else frueher
     davor = nachrichten[:-1] if nachrichten and nachrichten[-1].get("role") == "user" else []
     if len(davor) >= 2 and davor[-1].get("role") == "assistant" and (str(davor[-1].get("content", "")).startswith(schriftstueck.VORSPANN)
-                                                                       or nachschauen.ist_vergleich_rueckfrage(str(davor[-1].get("content", "")))):
+                                                                       or nachschauen.ist_vergleich_rueckfrage(str(davor[-1].get("content", "")))
+                                                                       or nachschauen.ist_land_rueckfrage(str(davor[-1].get("content", "")))):
         auftrag = next((" ".join(str(n.get("content", "")).split()) for n in reversed(davor) if n.get("role") == "user"), "")
         if auftrag:
             return f"{auftrag[:300]} {letzte}".strip()
@@ -7074,7 +7082,32 @@ def frage_fokus(frage: str) -> str:
         teile.append(REGEL_FOKUS)
     elif neuheitsfrage(f):
         teile.append(NEUHEIT_FOKUS.format(heute=ki_laufzeit.heute().strftime("%d.%m.%Y")))
+    if laender_frage(f):
+        teile.append(LAENDER_FOKUS)
     return " ".join(teile)
+
+
+LAENDER_FOKUS = ("Nennen die Quellen für verschiedene Bundesländer verschiedene Werte, sag das: was in den meisten Bundesländern gilt und welche "
+                 "abweichen, jeweils mit dem Namen des Bundeslands. Nenne nie den Wert eines einzelnen Bundeslands als Regel für ganz Österreich.")
+_OESTERREICH = re.compile(r"\b(?:österreich|oesterreich|austria)\w*", re.I)
+
+
+def laender_frage(frage: str) -> bool:
+    f = str(frage or "")
+    if not regel_ohne_ort(f):
+        return False
+    r = region.erkennen(f)
+    if _OESTERREICH.search(f):
+        return r is None or (r.land == "at" and not r.gebiet)
+    return r is None and ohne_land_oesterreich(f)
+
+
+_REGELVERB = re.compile(r"\b(?:darf|dürfen|darfst|muss|müssen|musst|erlaubt|verboten|pflicht\w*|gilt|gelten|gültig\w*|frist\w*|vorgeschrieben)\b", re.I)
+
+
+def regel_ohne_ort(frage: str) -> bool:
+    f = str(frage or "")
+    return bool(belege.regelfrage(f) or _REGELVERB.search(f))
 
 
 _MASSFRAGE = re.compile(r"\b(?:wie\s+(?:lange?|viele?|viel|hoch|weit|oft|alt|gro(?:ß|ss)|schwer|tief|breit|schnell|teuer|sp[äa]t|fr[üu]h|warm|kalt)"
@@ -7391,6 +7424,9 @@ def frage_leitzeilen(frage: str) -> str:
     r = region.erkennen(frage)
     if r is not None:
         zeilen.append(f"Die Frage betrifft {r.text()}. Nimm nur Angaben, die dort gelten.")
+    elif ohne_land_oesterreich(frage):
+        zeilen.append("Die Frage nennt kein Land. Ist eine Angabe je Land verschieden (Fristen, Preise, Regeln), nimm die für Österreich und "
+                      "sag dazu, dass sie für Österreich gilt.")
     ri = nachschauen.richtung(frage)
     if ri == "naechst":
         zeilen.append("Gefragt ist das Nächste ab heute: nimm den ersten Termin nach dem heutigen Datum, nie einen vergangenen.")
@@ -7421,7 +7457,21 @@ def such_sprache(frage: str) -> str:
     if ki_laufzeit.original():
         return "en"
     r = region.erkennen(frage)
+    if r is None and ohne_land_oesterreich(frage):
+        return region.SPRACHE["at"]
     return r.sprache if r else ""
+
+
+def ohne_land_oesterreich(frage: str) -> bool:
+    f = str(frage or "")
+    if region.erkennen(f) is not None or ki_laufzeit.original() or not _DEUTSCH.search(f):
+        return False
+    if woerterbuch_at._NICHT_AT.search(f):
+        return False
+    return bool(belege.regelfrage(f) or nachschauen._LANDABHAENGIG.search(f))
+
+
+_DEUTSCH = re.compile(r"\b(?:der|das|ist|sind|wie|wer|wann|ein|eine|einen|ich|darf|muss|kostet|gilt|lange|viel|nicht|und|für)\b", re.I)
 
 
 def englisch_direkt(frage: str) -> bool:
@@ -8173,6 +8223,9 @@ def im_netz_gesucht(nachgeholt: bool, quellen: list[dict], lauf: dict | None) ->
     return False
 
 
+_FUNDSTELLE_IN_WOHER = re.compile(r"(?:Nachgeschaut: |Suchergebnisse ).*?, gelesen am \d{1,2}\.\d{1,2}\.\d{4}\.\s*")
+
+
 def _weiss_nicht_anwenden(antwort_text: str, lieferschein: dict, *, gesucht: bool | str = False, vorher: str | None = None) -> str:
     lieferschein["angebot"] = "nachpruefen"
     fakt = any(re.search(r"\d", s) and not _WEISS_NICHT.search(s) for s in pruefung.saetze(antwort_text))
@@ -8184,8 +8237,11 @@ def _weiss_nicht_anwenden(antwort_text: str, lieferschein: dict, *, gesucht: boo
             lieferschein["pruefung"] = pruefung.pruefen("", []).kurz()
             lieferschein["erfunden"] = ""
             return _satz(_NICHT_ERREICHT_SATZ, _NICHT_ERREICHT_SATZ_EN)
-        lieferschein["quellen"] = ("keine Antwort: das Modell hat es nicht gewusst, und die Suche im Internet hat nichts Verlässliches gebracht."
-                                   if gesucht else "keine Antwort: das Modell hat es nicht gewusst; „Live nachprüfen“ schaut im Internet nach.")
+        weg_dahin = _FUNDSTELLE_IN_WOHER.sub("", str(lieferschein.get("quellen") or ""))
+        weg_dahin = " ".join(x for x in re.split(r"(?<=[.!?])\s+", weg_dahin) if x and not x.startswith(("keine Antwort", "Quelle", "Nachgeschaut:")))
+        lieferschein["quellen"] = (("keine Antwort: das Modell hat es nicht gewusst, und die Suche im Internet hat nichts Verlässliches gebracht."
+                                    if gesucht else "keine Antwort: das Modell hat es nicht gewusst; „Live nachprüfen“ schaut im Internet nach.")
+                                   + (" " + weg_dahin if weg_dahin else ""))
         lieferschein["pruefung"] = pruefung.pruefen("", []).kurz()
         lieferschein["erfunden"] = ""
         return _satz(_GESUCHT_NICHTS_SATZ, _GESUCHT_NICHTS_SATZ_EN) if gesucht else _satz(_WEISS_NICHT_SATZ, _WEISS_NICHT_SATZ_EN)

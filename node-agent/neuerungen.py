@@ -14,6 +14,9 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-11-22e": [
+        "Hängt die Antwort vom Land ab, etwa bei Steuern, Beihilfen, Pension, Ausweisen oder Altersgrenzen, und du nennst keines, fragt KIplatz zuerst, für welches Land du es wissen willst. Ist etwas in den Bundesländern verschieden, sagt KIplatz, was meistens gilt und wo es abweicht. Beträge aus Tabellen liest KIplatz jetzt in derselben Zeile wie ihre Beschriftung, so passt der Betrag zum richtigen Alter. Und wer fragt, wie man etwas wird oder bekommt, bekommt die Voraussetzungen.",
+    ],
     "2026-11-22d": [
         "Steht die Antwort in einer Tabelle, etwa die Ausgehzeiten je Bundesland, liest KIplatz jetzt jede Zeile mit ihrer Beschriftung. So wird aus der Regel eines Bundeslands keine Regel für ganz Österreich mehr. Auf PCs mit Bewertungsmodell prüft KIplatz von den gelesenen Seiten mehr Stellen und findet so die, in der die Antwort wirklich steht. Und KIplatz schreibt Pensionsversicherung statt Rentenversicherung und Jänner statt Januar.",
     ],

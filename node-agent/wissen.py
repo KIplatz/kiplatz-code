@@ -350,6 +350,12 @@ class _Text(HTMLParser):
             elif z is not None and z["offen"] and data.strip():
                 self.teile.append(z["label"] + ": ")
                 z["offen"] = False
+            elif z is not None and z["label"] and z["zelle"] == 2 and not z["geerbt"] and z["laenge"] == 0 and data.strip():
+                while self.teile and not self.teile[-1].strip():
+                    self.teile.pop()
+                if self.teile:
+                    self.teile[-1] = self.teile[-1].rstrip()
+                self.teile.append(" " if self.teile and self.teile[-1].rstrip().endswith(":") else ": ")
             if z is not None:
                 z["laenge"] += len(data.strip())
             self.teile.append(data)

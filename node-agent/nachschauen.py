@@ -382,6 +382,59 @@ def vergleich_rueckfrage(nachrichten: list[dict]) -> tuple[str, str] | None:
     return _rueckfrage_text(fehlt) if fehlt else None
 
 
+LAND_RUECKFRAGE = "Für welches Land möchtest du das wissen? Das ist von Land zu Land verschieden, etwa in Österreich, Deutschland oder der Schweiz."
+LAND_RUECKFRAGE_EN = "Which country do you want to know this for? It differs from country to country, for example in Austria, Germany or Switzerland."
+_LANDABHAENGIG = re.compile(
+    r"(?i)\b(?:(?-i:[A-ZÄÖÜ][\wäöüß]*steuer|Steuer)(?!ung|gerät|rad|knüppel|mann|bord|zeichen|leute)\w*|\w*steuer(?:satz|sätze|n|erklärung|ausgleich|klasse\w*|"
+    r"freibetrag|bescheid|nummer|berater\w*)\b|abgaben\b|\w+abgabe(?<!stimmabgabe)(?<!wärmeabgabe)\b|\w*beihilfe\w*|familienbonus|kinderbetreuungsgeld|"
+    r"kindergeld|elterngeld|karenz\w*|elternzeit|pension(?:s\w+|ist\w*)|in\s+pension|\w*rente\b|renten\w*|rentner\w*|mindestlohn\w*|\w*lohn\b|"
+    r"brutto|netto|mindestsicherung|arbeitslose\w*|kündigungsfrist\w*|kündigungsschutz|urlaubsanspruch|urlaubstage|urlaub\s+steht|probezeit|"
+    r"überstunden|krankenstand\w*|sozialversicherung\w*|krankenversicherung\w*|gesetzlich\w*|gesetzeslage|bußgeld\w*|\w*strafe\w*|reisepass\w*|"
+    r"personalausweis\w*|führerschein\w*|staatsbürger\w*|einbürgerung\w*|aufenthaltstitel\w*|wahlrecht|wahlalter|volljährig\w*|jugendschutz\w*|"
+    r"ausgehzeit\w*|mietrecht\w*|mieterhöhung\w*|kaution|gewährleistung|widerrufsrecht|(?<!altes )(?<!neues )testament|mwst|ust\b|gewerbeschein|"
+    r"gewerbeanmeldung|kilometergeld|pendler\w*|lohnzettel|abfertigung|zuverdienst\w*|dazuverdien\w*|geringfügig\w*|mutterschutz|vaterschaft\w*|"
+    r"scheidung\w*|unterhalt(?:szahlung\w*|spflicht\w*|sanspruch\w*|svorschuss)|erbrecht\w*|erbschaft\w*|absetzen|promille\w*|tempolimit|"
+    r"höchstgeschwindigkeit|ab\s+(?:wann|welchem\s+alter)\s+(?:darf|dürfen|darfst|muss|müssen)\s+(?:man|ich|du|jugendliche\w*|kinder)|"
+    r"tax(?:es|ation)?|minimum wage|passport|driving licen[cs]e|citizenship)\b")
+_KEINE_LANDFRAGE = re.compile(r"(?i)^\s*(?:was\s+(?:ist|sind|bedeutet|bedeuten|heißt|war|waren)\b|wer\b|seit\s+wann\b|warum\b|wieso\b|weshalb\b|"
+                              r"welche\w*\s+[\wäöüß-]+\s+(?:hat|hatte|haben|bekam|bekamen)\b)")
+_NUR_AT = re.compile(r"(?i)\b(?:familienbeihilfe|klimaticket|kollektivvertrag\w*|finanzonline|e-card|ögk|ams\b|"
+                     r"matura|lehrabschluss|abfertigung neu|pensionsversicherungsanstalt|pva\b)")
+_NUR_DE = re.compile(r"(?i)\b(?:bürgergeld|elterngeld|kindergeld|minijob\w*|abitur|bafög|elster|bundestag\w*|hartz\w*)")
+
+
+_SCHREIBAUFTRAG = re.compile(r"(?i)^\s*(?:ein(?:en|e)?\s+)?(?:brief|e-?mail|mail|schreiben|antrag|einspruch|beschwerde|kündigungsschreiben|vorlage)\b"
+                             r"|\b(?:formulier\w*|verfass(?:e|en|t|st)|entwirf|entwurf)\b")
+_EIGENES_DOKUMENT = re.compile(r"(?i)\b(?:mein|meine[mnrs]?|unser|unsere[mnrs]?)\s+[\wäöüß-]*(?:vertrag|bescheid|zettel|brief|rechnung|abrechnung|"
+                               r"dokument\w*|unterlagen|befund|polizze)\b")
+
+
+def ist_land_rueckfrage(text: str) -> bool:
+    t = " ".join(str(text or "").split())
+    return t.startswith(LAND_RUECKFRAGE[:30]) or t.startswith(LAND_RUECKFRAGE_EN[:30])
+
+
+def land_rueckfrage(nachrichten: list[dict]) -> tuple[str, str] | None:
+    if not nachrichten or nachrichten[-1].get("role") != "user":
+        return None
+    if any(n.get("role") == "assistant" and ist_land_rueckfrage(str(n.get("content", ""))) for n in nachrichten[:-1]):
+        return None
+    vorige = next((n for n in reversed(nachrichten[:-1]) if n.get("role") == "assistant"), None)
+    if vorige is not None and (str(vorige.get("content", "")).startswith(schriftstueck.VORSPANN)
+                               or ist_vergleich_rueckfrage(str(vorige.get("content", "")))):
+        return None
+    eigen = schriftstueck.eigene_worte(str(nachrichten[-1].get("content", "")))[0]
+    if not _LANDABHAENGIG.search(eigen) or belege.vergleichsfrage(eigen) or _KEINE_LANDFRAGE.search(eigen):
+        return None
+    if _SCHREIBEN.search(eigen) or _SCHREIBAUFTRAG.search(eigen) or _EIGENES_DOKUMENT.search(eigen) or ist_dateifrage(eigen):
+        return None
+    gespraech = " ".join(str(n.get("content", "")) for n in nachrichten if n.get("role") == "user")
+    import region
+    if region.erkennen(gespraech) is not None or belege.laender_in(gespraech) or _NUR_AT.search(gespraech) or _NUR_DE.search(gespraech):
+        return None
+    return LAND_RUECKFRAGE, LAND_RUECKFRAGE_EN
+
+
 def ohne_vergleichswunsch(anfrage: str) -> str:
     rest = [w for w in str(anfrage or "").split() if not _VERGLEICH_WUNSCH.match(w.strip(",.;:!?„“\"'"))]
     return " ".join(rest) if len(rest) >= 2 else str(anfrage or "")
@@ -395,10 +448,13 @@ def suchbegriffe_regel(text: str, frueher: str = "") -> str:
                if m[:1].isupper()}
         verneint = {m.lower() for m in re.findall(r"\bnicht\s+([a-zäöüß][\wäöüß-]*)", t or "") if m.lower() not in _NICHT_SUCHEN}
         out = []
-        for w in re.findall(r"[\wäöüÄÖÜß-]+(?:/[\wäöüÄÖÜß-]+)*", t or ""):
+        alle = re.findall(r"[\wäöüÄÖÜß-]+(?:/[\wäöüÄÖÜß-]+)*", t or "")
+        for i, w in enumerate(alle):
             if vergleich and _VERGLEICH_WUNSCH.match(w):
                 continue
-            if len(w) < 2 or w.lower() in _NICHT_SUCHEN or w.lower() in weg or w.lower() in out:
+            fuell_man = (w == "man" and not (i > 0 and alle[i - 1].lower() in _NAME_VOR_MAN)
+                         and not (i + 1 < len(alle) and alle[i + 1].lower() in _NAME_NACH_MAN))
+            if len(w) < 2 or w.lower() in _NICHT_SUCHEN or w.lower() in weg or w.lower() in out or fuell_man:
                 continue
             if w.lower() in verneint and "nicht" not in out:
                 out.append("nicht")
@@ -407,7 +463,18 @@ def suchbegriffe_regel(text: str, frueher: str = "") -> str:
     eigen = worte(text)
     if len(eigen) < 3 and frueher:
         eigen = [w for w in worte(frueher) if w.lower() not in {e.lower() for e in eigen}][:4] + eigen
+    if (_WIE_WIRD_MAN.search(text or "") or (_WAS_BRAUCHT_MAN.search(text or "") and belege.regelfrage(text or ""))) \
+            and not any(w.lower().startswith("voraussetzung") for w in eigen):
+        eigen = eigen[:7] + ["Voraussetzungen"] if len(eigen) >= 8 else eigen + ["Voraussetzungen"]
     return " ".join(eigen[:8])
+
+
+_WIE_WIRD_MAN = re.compile(r"(?i)^\s*wie\s+(?:(?:wird|werde|werden)\s+(?:man|ich|du)\s+(?:(?:in|als)\s+[\wäöüÄÖÜß-]+\s+)?(?:(?:ein|eine|einen)\s+)?"
+                           r"|(?:bekommt|bekomme|kriegt|kriege|erhält|erhalte)\s+(?:man|ich|du)\s+(?:(?:in|als)\s+[\wäöüÄÖÜß-]+\s+)?"
+                           r"(?:ein|eine|einen|den|die|das)\s+)(?-i:[A-ZÄÖÜ])[\wäöüß-]+\s*\??\s*$")
+_WAS_BRAUCHT_MAN = re.compile(r"(?i)\bwas\s+(?:braucht|brauche)\s+(?:man|ich)\s+(?:für|um)\b")
+_NAME_VOR_MAN = frozenset("iron spider pac bat super ant isle of ein einen der dem den die".split())
+_NAME_NACH_MAN = frozenset("city utd united tge tgx tgs tgl lkw bus truck group".split())
 
 
 _AUFZ_TRENNER = {"und", "oder", "sowie", ",", "bzw", "bzw."}

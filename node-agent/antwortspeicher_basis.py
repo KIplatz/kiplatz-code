@@ -239,6 +239,9 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
     ("2026-11-22d", frozenset({"suche"}), "Tabellenzeilen tragen ihre Beschriftung, die Stellen einer gelesenen Seite werden auch nach Wortanfängen gewählt, "
      "mit Bewertungsmodell bewertet es bis zu 30 gelesene Stellen statt 12 (Ausgehzeit „nur in Begleitung“ aus der Kärnten-Zeile, Staatsbürgerschaft "
      "„fünf Jahre“); Antworten mit Suche von vorher werden verworfen"),
+    ("2026-11-22e", frozenset({"suche", "zahl"}), "Tabellenwerte in derselben Zeile wie ihre Beschriftung (Familienbeihilfe „148 Euro“ statt 171,80), "
+     "Länderregeln nicht als Regel für ganz Österreich (Ausgehzeit „bis 24 Uhr“), Fragen ohne Land nach Österreich (Reisepass „unter 24 Jahren 6 Jahre“); "
+     "Antworten mit Suche oder mit einer Zahl von vorher werden verworfen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())
