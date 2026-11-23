@@ -7673,7 +7673,8 @@ def suchwoerter_ordnen(liste: list[str], frage: str, frueher: str = "", heute=No
             out.append(vorjahr)
     domain = nachschauen.amts_domain(frage)
     if out and domain and not ausgabe and not any("site:" in o for o in out):
-        out = [out[0], f"{out[0]} site:{domain}"]
+        eng = " ".join((nachschauen.suchbegriffe_regel(frage, "") or out[0]).split())[:120]
+        out = [out[0], f"{eng} site:{domain}"]
     if out and nachschauen._VIDEO_WORT.search(frage) and not any(re.search(r"(?i)youtu", o) for o in out):
         out[0] = " ".join([out[0], "youtube"])
     return out[:SUCHEN_HOECHSTENS]

@@ -35,7 +35,16 @@ def test_leistung_auf_amtlicher_domain(frage, domain):
 
 def test_zweite_suche_mindestpension():
     out = app_web.suchwoerter_ordnen(["Mindestpension Österreich"], "Wie hoch ist die Mindestpension in Österreich?", "", date(2026, 11, 23))
-    assert out == ["Mindestpension Österreich", "Mindestpension Österreich site:gv.at"]
+    assert out == ["Mindestpension Österreich", "hoch Mindestpension Österreich site:gv.at"]
+
+
+def test_amtliche_suche_mit_den_woertern_der_frage():
+    modell = "Mindestpensionsbetrag Österreich 2026 offizielle Quelle Bundesministerium für Soziales"
+    out = app_web.suchwoerter_ordnen([modell], "Wie hoch ist die Mindestpension in Österreich?", "", date(2026, 11, 23))
+    assert out[0].startswith("Mindestpensionsbetrag Österreich")
+    assert out[1] == "hoch Mindestpension Österreich site:gv.at"
+    out = app_web.suchwoerter_ordnen(["Schengen visa fee 2026 official EU website"], "How much does a Schengen visa cost?", "", date(2026, 11, 23))
+    assert out[1] == "Schengen visa cost site:europa.eu"
 
 
 def test_pva_ist_amtlich():
