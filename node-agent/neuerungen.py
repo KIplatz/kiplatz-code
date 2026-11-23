@@ -14,6 +14,9 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-11-23a": [
+        "Rechenaufgaben aus der Volksschule rechnet KIplatz jetzt selbst und genau, mit Rechenweg und Probe, ohne Gleichungen mit x: Zahlenrätsel wie „Dividiere die Zahl durch 6 und du erhältst 22 Rest 2“, Tiere und Beine, Reihenfolge-Rätsel und „Wo ist der Fehler?“ bei Divisionen mit Rest.",
+    ],
     "2026-11-22z": [
         "Liest KIplatz mehrere Seiten, bekommt das Modell jetzt von jeder Seite zuerst die beste Stelle. Bisher konnte eine lange Seite alle Plätze belegen, etwa die Seite eines früheren Bundeskanzlers statt der Seite des Kanzleramts mit dem heutigen.",
     ],
@@ -1455,6 +1458,11 @@ ZURUECKGEHALTEN: dict[str, list[str]] = {
 }
 
 KURZ_JE_TAG: dict[str, list[str]] = {
+    "2026-11-23": [
+        "Rechenaufgaben aus der Volksschule rechnet KIplatz jetzt selbst, mit Rechenweg und Probe",
+        "Fragen nach Mindestpension oder Familienbeihilfe beantwortet KIplatz mit den amtlichen Beträgen",
+        "Die Uhrzeit in einer anderen Stadt rechnet KIplatz jetzt selbst aus, auch bei „right now“",
+    ],
     "2026-11-22": [
         "Den Unterschied zwischen Wetter und Klima erklärt KIplatz jetzt, statt nach deinem Ort zu fragen",
         "Ein Gedicht oder einen Witz mit Thema schreibt KIplatz gleich, ohne Rückfragen",

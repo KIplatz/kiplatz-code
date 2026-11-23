@@ -1078,7 +1078,7 @@ def _bruch_aufgabe(text: str) -> Ergebnis | None:
     return None
 
 
-_LEBEN = ("rechnen_zeit", "rechnen_gleichung", "rechnen_geld", "rechnen_kueche", "rechnen_gehalt", "rechnen_international")
+_LEBEN = ("rechnen_schule", "rechnen_zeit", "rechnen_gleichung", "rechnen_geld", "rechnen_kueche", "rechnen_gehalt", "rechnen_international")
 
 
 def loesen(text: str) -> Ergebnis | None:
@@ -1102,9 +1102,10 @@ def _loesen_kern(text: str) -> Ergebnis | None:
     import rechnen_gleichung
     import rechnen_international
     import rechnen_kueche
+    import rechnen_schule
     import rechnen_zeit
     try:
-        for modul in (rechnen_zeit, rechnen_gleichung, rechnen_geld, rechnen_kueche, rechnen_gehalt):
+        for modul in (rechnen_schule, rechnen_zeit, rechnen_gleichung, rechnen_geld, rechnen_kueche, rechnen_gehalt):
             if modul.__name__ not in _LEBEN:
                 continue
             r = modul.loesen(t)
