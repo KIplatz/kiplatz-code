@@ -971,14 +971,26 @@ def ohne_selbstbezug(text: str) -> tuple[str, int]:
     return re.sub(r"[ \t]{2,}", " ", t).strip() or weiss_nicht_satz(), n
 
 
-def ohne_platzhalter(text: str) -> tuple[str, int]:
+STRICH = "________"
+_PLATZHALTER_ZEILE = re.compile(r"(?m)^[ \t]*\[(?!\d)(?!Quelle)[^\[\]\n]{1,40}\][ \t]*[,.!]?[ \t]*$")
+_FELD = re.compile(r"(?i)\b(?:name\w*|vorname|nachname|datum|tag|uhrzeit|zeit|ort|adresse|anschrift|straße|plz|telefon\w*|nummer|e-?mail|"
+                   r"klasse|schule|betreff|unterschrift|grund|firma|betrag|anrede|lehrer\w*|kind\w*|sohn|tochter|ihr\w*|dein\w*|diagnose)\b")
+
+
+def ohne_platzhalter(text: str, *, strich: bool = False) -> tuple[str, int]:
     t = text or ""
     n = len(_PLATZHALTER.findall(t))
     if not n:
         return t, 0
     t = _GRUSS_LUECKE.sub("", t)
     t = _ANREDE_LUECKE.sub(lambda m: "Guten Tag" if m.group(1).lower().startswith("sehr") else "Hallo", t)
-    t = _PLATZHALTER.sub("", t)
+    t = _PLATZHALTER_ZEILE.sub("", t)
+    if strich:
+        teile = re.split(r"(```.*?```|`[^`\n]*`)", t, flags=re.S)
+        t = "".join(x if x.startswith("`") else _PLATZHALTER.sub(
+            lambda m: STRICH if _FELD.search(m.group(0)) and not re.search(r"[\wäöüß]$", x[:m.start()]) else "", x) for x in teile)
+    else:
+        t = _PLATZHALTER.sub("", t)
     zeilen = [z for z in t.split("\n") if not _NUR_GRUSSWORT.match(z)]
     t = "\n".join(re.sub(r"[ \t]{2,}", " ", re.sub(r"\s+([,.!?])", r"\1", z)).rstrip() for z in zeilen)
     return re.sub(r"\n{3,}", "\n\n", t).strip(), n

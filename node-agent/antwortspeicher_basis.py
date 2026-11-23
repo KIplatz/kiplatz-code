@@ -289,6 +289,7 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
     ("2026-11-23e", frozenset({"suche"}), "Kündigungsfrist nach § 20 Angestelltengesetz rechnet das Programm (nach 6 Dienstjahren 3 Monate); Antworten mit Suche von vorher werden verworfen"),
     ("2026-11-23f", frozenset({"ohne_suche"}), "Kalenderwissen (Wochen im Jahr, Tage im Schaltjahr), „Rechne geschickt“ mit 9, 19 … 99 und „Kann das stimmen?“ beim Altersvergleich rechnet das Programm; Antworten ohne Suche von vorher werden verworfen"),
     ("2026-11-23g", frozenset({"suche"}), "Aufzählungen von Namen (die neun Bundesländer) gelten nicht mehr als wörtlich übernommen und werden nicht mehr gestrichen; „ein Drittel davon“ ist eine Rechenaufgabe; Antworten mit Suche von vorher werden verworfen"),
+    ("2026-11-23h", frozenset(), "Lücken in Briefen und Nachrichten werden Striche zum Ausfüllen statt zu verschwinden; nur der Weg, nichts zu verwerfen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())

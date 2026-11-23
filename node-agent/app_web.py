@@ -8172,9 +8172,10 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
     wn = _satz("Das weiß ich noch nicht.", belege.WEISS_NICHT_EN)
     notizen: list[str] = []
     einspruch_zaehler = [0, 0]
-    t, n = belege.ohne_platzhalter(text)
+    strich = schreiben or schriftstueck.vorlage_gefragt(frage)
+    t, n = belege.ohne_platzhalter(text, strich=strich)
     if n:
-        notizen.append(f"{n} Platzhalter in eckigen Klammern entfernt.")
+        notizen.append(f"{n} Platzhalter in eckigen Klammern entfernt." if not strich else f"{n} Platzhalter in eckigen Klammern zu Strichen zum Ausfüllen.")
     t, n = belege.wochentage_berichtigen(t, heute)
     if n:
         notizen.append("1 falschen Wochentag neben einem Datum vom Programm berichtigt." if n == 1
@@ -8279,7 +8280,7 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
                 neu = nochmal(NAME_OHNE_BELEG_ZUSATZ.format(namen=", ".join(f"„{n}“" for n in namen)) + " " + frage_fokus(frage))
             else:
                 neu = nochmal(BELEGE_ZUSATZ.format(saetze=" ".join(raus)[:400]) + (" " + REGEL_ZUSATZ if regel_vorher else "") + " " + frage_fokus(frage))
-            neu, _ = belege.ohne_platzhalter(neu or "")
+            neu, _ = belege.ohne_platzhalter(neu or "", strich=strich)
             neu, _ = belege.ohne_selbstbezug(neu)
             neu, _ = belege.wochentage_berichtigen(neu, heute)
             neu = ohne_auszuege(ohne_markdown(neu))
@@ -8327,7 +8328,7 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
         if fehlend and nochmal is not None:
             try:
                 neu = nochmal(NAMEN_ZUSATZ.format(namen=", ".join(fehlend)))
-                neu, _ = belege.ohne_platzhalter(neu or "")
+                neu, _ = belege.ohne_platzhalter(neu or "", strich=strich)
                 neu, _ = belege.ohne_selbstbezug(neu)
                 neu, _ = belege.wochentage_berichtigen(neu, heute)
                 geprueft3, raus3, vom3 = _streng(neu, belegtext, zusatz, rechnen, pruefer, auszuege, regelfrage=regelfrage, ableitung=ableitung)

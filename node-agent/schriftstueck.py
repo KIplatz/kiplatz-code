@@ -126,6 +126,15 @@ _PERSOENLICHER_ANLASS = re.compile(r"\bfür\s+\S|\b(?:über|ueber|von)\s+(?:mein
 _WAS_TUN_WENN = re.compile(r"\bwas soll(?:te)? (?:ich|man|wir) (?:tun|machen)\b,? *(?:wenn|falls|bei)\b", re.I)
 
 
+_SCHRIFTSTUECK = re.compile(r"(?i)\b(?:e-?mail|mail|brief\w*|nachricht|absage|zusage|kündigung\w*|kuendigung\w*|bewerbung\w*|einladung\w*|"
+                            r"beschwerde\w*|entschuldigung\w*|krankmeldung\w*|vollmacht|antrag|anschreiben|glückwunsch\w*|karte)\b")
+
+
+def vorlage_gefragt(frage: str) -> bool:
+    f = " ".join((frage or "").split())
+    return bool(_ANLEITUNG.search(f) and _SCHRIFTSTUECK.search(f))
+
+
 def erkennen(frage: str) -> Aufgabe | None:
     worte, mit_anhang = eigene_worte(frage)
     f = " ".join(worte.split())

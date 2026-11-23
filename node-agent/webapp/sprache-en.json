@@ -2483,6 +2483,7 @@
  "{0} passt in die {1} MiB freien Grafikspeicher von {2}": "{0} fits into the {1} MiB of free graphics memory of {2}",
  "{0} PDFs mit zusammen {1} Seiten zusammengefügt, nach dem Dateinamen geordnet: {2}": "Merged {0} PDFs with {1} pages in total, in order of their file names: {2}",
  "{0} Platzhalter in eckigen Klammern entfernt.": "{0} placeholders in square brackets removed.",
+ "{0} Platzhalter in eckigen Klammern zu Strichen zum Ausfüllen.": "{0} placeholders in square brackets turned into lines to fill in.",
  "{0} Quellen": "{0} sources",
  "{0} Quellen am Community-Server": "{0} sources on the community server",
  "{0} Quellen auf diesem Gerät": "{0} sources on this device",
