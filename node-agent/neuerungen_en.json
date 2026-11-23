@@ -715,5 +715,7 @@
  "Auch längere Hinweise in eckigen Klammern, etwa „[kurze Begründung, z. B. …]“, stehen in Briefen jetzt als Strich zum Ausfüllen da.": "Longer hints in square brackets, such as “[short reason, e.g. …]”, now also appear in letters as a line to fill in.",
  "Fragst du „Ein Bus fährt um 7:45 ab und braucht 35 Minuten, wann kommt er an?“, rechnet KIplatz die Uhrzeit jetzt selbst aus, auch umgekehrt. Und bei Zahlenfolgen wie 2, 4, 8, 16 nennt es die nächste Zahl mit der richtigen Regel.": "Ask “A bus leaves at 7:45 and takes 35 minutes, when does it arrive?” and KIplatz now works out the time itself, also the other way round. And for number sequences such as 2, 4, 8, 16 it gives the next number with the right rule.",
  "Wann ein Bus oder Zug ankommt, rechnet KIplatz aus Abfahrt und Fahrzeit selbst": "KIplatz now works out when a bus or train arrives from departure and travel time",
- "Zahlenfolgen wie 2, 4, 8, 16 setzt KIplatz mit der richtigen Regel fort": "KIplatz continues number sequences such as 2, 4, 8, 16 with the right rule"
+ "Zahlenfolgen wie 2, 4, 8, 16 setzt KIplatz mit der richtigen Regel fort": "KIplatz continues number sequences such as 2, 4, 8, 16 with the right rule",
+ "Umfang und Fläche von Rechteck und Quadrat rechnet KIplatz jetzt selbst aus, mit Rechenweg.": "KIplatz now works out the perimeter and area of rectangles and squares itself, with the working.",
+ "Umfang und Fläche von Rechteck und Quadrat rechnet KIplatz selbst": "KIplatz works out the perimeter and area of rectangles and squares itself"
 }

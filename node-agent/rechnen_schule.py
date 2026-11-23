@@ -29,7 +29,7 @@ def loesen(text: str) -> Ergebnis | None:
         return None
     t = _zahlwoerter(t)
     for stufe in (_umkehr, _beine, _reihenfolge, _fehler_division, _wechselgeld, _stueck_preis, _je_zeit, _so_viele_wie, _summe_zwei,
-                  _summe_aus, _alter_wochen, _alle_n_tage, _geschickt, _kalender, _altersvergleich, _bruchteil, _abfahrt_ankunft, _zahlenfolge):
+                  _summe_aus, _alter_wochen, _alle_n_tage, _geschickt, _kalender, _altersvergleich, _bruchteil, _abfahrt_ankunft, _zahlenfolge, _rechteck):
         r = stufe(t)
         if r is not None:
             return r
@@ -762,3 +762,43 @@ def _zahlenfolge(t: str) -> Ergebnis | None:
     else:
         return None
     return Ergebnis(f"Die nächste Zahl ist {_t(n)}.\n\n{regel}", f"The next number is {n}. {en}")
+
+
+_LAENGE = r"(\d{1,4}(?:,\d{1,2})?)\s*(mm|cm|dm|m|km)\b"
+
+
+def _rechteck(t: str) -> Ergebnis | None:
+    from fractions import Fraction
+    form = re.search(r"(?i)\b(rechteck\w*|quadrat(?!meter|zentimeter|kilometer|dezimeter|millimeter|zahl|wurzel)\w*)\b", t)
+    umfang, flaeche = re.search(r"(?i)\bumfang\b", t), re.search(r"(?i)\b(?:fläche\w*|flaeche\w*|flächeninhalt)\b", t)
+    if not form or not (umfang or flaeche) or re.search(r"(?i)\b(?:kreis|dreieck|würfel|quader|volumen|prozent|kostet|preis|€|euro|diagonale\w*|"
+                                                         r"verdoppel\w*|halbier\w*|vergrößer\w*|verkleiner\w*|maßstab\w*|doppelt\w*|dreimal|wenn)\b", t):
+        return None
+    if re.search(r"(?i)\b(?:umfang|fläche\w*|flaeche\w*|flächeninhalt)\b\s*(?:von|beträgt|betraegt|ist|hat|misst|=|:)?\s*(?:\S+\s+){0,2}?\d", t):
+        return None
+    masse = re.findall(rf"(?i){_LAENGE}", t)
+    if not masse or len({e.lower() for _z, e in masse}) != 1:
+        return None
+    e = masse[0][1].lower()
+    zahlen = [Fraction(z.replace(",", ".")) for z, _e in masse]
+    quadrat = form.group(1).lower().startswith("quadrat")
+    if quadrat and len(zahlen) == 1:
+        a = b = zahlen[0]
+    elif not quadrat and len(zahlen) == 2 and re.search(r"(?i)\b(?:lang|länge|breit|breite|seite\w*|mal)\b", t):
+        a, b = zahlen
+    else:
+        return None
+    def z(x):
+        return _t(int(x)) if x.denominator == 1 else str(float(x)).replace(".", ",")
+    teile_de, teile_en = [], []
+    name = "Quadrats" if quadrat else "Rechtecks"
+    if umfang:
+        u = 2 * (a + b)
+        teile_de.append(f"Der Umfang des {name} ist {z(u)} {e}: " + (f"4 · {z(a)} {e} = {z(u)} {e}." if quadrat else
+                        f"2 · ({z(a)} {e} + {z(b)} {e}) = 2 · {z(a + b)} {e} = {z(u)} {e}."))
+        teile_en.append(f"Perimeter: {z(u)} {e}.")
+    if flaeche:
+        f = a * b
+        teile_de.append(f"Die Fläche ist {z(f)} {e}²: {z(a)} {e} · {z(b)} {e} = {z(f)} {e}².")
+        teile_en.append(f"Area: {z(f)} {e}².")
+    return Ergebnis("\n".join(teile_de), " ".join(teile_en))

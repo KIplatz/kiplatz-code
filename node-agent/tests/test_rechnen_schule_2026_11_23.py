@@ -311,3 +311,33 @@ def test_zahlenfolge_nur_als_aufgabe(frage):
 ])
 def test_abfahrt_ankunft_andere_fragen(frage):
     assert rechnen_schule._abfahrt_ankunft(frage) is None
+
+
+@pytest.mark.parametrize("frage,ganz", [
+    ("Ein Rechteck ist 8 cm lang und 5 cm breit. Wie groß sind Umfang und Fläche?",
+     "Der Umfang des Rechtecks ist 26 cm: 2 · (8 cm + 5 cm) = 2 · 13 cm = 26 cm.\nDie Fläche ist 40 cm²: 8 cm · 5 cm = 40 cm²."),
+    ("Wie groß ist der Umfang eines Quadrats mit 7 m Seitenlänge?", "Der Umfang des Quadrats ist 28 m: 4 · 7 m = 28 m."),
+    ("Ein Garten ist ein Rechteck, 12 m lang und 9 m breit. Wie groß ist die Fläche?", "Die Fläche ist 108 m²: 12 m · 9 m = 108 m²."),
+])
+def test_rechteck(frage, ganz):
+    assert rechnen.loesen(frage).de == ganz
+
+
+@pytest.mark.parametrize("frage", [
+    "Ein Rechteck ist 8 cm lang und 50 mm breit. Wie groß ist die Fläche?",
+    "Was kostet Rasen für ein Rechteck mit 12 m und 9 m, wenn 1 m² 4 Euro kostet?",
+    "Wie groß ist die Fläche eines Kreises mit 5 cm Radius?",
+])
+def test_rechteck_gegenproben(frage):
+    assert rechnen_schule._rechteck(frage) is None
+
+
+@pytest.mark.parametrize("frage", [
+    "Ein Quadrat hat einen Umfang von 28 m. Wie groß ist die Fläche?",
+    "Ein Rechteck hat einen Umfang von 26 cm und ist 8 cm lang. Wie groß ist die Fläche?",
+    "Ein Rechteck ist 8 cm lang, die Diagonale 10 cm. Wie groß ist die Fläche?",
+    "Wie groß ist die Fläche in Quadratmetern bei einem Sechseck mit 5 m Seitenlänge?",
+    "Ein Rechteck ist 8 cm lang und 5 cm breit. Wie groß ist die Fläche, wenn man beide Seiten verdoppelt?",
+])
+def test_rechteck_umkehr_und_weiterer_schritt(frage):
+    assert rechnen_schule._rechteck(frage) is None
