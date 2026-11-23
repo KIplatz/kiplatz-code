@@ -27,7 +27,9 @@ def loesen(text: str) -> Ergebnis | None:
     t = " ".join(str(text or "").split())
     if not t or len(t) > 600:
         return None
-    for stufe in (_umkehr, _beine, _reihenfolge, _fehler_division):
+    t = _zahlwoerter(t)
+    for stufe in (_umkehr, _beine, _reihenfolge, _fehler_division, _wechselgeld, _stueck_preis, _je_zeit, _so_viele_wie, _summe_zwei,
+                  _summe_aus, _alter_wochen):
         r = stufe(t)
         if r is not None:
             return r
@@ -292,3 +294,187 @@ def _eine_division(a: int, b: int, q: int, r: int, schritte: list) -> Ergebnis:
           + f"\nProbe: {_t(b)} · {_t(rq)} = {_t(b * rq)}, {_t(b * rq)} + {_t(rr)} = {_t(a)}.")
     en = f"That is not right. The answer is {_t(a)} ÷ {_t(b)} = {_t(rq)} remainder {_t(rr)}."
     return Ergebnis(de, en)
+
+
+_ZAHLWORT = {"ein": 1, "eine": 1, "einen": 1, "zwei": 2, "drei": 3, "vier": 4, "fünf": 5, "sechs": 6, "sieben": 7, "acht": 8, "neun": 9,
+             "zehn": 10, "elf": 11, "zwölf": 12}
+
+
+def _zahlwoerter(t: str) -> str:
+    return re.sub(r"\b(zwei|drei|vier|fünf|sechs|sieben|acht|neun|zehn|elf|zwölf)\b(?=\s+(?-i:[A-ZÄÖÜ])|\s+(?:jahre|wochen|tage|monate)\b)",
+                  lambda m: str(_ZAHLWORT[m.group(1).lower()]), t, flags=re.I)
+
+
+def _geld(s_: str) -> int | None:
+    m = re.fullmatch(r"(\d{1,6})(?:,(\d{1,2}))?\s*(€|euro|ct|cent)", s_.strip(), re.I)
+    if not m:
+        return None
+    if m.group(3).lower() in ("ct", "cent"):
+        return None if m.group(2) else int(m.group(1))
+    return int(m.group(1)) * 100 + int((m.group(2) or "0").ljust(2, "0"))
+
+
+def _eur(cent: int) -> str:
+    return f"{_t(cent // 100)},{cent % 100:02d} €"
+
+
+_BETRAG = r"\d{1,6}(?:,\d{1,2})?\s*(?:€|euro\b|ct\b|cent\b)"
+
+
+def _wechselgeld(t: str) -> Ergebnis | None:
+    m = re.search(rf"(?i)\bhat\s+({_BETRAG})[^.?!]*[.?!]?\s*[^.?!]*?\bkauft\b[^.?!]*?\b(?:um|für|zu)\s+({_BETRAG})", t)
+    if not m or not re.search(r"(?i)\b(?:bleibt|übrig|zurück|wechselgeld|rest)\b", t[m.end():]):
+        return None
+    if len(re.findall(_BETRAG, t, re.I)) != 2 or re.search(r"(?i)\bkauft\b[^.?!]*?(?:\b\d|\bje\b|\bjede)", t[:m.start(2)]):
+        return None
+    hat, preis = _geld(m.group(1)), _geld(m.group(2))
+    if hat is None or preis is None or preis > hat:
+        return None
+    rest = hat - preis
+    return Ergebnis(f"Es bleiben {_eur(rest)} übrig.\n\nRechnung: {_eur(hat)} − {_eur(preis)} = {_eur(rest)}.\nProbe: {_eur(rest)} + {_eur(preis)} = {_eur(hat)}.",
+                    f"{_eur(rest)} is left.\n\n{_eur(hat)} − {_eur(preis)} = {_eur(rest)}.")
+
+
+class _Treffer:
+
+    def __init__(self, *gruppen):
+        self._g = gruppen
+
+    def group(self, i):
+        return self._g[i - 1]
+
+
+def _stueck_preis(t: str) -> Ergebnis | None:
+    m = re.search(rf"(?i)\b(?:kauft|kaufen|kaufe|bestellt|nimmt)\s+[^.?!]*?\b(\d{{1,4}})\s+((?-i:[A-ZÄÖÜ])[a-zäöüß]+)[^.?!]*[.?!]?\s*"
+                  rf"(?:jede[rs]?|je|ein(?:e[rs]?)?|pro)\s+[^.?!]*?\b(?:kostet|kosten|um|für)\s+({_BETRAG})", t)
+    if not m:
+        m = re.search(rf"(?i)\b(\d{{1,4}})\s+((?-i:[A-ZÄÖÜ])[a-zäöüß]+)\b[^?]*?\b(?:kostet|kosten|zahlt|zahlen)\s+(?:für\s+|pro\s+)?"
+                      rf"(?:jede[nrs]?|je|ein(?:e[rs]?)?)\s+(?-i:[A-ZÄÖÜ])[a-zäöüß]+\s+({_BETRAG})", t)
+        if m:
+            m = _Treffer(m.group(1), m.group(2), m.group(3))
+    if not m or re.search(r"(?i)\b(?:wenn|falls|außer|ausser|ohne|rabatt|ermäßig\w*|gratis|frei|insgesamt\s+\d)\b", t):
+        return None
+    if not re.search(r"(?i)\bwie\s*viel\b|\binsgesamt\b|\bzusammen\b|\?", t):
+        return None
+    ohne_betraege = re.sub(_BETRAG, " ", t, flags=re.I)
+    if len(re.findall(_BETRAG, t, re.I)) != 1 or len(re.findall(r"\b\d{1,4}\b", ohne_betraege)) != 1:
+        return None
+    n, preis = int(m.group(1)), _geld(m.group(3))
+    if preis is None or not 1 <= n <= 1000:
+        return None
+    ges = n * preis
+    weg = f"{n} · {_eur(preis)} = {_eur(ges)}"
+    if preis % 100 in (99, 98, 95) and n <= 20:
+        ganz = preis + (100 - preis % 100)
+        weg += f". Geschickt gerechnet: {n} · {_eur(ganz)} = {_eur(n * ganz)}, weniger {n} · {100 - preis % 100} ct = {_eur(n * ganz - ges)}"
+    return Ergebnis(f"Das kostet zusammen {_eur(ges)}.\n\nRechnung: {weg}.", f"Together that costs {_eur(ges)}.\n\n{n} × {_eur(preis)} = {_eur(ges)}.")
+
+
+_ZEIT_IN = {("tag", "woche"): 7, ("woche", "jahr"): 52, ("monat", "jahr"): 12, ("tag", "jahr"): 365, ("stunde", "tag"): 24, ("minute", "stunde"): 60}
+
+
+def _je_zeit(t: str) -> Ergebnis | None:
+    m = re.search(r"(?i)\b(?:jede[nrs]?|pro|am|im)\s+(tag|woche|monat|stunde|minute)\b", t)
+    z = re.search(r"(?i)\bin\s+(?:einer|einem|einem\s+ganzen|einer\s+ganzen)\s+(woche|jahr|monat|tag|stunde)\b", t)
+    if not m or not z or not re.search(r"(?i)\bwie\s*viel", t):
+        return None
+    if re.search(r"(?i)\b(?:wenn|falls|außer|ausser|ohne|frei|nur|bis\s+auf|abzüglich|weniger|manchmal)\b", t):
+        return None
+    faktor = _ZEIT_IN.get((m.group(1).lower(), z.group(1).lower()))
+    if not faktor:
+        return None
+    if re.search(r"(?i)\w+mal\b", t) or re.search(r"\d", t[z.end():]):
+        return None
+    zahlen = [x for x in re.findall(rf"(?i)({_BETRAG}|\b\d{{1,5}}\b)", t[:z.start()]) if not re.fullmatch(r"(?:19|20)\d\d", x)]
+    if len(zahlen) != 1:
+        return None
+    betrag = _geld(zahlen[0])
+    if betrag is not None and (m.group(1).lower(), z.group(1).lower()) == ("stunde", "tag"):
+        return None
+    einheit = {"woche": "Woche", "jahr": "Jahr", "monat": "Monat", "tag": "Tag", "stunde": "Stunde"}[z.group(1).lower()]
+    hinweis = " (ein Jahr hat 52 Wochen)" if faktor == 52 else " (eine Woche hat 7 Tage)" if faktor == 7 else ""
+    if betrag is not None:
+        ges = betrag * faktor
+        return Ergebnis(f"In einem {einheit} sind das {_eur(ges)}.\n\nRechnung: {faktor} · {_eur(betrag)} = {_eur(ges)}{hinweis}.",
+                        f"That is {_eur(ges)}.\n\n{faktor} × {_eur(betrag)} = {_eur(ges)}.")
+    n = int(zahlen[0])
+    if einheit == "Woche":
+        zeile = f"In einer Woche sind das {_t(n * faktor)}."
+    else:
+        zeile = f"In einem {einheit} sind das {_t(n * faktor)}."
+    return Ergebnis(f"{zeile}\n\nRechnung: {faktor} · {_t(n)} = {_t(n * faktor)}{hinweis}.", f"That is {_t(n * faktor)}.\n\n{faktor} × {_t(n)} = {_t(n * faktor)}.")
+
+
+_MAL = {"doppelt": 2, "zweimal": 2, "dreimal": 3, "viermal": 4, "fünfmal": 5, "halb": None}
+
+
+def _so_viele_wie(t: str) -> Ergebnis | None:
+    m = re.search(r"(?i)\b(doppelt|zweimal|dreimal|viermal|fünfmal)\s+so\s+viele\s+((?-i:[A-ZÄÖÜ])[a-zäöüß]+)\s+wie\s+((?-i:[A-ZÄÖÜ])[a-zäöüß]+)\b"
+                  r"[^?]*?\bzusammen\s+(?:sind\s+es|gibt\s+es|haben\s+sie)?\s*(\d{1,6})", t)
+    if not m:
+        return None
+    k, viel, wenig, n = _MAL[m.group(1).lower()], m.group(2), m.group(3), int(m.group(4))
+    teile = k + 1
+    if n % teile:
+        return None
+    w = n // teile
+    return Ergebnis(f"Es sind {_t(w * k)} {viel} und {_t(w)} {wenig}.\n\nSo kommst du darauf: Auf je 1 von den {wenig} kommen {k} {viel}, "
+                    f"zusammen also {teile} Teile. {_t(n)} : {teile} = {_t(w)} {wenig}, und {k} · {_t(w)} = {_t(w * k)} {viel}.\n"
+                    f"Probe: {_t(w * k)} + {_t(w)} = {_t(n)}.",
+                    f"There are {_t(w * k)} {viel} and {_t(w)} {wenig}.\n\n{_t(n)} ÷ {teile} = {_t(w)}; {k} × {_t(w)} = {_t(w * k)}.")
+
+
+def _summe_zwei(t: str) -> Ergebnis | None:
+    m = re.search(r"(?i)\bdie\s+summe\s+(?:aus|von)\s+(?:zwei|2)\s+zahlen\s+ist\s+(\d{1,7})\b[^.]*\.\s*die\s+erste\s+zahl\s+ist\s+"
+                  r"(?:(\d{1,7})\s*(?:[.?!]|$)|das\s+doppelte\s+der\s+zweiten)", t)
+    if not m:
+        return None
+    summe = int(m.group(1))
+    if m.group(2):
+        a = int(m.group(2))
+        if a > summe:
+            return None
+        b = summe - a
+        return Ergebnis(f"Die zweite Zahl ist {_t(b)}.\n\nRechnung: {_t(summe)} − {_t(a)} = {_t(b)}.\nProbe: {_t(a)} + {_t(b)} = {_t(summe)}.",
+                        f"The second number is {_t(b)}.\n\n{_t(summe)} − {_t(a)} = {_t(b)}.")
+    if summe % 3:
+        return None
+    b = summe // 3
+    return Ergebnis(f"Die erste Zahl ist {_t(2 * b)}, die zweite {_t(b)}.\n\nSo kommst du darauf: Die erste ist doppelt so groß, zusammen sind es 3 "
+                    f"gleiche Teile: {_t(summe)} : 3 = {_t(b)}, und 2 · {_t(b)} = {_t(2 * b)}.\nProbe: {_t(2 * b)} + {_t(b)} = {_t(summe)}.",
+                    f"The first number is {_t(2 * b)}, the second {_t(b)}.")
+
+
+_re_summe = re.compile(r"(?i)\bdie\s+summe\s+(?:aus|von)\b")
+
+
+def _summe_aus(t: str) -> Ergebnis | None:
+    m = re.fullmatch(r"(?i)(?:.*?:\s*)?(halbiere|verdopple|bilde|addiere)\s+(?:die\s+summe\s+(?:aus|von)\s+)?(\d{1,7})\s+und\s+(\d{1,7})\s*[.!]?"
+                     r"(?:\s*was\s+kommt\s+heraus\??)?", t)
+    if not m:
+        return None
+    op, a, b = m.group(1).lower(), int(m.group(2)), int(m.group(3))
+    if op in ("halbiere", "verdopple") and not _re_summe.search(t):
+        return None
+    summe = a + b
+    if op == "halbiere":
+        if summe % 2:
+            return None
+        return Ergebnis(f"Das Ergebnis ist {_t(summe // 2)}.\n\nRechnung: {_t(a)} + {_t(b)} = {_t(summe)}, die Hälfte: {_t(summe)} : 2 = {_t(summe // 2)}.",
+                        f"The result is {_t(summe // 2)}.")
+    if op == "verdopple":
+        return Ergebnis(f"Das Ergebnis ist {_t(2 * summe)}.\n\nRechnung: {_t(a)} + {_t(b)} = {_t(summe)}, das Doppelte: 2 · {_t(summe)} = {_t(2 * summe)}.",
+                        f"The result is {_t(2 * summe)}.")
+    return Ergebnis(f"Die Summe ist {_t(summe)}.\n\nRechnung: {_t(a)} + {_t(b)} = {_t(summe)}.", f"The sum is {_t(summe)}.")
+
+
+def _alter_wochen(t: str) -> Ergebnis | None:
+    m = re.search(r"(?i)\b(\d{1,2})\s+jahre?\s+und\s+(\d{1,2})\s+wochen\s+alt\b[^.]*\.\s*(?:er|sie|es)\s+ist\s+also\s+(\d{1,4})\s+wochen\s+alt", t)
+    if not m:
+        return None
+    j, w, behauptet = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    echt = j * 52 + w
+    ja = echt == behauptet
+    return Ergebnis(("Ja, das stimmt" if ja else "Nein, das stimmt nicht") + f": {j} · 52 + {w} = {_t(echt)} Wochen (ein Jahr hat 52 Wochen)."
+                    + ("" if ja else f" {_t(behauptet)} Wochen wären erst gut {behauptet // 52} Jahre."),
+                    ("Yes" if ja else "No") + f": {j} × 52 + {w} = {_t(echt)} weeks.")

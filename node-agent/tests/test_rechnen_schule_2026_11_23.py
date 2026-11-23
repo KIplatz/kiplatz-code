@@ -79,3 +79,48 @@ def test_fable_zu_23a():
     assert rechnen_schule.loesen("Mia, Selina, Nick und Elisa reiten aus. Mia reitet weder vor Nick noch hinter Elisa. In welcher Reihenfolge "
                                  "reiten sie?") is None
     assert "Richtig ist 446 : 6 = 74 Rest 2." in rechnen.loesen("Wo ist der Fehler? 446 ÷ 6 = 74 r 3").de
+
+
+@pytest.mark.parametrize("frage,beginn", [
+    ("Suri hat 10 €. Sie kauft ein Geodreieck um 1,95 €. Wie viel Geld bleibt übrig?", "Es bleiben 8,05 € übrig."),
+    ("Der Lehrer kauft in der Pause sechs Tüten mit Süßigkeiten. Jede Tüte kostet 99 ct. Wie viel kostet das?", "Das kostet zusammen 5,94 €."),
+    ("In der Klasse 3b sind 29 Kinder. Der Theatereintritt kostet für jedes Kind 5 €. Wie viel kostet das insgesamt?", "Das kostet zusammen 145,00 €."),
+    ("Familie Kliminski kauft jede Woche eine Grüne Kiste um 12 €. Wie viel bezahlt sie in einem ganzen Jahr?", "In einem Jahr sind das 624,00 €."),
+    ("Bauer Heiko muss jeden Tag 14 Schubkarren holen. Wie viele Schubkarren sind das in einer Woche?", "In einer Woche sind das 98."),
+    ("Auf dem Hof leben genau doppelt so viele Kühe wie Pferde. Zusammen sind es 27 Tiere. Wie viele sind es?", "Es sind 18 Kühe und 9 Pferde."),
+    ("Die Summe aus zwei Zahlen ist 444. Die erste Zahl ist 240. Wie heißt die zweite Zahl?", "Die zweite Zahl ist 204."),
+    ("Die Summe aus zwei Zahlen ist 666. Die erste Zahl ist das Doppelte der zweiten.", "Die erste Zahl ist 444, die zweite 222."),
+    ("Halbiere die Summe aus 297 und 133.", "Das Ergebnis ist 215."),
+    ("Kann das stimmen? Felix ist sieben Jahre und vier Wochen alt. Er ist also 215 Wochen alt.", "Nein, das stimmt nicht: 7 · 52 + 4 = 368 Wochen"),
+])
+def test_textaufgaben_23b(frage, beginn):
+    assert rechnen.loesen(frage).de.startswith(beginn)
+
+
+@pytest.mark.parametrize("frage", [
+    "Ich habe jeden Tag 3 Termine. Wie viele Termine habe ich in einer Woche, wenn am Sonntag frei ist?",
+    "Frau Sommer kauft zwei Brote für insgesamt 5 € und drei Stücke Käse für je 3 €. Wie viel zahlt sie?",
+    "Wie viel kostet eine Woche Urlaub in Kroatien?",
+])
+def test_textaufgaben_bleiben_beim_modell(frage):
+    assert rechnen_schule.loesen(frage) is None
+
+
+@pytest.mark.parametrize("frage", [
+    "Die Summe aus zwei Zahlen ist 100. Die erste Zahl ist 20 größer als die zweite.",
+    "Halbiere 10 und 20.",
+    "Suri hat 10 €. Sie kauft ein Geodreieck um 1,95 € und einen Stift um 0,80 €. Wie viel bleibt übrig?",
+    "Suri hat 10 €. Sie kauft 3 Hefte um je 1,20 €. Wie viel bleibt übrig?",
+    "Mama kauft 3 Semmeln und 2 Brezen. Jede Breze kostet 1,20 €. Wie viel kosten die Brezen?",
+    "29 Kinder und 2 Lehrerinnen gehen ins Theater. Der Eintritt kostet für jede Person 5 €. Wie viel kostet das?",
+    "Ich nehme dreimal am Tag 2 Tabletten. Wie viele sind das in einer Woche?",
+    "Ich fahre jeden Tag 30 km. Wie viele km sind das in einer Woche mit 5 Arbeitstagen?",
+    "Ich verdiene 15 € pro Stunde. Wie viel ist das in einem Tag?",
+])
+def test_fable_zu_23b_bleibt_beim_modell(frage):
+    assert rechnen_schule.loesen(frage) is None
+
+
+def test_zahlwort_nur_vor_hauptwort():
+    assert rechnen_schule._zahlwoerter("elf und drei") == "elf und drei"
+    assert rechnen_schule._zahlwoerter("kauft sechs Tüten") == "kauft 6 Tüten"

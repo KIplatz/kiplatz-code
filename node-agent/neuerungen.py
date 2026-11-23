@@ -14,6 +14,9 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-11-23b": [
+        "Auch Textaufgaben aus der Volksschule rechnet KIplatz jetzt selbst: Wechselgeld, Stückpreis mal Anzahl, pro Tag oder Woche aufs Jahr, „doppelt so viele wie“ und die Summe aus zwei Zahlen, jeweils mit Rechenweg.",
+    ],
     "2026-11-23a": [
         "Rechenaufgaben aus der Volksschule rechnet KIplatz jetzt selbst und genau, mit Rechenweg und Probe, ohne Gleichungen mit x: Zahlenrätsel wie „Dividiere die Zahl durch 6 und du erhältst 22 Rest 2“, Tiere und Beine, Reihenfolge-Rätsel und „Wo ist der Fehler?“ bei Divisionen mit Rest.",
     ],
