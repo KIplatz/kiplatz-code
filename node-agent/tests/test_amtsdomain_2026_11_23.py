@@ -15,6 +15,10 @@ import nachschauen
 HEUTE = date(2026, 11, 23)
 
 
+def _mit_amt(liste, frage, frueher, heute):
+    return app_web.amtssuche_dazu(app_web.suchwoerter_ordnen(liste, frage, frueher, heute), frage, heute)
+
+
 @pytest.mark.parametrize("frage,domain", [
     ("How much does a Schengen visa cost?", "europa.eu"),
     ("How much does a passport cost in the UK?", "gov.uk"),
@@ -35,9 +39,9 @@ def test_amts_domain(frage, domain):
 
 
 def test_zweite_suche_auf_der_domain_erste_bleibt_offen():
-    out = app_web.suchwoerter_ordnen(["Schengen visa cost", "Schengen visa fees 2026"], "How much does a Schengen visa cost?", "", HEUTE)
-    assert out == ["Schengen visa cost", "Schengen visa cost site:europa.eu"]
-    assert app_web.suchwoerter_ordnen(["Winterreifenpflicht Österreich"], "Wann muss ich in Österreich auf Winterreifen wechseln?", "",
+    out = _mit_amt(["Schengen visa cost", "Schengen visa fees 2026"], "How much does a Schengen visa cost?", "", HEUTE)
+    assert out == ["Schengen visa fees 2026", "Schengen visa cost site:europa.eu"]
+    assert _mit_amt(["Winterreifenpflicht Österreich"], "Wann muss ich in Österreich auf Winterreifen wechseln?", "",
                                       HEUTE) == ["Winterreifenpflicht Österreich"]
 
 
@@ -57,5 +61,5 @@ def test_urlaub_ist_kein_feiertag():
 
 
 def test_keine_zweite_site_und_nicht_bei_youtube_am_ende():
-    out = app_web.suchwoerter_ordnen(["UK passport cost site:gov.uk"], "How much does a passport cost in the UK?", "", HEUTE)
+    out = _mit_amt(["UK passport cost site:gov.uk"], "How much does a passport cost in the UK?", "", HEUTE)
     assert sum(q.count("site:") for q in out) == 1

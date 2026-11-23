@@ -1285,6 +1285,10 @@ class Api:
 
     def _suchwoerter(self, nachrichten: list[dict] | None, frage: str, *, bisher: list[str] | None = None,
                      ohne_modell: bool = False) -> list[str] | None:
+        return amtssuche_dazu(self._suchwoerter_alle(nachrichten, frage, bisher=bisher, ohne_modell=ohne_modell), frage, bisher=bisher or ())
+
+    def _suchwoerter_alle(self, nachrichten: list[dict] | None, frage: str, *, bisher: list[str] | None = None,
+                          ohne_modell: bool = False) -> list[str] | None:
         verlauf = [n for n in (nachrichten or []) if n.get("role") in ("user", "assistant") and isinstance(n.get("content"), str)][-5:]
         if not verlauf:
             verlauf = [{"role": "user", "content": frage}]
@@ -7614,6 +7618,22 @@ def _gelesen_um(ergebnis) -> str:
 _AMT_ZURUECK = re.compile(r"(?i)\b(?:dort|da|davon|dessen|deren|sein\w*|ihr\w*|there|its|their|his|her)\b|^\s*(?:und|and)\b")
 
 
+def amtssuche_dazu(liste: list[str] | None, frage: str, heute=None, bisher=()) -> list[str] | None:
+    if not liste:
+        return liste
+    h = heute or ki_laufzeit.heute()
+    domain = nachschauen.amts_domain(frage)
+    ausgabe = nachschauen.ereignis_tag(frage, h) is None and nachschauen.juengstes_ereignis(frage)
+    if not domain or ausgabe or any("site:" in q for q in liste):
+        return liste
+    eng = " ".join((nachschauen.suchbegriffe_regel(frage, "") or liste[0]).split())[:120]
+    amt = f"{eng} site:{domain}"
+    if amt.lower() in {str(b).lower() for b in bisher or ()}:
+        return liste
+    offen = liste[1] if len(liste) > 1 and set(wissen.woerter(liste[0])) == set(wissen.woerter(eng)) else liste[0]
+    return [offen, amt]
+
+
 def suchwoerter_ordnen(liste: list[str], frage: str, frueher: str = "", heute=None) -> list[str]:
     from datetime import date
     h = heute or ki_laufzeit.heute()
@@ -7671,10 +7691,6 @@ def suchwoerter_ordnen(liste: list[str], frage: str, frueher: str = "", heute=No
         vorjahr = re.sub(rf"\b{h.year}\b", str(h.year - 1), out[0])
         if vorjahr != out[0]:
             out.append(vorjahr)
-    domain = nachschauen.amts_domain(frage)
-    if out and domain and not ausgabe and not any("site:" in o for o in out):
-        eng = " ".join((nachschauen.suchbegriffe_regel(frage, "") or out[0]).split())[:120]
-        out = [out[0], f"{eng} site:{domain}"]
     if out and nachschauen._VIDEO_WORT.search(frage) and not any(re.search(r"(?i)youtu", o) for o in out):
         out[0] = " ".join([out[0], "youtube"])
     return out[:SUCHEN_HOECHSTENS]
