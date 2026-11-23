@@ -14,6 +14,9 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-11-23f": [
+        "Fragen aus dem Schulbuch zu Kalender und Zeit, etwa „Wie viele Wochen hat ein Jahr?“, beantwortet KIplatz jetzt selbst, auch wenn die Suche gerade nicht geht. Bei „Rechne geschickt: 9 · 57“ zeigt es den geschickten Weg, und bei „Kann das stimmen?“ zu zwei Altersangaben sagt es, wer wirklich älter ist.",
+    ],
     "2026-11-23e": [
         "Fragst du nach der Kündigungsfrist in Österreich und nennst deine Dienstjahre, rechnet KIplatz sie jetzt direkt aus dem Angestelltengesetz aus, etwa 3 Monate nach 6 Dienstjahren, und sagt dazu, was gilt, wenn du selbst kündigst.",
     ],

@@ -138,3 +138,72 @@ def test_alle_zwei_tage_und_textaufgabe_sucht_nicht():
     for wissen in ("Mein Baby ist 10 Tage alt und trinkt 60 ml. Ist das genug?", "Darf ich Ibuprofen 400 alle 2 Tage nehmen?",
                    "An wie vielen Tagen regnet es in Wien?"):
         assert not belege.rechenaufgabe(wissen)
+
+
+@pytest.mark.parametrize("frage,teil", [
+    ("Rechne geschickt: 9 · 57", "Erst 10 · 57 = 570, dann 1 · 57 weg: 570 − 57 = 513."),
+    ("Rechne geschickt: 5 · 99", "Erst 100 · 5 = 500, dann 1 · 5 weg: 500 − 5 = 495."),
+    ("6 · 39 = ? Rechne geschickt.", "Erst 40 · 6 = 240, dann 1 · 6 weg: 240 − 6 = 234."),
+])
+def test_geschickt_rechnen(frage, teil):
+    assert teil in rechnen.loesen(frage).de
+
+
+def test_geschickt_nur_mit_einem_faktor_knapp_unter_dem_zehner():
+    assert rechnen_schule.loesen("Rechne geschickt: 7 · 8") is None
+
+
+@pytest.mark.parametrize("frage,antwort", [
+    ("Wie viele Wochen hat ein Jahr und wie viele Tage ein Schaltjahr?", "Ein Jahr hat 52 Wochen und 1 Tag (im Schaltjahr 2 Tage). Ein Schaltjahr hat 366 Tage."),
+    ("Wie oft gibt es ein Schaltjahr?", "Ein Schaltjahr gibt es meistens alle 4 Jahre (nicht in vollen Jahrhunderten, außer sie sind durch 400 teilbar, etwa 2000)."),
+    ("Wie viele Tage hat ein Schaltjahr?", "Ein Schaltjahr hat 366 Tage."),
+])
+def test_kalender_festes_wissen(frage, antwort):
+    assert rechnen.loesen(frage).de == antwort
+
+
+@pytest.mark.parametrize("frage", [
+    "Wie viele Tage hat der Februar 2027?",
+    "Wie viele Tage hat ein Jahr auf dem Mars?",
+    "Wie viele Wochen hat ein Jahr Urlaub in Österreich?",
+])
+def test_kalender_gegenproben(frage):
+    assert rechnen_schule._kalender(frage) is None
+
+
+def test_altersvergleich():
+    de = rechnen.loesen("Kann das stimmen? Nina ist sechs Jahre und fünf Tage alt, Lukas sieben Jahre und fünf Tage. "
+                        "Lukas ist also ein Jahr jünger als Nina.").de
+    assert de.startswith("Nein, das stimmt nicht. Lukas ist 1 Jahr älter als Nina.")
+    assert rechnen.loesen("Kann das stimmen? Nina ist 6 Jahre alt, Lukas 7 Jahre. Lukas ist also 1 Jahr älter als Nina.").de.startswith("Ja, das stimmt.")
+
+
+@pytest.mark.parametrize("frage", [
+    "Wie viele Tage hat das Jahr noch?",
+    "Wie viele Tage hat ein Jahr auf Mars?",
+    "Wie viele Tage hat ein Jahr im Islam?",
+    "Wie viele Wochen hat ein Jahr Schule?",
+    "Wie viele Wochen hat das Jahr 2026?",
+])
+def test_kalender_zusatz_geht_ans_modell(frage):
+    assert rechnen_schule._kalender(frage) is None
+
+
+def test_kalender_fuellwort():
+    assert rechnen_schule._kalender("Wie viele Tage hat ein Schaltjahr eigentlich?").de == "Ein Schaltjahr hat 366 Tage."
+
+
+def test_altersvergleich_nur_als_stimmt_das_aufgabe():
+    assert rechnen.loesen("Anna ist 6 Jahre alt, Paul 8 Jahre. Paul ist also 2 Jahre älter als Anna. Welches Geschenk passt für beide?") is None \
+        or not rechnen.loesen("Anna ist 6 Jahre alt, Paul 8 Jahre. Paul ist also 2 Jahre älter als Anna. Welches Geschenk passt für beide?").de.startswith("Ja")
+    assert rechnen_schule._altersvergleich("Anna ist 6 Jahre alt, Paul 8 Jahre. Paul ist also 2 Jahre älter als Anna. Stimmt das?") is not None
+
+
+def test_altersvergleich_volle_jahre():
+    de = rechnen.loesen("Kann das stimmen? Nina ist 6 Jahre und 5 Tage alt, Lukas 7 Jahre und 100 Tage. Lukas ist also ein Jahr älter als Nina.").de
+    assert de.startswith("Ja, in vollen Jahren stimmt das. Genau gerechnet: Lukas ist 1 Jahr und 95 Tage älter als Nina.")
+    assert "Nina ist 6 Jahre und 5 Tage alt" in de
+
+
+def test_geschickt_tausenderpunkt():
+    assert "Erst 10 · 5.700 = 57.000, dann 1 · 5.700 weg: 57.000 − 5.700 = 51.300." in rechnen.loesen("Rechne geschickt: 9 · 5700").de

@@ -29,7 +29,7 @@ def loesen(text: str) -> Ergebnis | None:
         return None
     t = _zahlwoerter(t)
     for stufe in (_umkehr, _beine, _reihenfolge, _fehler_division, _wechselgeld, _stueck_preis, _je_zeit, _so_viele_wie, _summe_zwei,
-                  _summe_aus, _alter_wochen, _alle_n_tage):
+                  _summe_aus, _alter_wochen, _alle_n_tage, _geschickt, _kalender, _altersvergleich):
         r = stufe(t)
         if r is not None:
             return r
@@ -516,3 +516,91 @@ def _alle_n_tage(t: str) -> Ergebnis | None:
              else f"der {bis.day}.{bis.month}. zählt mit, wenn er dran ist")
     return Ergebnis(f"An {len(tage)} Tagen: {liste}\n\nSo kommst du darauf: Ab dem {erst.day}.{erst.month}. jeden {schritt}. Tag; {grund}.",
                     f"On {len(tage)} days: {liste}")
+
+
+def _geschickt(t: str) -> Ergebnis | None:
+    if not re.search(r"(?i)\bgeschickt\b", t):
+        return None
+    m = re.fullmatch(r"(?i)(?:.*?:\s*)?(?:rechne\s+geschickt\s*:?\s*)?(\d{1,4})\s*[·x×*]\s*(\d{1,4})\s*=?\s*\??(?:\s*rechne\s+geschickt\.?)?", t.strip())
+    if not m:
+        return None
+    a, b = int(m.group(1)), int(m.group(2))
+    for x, y in ((a, b), (b, a)):
+        if x % 10 == 9 and x <= 99:
+            rund = x + 1
+            ergebnis = x * y
+            return Ergebnis(f"{_t(a)} · {_t(b)} = {_t(ergebnis)}.\n\nGeschickt gerechnet: {x} ist {rund} weniger 1. Erst {rund} · {_t(y)} = "
+                            f"{_t(rund * y)}, dann 1 · {_t(y)} weg: {_t(rund * y)} − {_t(y)} = {_t(ergebnis)}.",
+                            f"{_t(a)} × {_t(b)} = {_t(ergebnis)}. Smart way: {rund} × {_t(y)} = {_t(rund * y)}, minus {_t(y)} = {_t(ergebnis)}.")
+    return None
+
+
+_KALENDER = (
+    (r"wie\s+viele\s+wochen\s+(?:hat|haben)\s+(?:ein|das)\s+jahr\b(?!\s*\d)", "Ein Jahr hat 52 Wochen und 1 Tag (im Schaltjahr 2 Tage).",
+     "A year has 52 weeks and 1 day (2 in a leap year)."),
+    (r"wie\s+viele\s+tage\s+(?:hat|haben)\s+(?:ein|das)\s+schaltjahr", "Ein Schaltjahr hat 366 Tage.", "A leap year has 366 days."),
+    (r"(?:wie\s+oft|alle\s+wie\s+viele\s+jahre)\s+(?:gibt\s+es\s+)?(?:ein\s+)?schaltjahr", "Ein Schaltjahr gibt es meistens alle 4 Jahre "
+     "(nicht in vollen Jahrhunderten, außer sie sind durch 400 teilbar, etwa 2000).", "There is usually a leap year every 4 years."),
+)
+
+
+_KALENDER_FUELL = r"(?:\s+(?:genau|eigentlich|normalerweise|insgesamt|denn|ungefähr|überhaupt))*"
+
+
+def _kalender(t: str) -> Ergebnis | None:
+    rest = re.sub(r"(?i)\b(?:und|sowie)\b", ".", t)
+    teile = [x.strip(" ,;") for x in re.split(r"[.?!;]", rest) if x.strip(" ,;")]
+    if not teile or len(teile) > 4:
+        return None
+    de, en = [], []
+    for teil in teile:
+        teil_h = teil if re.search(r"(?i)\b(?:hat|haben)\b", teil) else re.sub(r"(?i)^(wie\s+viele\s+\w+)\s+", r"\1 hat ", teil)
+        for muster, satz_de, satz_en in _KALENDER:
+            if re.fullmatch(rf"(?i)\s*{muster}{_KALENDER_FUELL}\s*", teil_h):
+                if satz_de not in de:
+                    de.append(satz_de)
+                    en.append(satz_en)
+                break
+        else:
+            return None
+    return Ergebnis(" ".join(de), " ".join(en))
+
+
+_NAME_A = r"((?-i:[A-ZÄÖÜ])[a-zäöüß]+)"
+_ALTER = r"(\d{1,2})\s+jahre?(?:\s+und\s+(\d{1,3})\s+tage?)?"
+
+
+def _altersvergleich(t: str) -> Ergebnis | None:
+    m = re.search(rf"(?i){_NAME_A}\s+ist\s+{_ALTER}\s+alt\s*,?\s*(?:und\s+)?{_NAME_A}\s+(?:ist\s+)?{_ALTER}(?:\s+alt)?\s*\.\s*"
+                  rf"{_NAME_A}\s+ist\s+also\s+(\d{{1,2}}|ein|zwei|drei)\s+jahre?\s+(älter|jünger)\s+als\s+{_NAME_A}", t)
+    if not m:
+        return None
+    rahmen = r"[\s.?!:]*(?:(?:kann|könnte)\s+das\s+(?:wirklich\s+)?stimmen|stimmt\s+das(?:\s+wirklich)?)?[\s.?!:]*"
+    if not re.search(r"(?i)\bstimm", t) or not re.fullmatch(rf"(?i){rahmen}", t[:m.start()]) or not re.fullmatch(rf"(?i){rahmen}", t[m.end():]):
+        return None
+    n1, j1, d1, n2, j2, d2, wer, diff, richtung, als = m.groups()
+    alter = {n1: int(j1) * 365 + int(d1 or 0), n2: int(j2) * 365 + int(d2 or 0)}
+    if wer not in alter or als not in alter or wer == als:
+        return None
+    diff = {"ein": 1, "zwei": 2, "drei": 3}.get(diff.lower(), None) or int(diff)
+    unterschied = alter[wer] - alter[als]
+    behauptet = diff * 365 * (1 if richtung.lower() == "älter" else -1)
+    jahre = abs(unterschied) // 365
+    tage = abs(unterschied) % 365
+    wie = f"{jahre} Jahr{'e' if jahre != 1 else ''}" + (f" und {tage} Tag{'e' if tage != 1 else ''}" if tage else "")
+    if unterschied == 0:
+        wahr = f"{wer} und {als} sind gleich alt."
+    else:
+        wahr = f"{wer} ist {wie} {'älter' if unterschied > 0 else 'jünger'} als {als}."
+    ungefaehr = unterschied != behauptet and unterschied * behauptet > 0 and jahre == diff
+    if unterschied == behauptet:
+        anfang_de, anfang_en = "Ja, das stimmt. ", "Yes. "
+    elif ungefaehr:
+        anfang_de, anfang_en = "Ja, in vollen Jahren stimmt das. Genau gerechnet: ", "Yes, in full years. Exactly: "
+    else:
+        anfang_de, anfang_en = "Nein, das stimmt nicht. ", "No. "
+
+    def _alt(j: str, d: str | None) -> str:
+        return f"{j} Jahr{'e' if j != '1' else ''}" + (f" und {d} Tag{'e' if d != '1' else ''}" if d else "")
+
+    return Ergebnis(anfang_de + wahr + f"\n\n{n1} ist {_alt(j1, d1)} alt, {n2} {_alt(j2, d2)}.", anfang_en + wahr)
