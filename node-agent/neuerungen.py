@@ -14,6 +14,9 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-11-23d": [
+        "Textaufgaben mit Tagen, etwa „Blumen gießen alle zwei Tage vom 25.6. bis 8.7.“, rechnet KIplatz jetzt selbst und sucht dafür nicht mehr im Internet nach unbekannten Vornamen wie Pjotr oder Luba.",
+    ],
     "2026-11-23c": [
         "Braucht ein PC mit großem Modell länger als 90 Sekunden für eine Antwort, geht deine Frage nicht mehr verloren. Und wird die Grafikkarte eines PCs frei, nimmt KIplatz vor der nächsten Frage selbst das stärkere Modell.",
     ],

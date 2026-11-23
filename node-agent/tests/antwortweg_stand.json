@@ -1,6 +1,6 @@
 {
  "pruefwert": "0031690bcf3f8ded2d5d4f6d",
  "mindest_bau": "2026-10-26k",
- "erneuert": "2026-11-23c",
- "grund": "23c: Bedeutungs-Modell nur nach Fehler nachstarten"
+ "erneuert": "2026-11-23d",
+ "grund": "23d: Tage-Zaehler, ohne neue Wortmerkmale"
 }

@@ -29,7 +29,7 @@ def loesen(text: str) -> Ergebnis | None:
         return None
     t = _zahlwoerter(t)
     for stufe in (_umkehr, _beine, _reihenfolge, _fehler_division, _wechselgeld, _stueck_preis, _je_zeit, _so_viele_wie, _summe_zwei,
-                  _summe_aus, _alter_wochen):
+                  _summe_aus, _alter_wochen, _alle_n_tage):
         r = stufe(t)
         if r is not None:
             return r
@@ -478,3 +478,41 @@ def _alter_wochen(t: str) -> Ergebnis | None:
     return Ergebnis(("Ja, das stimmt" if ja else "Nein, das stimmt nicht") + f": {j} · 52 + {w} = {_t(echt)} Wochen (ein Jahr hat 52 Wochen)."
                     + ("" if ja else f" {_t(behauptet)} Wochen wären erst gut {behauptet // 52} Jahre."),
                     ("Yes" if ja else "No") + f": {j} × 52 + {w} = {_t(echt)} weeks.")
+
+
+_ZAHL_TAGE = {"zwei": 2, "drei": 3, "vier": 4, "fünf": 5, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7}
+_DATUM = r"(\d{1,2})\.\s?(\d{1,2})\."
+
+
+def _alle_n_tage(t: str) -> Ergebnis | None:
+    from datetime import date, timedelta
+    if not re.search(r"(?i)\ban\s+wie\s+vielen\s+tagen\b", t):
+        return None
+    n = re.search(r"(?i)\balle\s+(zwei|drei|vier|fünf|\d)\s+tage\b", t) or re.search(r"(?i)\bjeden\s+(zweiten|dritten)\s+tag\b", t)
+    span = re.search(rf"(?i)\bvom\s+{_DATUM}\s+bis\s+(?:zum\s+)?{_DATUM}", t)
+    beginn = re.search(rf"(?i)\b(?:beginn\w*|fang\w*\s+an|ab)\s+(?:am\s+)?{_DATUM}", t) or re.search(rf"(?i)\bam\s+{_DATUM}\s+(?:an|los)\b", t)
+    if not n or not span or not beginn:
+        return None
+    schritt = {"zweiten": 2, "dritten": 3}.get(n.group(1).lower()) or _ZAHL_TAGE.get(n.group(1).lower())
+    if not schritt:
+        return None
+    jahr = 2027
+    try:
+        von = date(jahr, int(span.group(2)), int(span.group(1)))
+        bis = date(jahr, int(span.group(4)), int(span.group(3)))
+        erst = date(jahr, int(beginn.group(2)), int(beginn.group(1))) if beginn else von + timedelta(days=1)
+    except ValueError:
+        return None
+    if not von <= erst < bis or (bis - von).days > 120 or {von.month, bis.month} & {1, 2, 12}:
+        return None
+    weg = bool(re.search(r"(?i)\b(?:urlaub|verreis\w*|fährt\w*\s+(?:weg|fort)|ist\s+weg|kommt\s+\w*\s*zurück|reise)\b", t))
+    tage = []
+    d = erst
+    while d < bis or (d == bis and not weg):
+        tage.append(d)
+        d += timedelta(days=schritt)
+    liste = ", ".join(f"{x.day}.{x.month}." for x in tage)
+    grund = (f"am {bis.day}.{bis.month}. ist wieder jemand da, darum zählt er nicht mehr mit" if weg
+             else f"der {bis.day}.{bis.month}. zählt mit, wenn er dran ist")
+    return Ergebnis(f"An {len(tage)} Tagen: {liste}\n\nSo kommst du darauf: Ab dem {erst.day}.{erst.month}. jeden {schritt}. Tag; {grund}.",
+                    f"On {len(tage)} days: {liste}")

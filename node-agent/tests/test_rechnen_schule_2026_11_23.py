@@ -124,3 +124,17 @@ def test_fable_zu_23b_bleibt_beim_modell(frage):
 def test_zahlwort_nur_vor_hauptwort():
     assert rechnen_schule._zahlwoerter("elf und drei") == "elf und drei"
     assert rechnen_schule._zahlwoerter("kauft sechs Tüten") == "kauft 6 Tüten"
+
+
+def test_alle_zwei_tage_und_textaufgabe_sucht_nicht():
+    import belege
+    frage = ("In den Sommerferien fährt Opa vom 24.6. bis zum 8.7. in den Urlaub. Pjotr und Luba sollen alle zwei Tage die Blumen gießen. "
+             "Sie beginnen am 25.6. An wie vielen Tagen gießen sie die Blumen?")
+    de = rechnen.loesen(frage).de
+    assert de.startswith("An 7 Tagen: 25.6., 27.6., 29.6., 1.7., 3.7., 5.7., 7.7.")
+    assert rechnen.loesen("Lena trainiert vom 1.7. bis 15.7. alle zwei Tage. Sie beginnt am 1.7. An wie vielen Tagen trainiert sie?").de.startswith(
+        "An 8 Tagen: 1.7., 3.7., 5.7., 7.7., 9.7., 11.7., 13.7., 15.7.")
+    assert rechnen_schule.loesen("Lena trainiert vom 1.7. bis 15.7. alle zwei Tage. An wie vielen Tagen trainiert sie?") is None
+    for wissen in ("Mein Baby ist 10 Tage alt und trinkt 60 ml. Ist das genug?", "Darf ich Ibuprofen 400 alle 2 Tage nehmen?",
+                   "An wie vielen Tagen regnet es in Wien?"):
+        assert not belege.rechenaufgabe(wissen)
