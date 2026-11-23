@@ -1309,6 +1309,18 @@ _STAT_ZAHL = re.compile(r"(?i)\b(?:einwohner\w*|bevölkerung\w*|population|inhab
                         r"unemployment\s+rate|inflation\w*|bip|gdp|geburtenrate|birth\s+rate|lebenserwartung|life\s+expectancy)\b")
 
 
+def _amts_land(f: str) -> str:
+    land = belege.gefragtes_land(f)
+    if land or belege.laender_in(f) or teilfragen(f):
+        return land
+    import region
+    ort = region.erkennen(f)
+    if ort is not None and getattr(ort, "land", ""):
+        return str(ort.land).lower()
+    begriff = land_aus_begriff(f)
+    return {"Österreich": "at", "Deutschland": "de"}.get(begriff[1], "") if begriff else ""
+
+
 def amts_domain(frage: str) -> str:
     f = frage or ""
     if not amtlich_zuerst(f) or not (_AMTS_GEBUEHR.search(f) or _AMTLICHE_ZAHL.search(f) or _AMTS_LEISTUNG.search(f)):
@@ -1317,13 +1329,10 @@ def amts_domain(frage: str) -> str:
         return ""
     import antwortsprache
     sprache = "en" if antwortsprache.frage_sprache(f) == "en" else "de"
-    land = belege.gefragtes_land(f)
+    land = _amts_land(f)
     if _AMTS_LEISTUNG.search(f) and not _AMTS_GEBUEHR.search(f):
         if not (belege.zahlenfrage(f) or belege.preisfrage(f)):
             return ""
-        if not land:
-            begriff = land_aus_begriff(f)
-            land = {"Österreich": "at", "Deutschland": "de"}.get(begriff[1], "") if begriff else ""
         return LEISTUNG_DOMAIN[sprache].get(land, "")
     if _STAT_ZAHL.search(f):
         return STAT_DOMAIN[sprache].get(land, "")

@@ -238,14 +238,28 @@ def _zonen(t: str) -> Ergebnis | None:
     return Ergebnis(de, en)
 
 
+_MEHRERE_ZONEN = {"australien": "sydney", "australia": "sydney", "brasilien": "sao paulo", "brazil": "sao paulo", "mexiko": "mexiko stadt",
+                  "mexico": "mexico city", "spanien": "madrid", "spain": "madrid"}
+
+
 def _jetzt_in(t: str) -> Ergebnis | None:
-    m = re.fullmatch(rf"(?:wie\s+sp[aä]t|wie\s*viel\s+uhr|welche\s+uhrzeit|uhrzeit|what\s+time|time)\s*(?:ist\s+es|is\s+it|ist|is)?\s*(?:jetzt\s+|gerade\s+|now\s+|right\s+now\s+)?(?:in|bei|at)\s+(?P<o>{_NAMEN_RE})(?:\s+(?:jetzt|gerade|now))?", t, re.I)
+    m = re.fullmatch(rf"(?:wie\s+sp[aä]t|wie\s*viel\s+uhr|welche\s+uhrzeit|uhrzeit|(?:what\s+is|what['’]?s)\s+the\s+(?:current\s+|local\s+)?time|"
+                     rf"(?:current|local)\s+time|what\s+time|time)\s*(?:ist\s+es|is\s+it|ist|is)?\s*"
+                     rf"(?:jetzt\s+|gerade\s+|aktuell\s+|now\s+|right\s+now\s+|currently\s+)?(?:in|bei|at)\s+(?P<o>{_NAMEN_RE})"
+                     rf"(?:\s+(?:jetzt|gerade|aktuell|now|right\s+now|currently))?", t, re.I)
     if not m:
         return None
-    z = _zone(m.group("o"))
+    land = _MEHRERE_ZONEN.get(m.group("o").lower())
+    z = _zone(land or m.group("o"))
     utc = jetzt_utc()
     dort = ortszeit(z, utc)
     tag_de, tag_en = _TAGE_DE[dort.weekday()], _TAGE_EN[dort.weekday()]
+    if land:
+        lz = _zone(m.group("o"))
+        return Ergebnis(f"{lz[0]} hat mehrere Zeitzonen. In {z[0]} ist es jetzt {_uhr(dort.hour, dort.minute, False)} ({tag_de}), nach der Uhr "
+                        f"dieses Geräts und den Sommerzeit-Regeln; in anderen Landesteilen ist es früher oder später.",
+                        f"{lz[1]} has several time zones. It is {_uhr(dort.hour, dort.minute, True, True)} in {z[1]} right now ({tag_en}), by this "
+                        f"device's clock and daylight saving rules; other parts of the country are earlier or later.")
     return Ergebnis(f"In {z[0]} ist es jetzt {_uhr(dort.hour, dort.minute, False)} ({tag_de}), nach der Uhr dieses Geräts und den Sommerzeit-Regeln.",
                     f"It is {_uhr(dort.hour, dort.minute, True, True)} in {z[1]} right now ({tag_en}), by this device's clock and daylight saving rules.")
 
@@ -269,7 +283,7 @@ def _zone_von(t: str) -> Ergebnis | None:
     if not m:
         return None
     ort = next(g for g in m.groups() if g)
-    if ort.lower() in ("utc", "gmt", "weltzeit", "australien", "australia", "brasilien", "brazil", "mexiko", "mexico", "spanien", "spain"):
+    if ort.lower() in ("utc", "gmt", "weltzeit") or ort.lower() in _MEHRERE_ZONEN:
         return None
     z = _zone(ort)
     utc = jetzt_utc()

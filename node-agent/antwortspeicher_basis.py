@@ -273,6 +273,7 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
     ("2026-11-22v", frozenset({"suche"}), "Die Suche auf der amtlichen Domain nimmt die Wörter der Frage statt der Modellanfrage (Mindestpension fand nichts); Antworten mit Suche von vorher werden verworfen"),
     ("2026-11-22w", frozenset({"suche"}), "„Wie hoch“ vor einem Wort für Geld (Pension, Beihilfe, Lohn) wählt die Stellen mit Betrag statt mit Metern; Antworten mit Suche von vorher werden verworfen"),
     ("2026-11-22x", frozenset({"suche"}), "Die Suche auf der amtlichen Domain bleibt, wenn die Wörter der Person zuerst gesucht werden (ESTA, Familienbeihilfe); Antworten mit Suche von vorher werden verworfen"),
+    ("2026-11-22y", frozenset({"suche"}), "Uhrzeit auch bei „right now“, „What is the time“ gerechnet statt gesucht; das Land für die amtliche Domain auch aus dem Ort (Graz); Antworten mit Suche von vorher werden verworfen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())
