@@ -14,6 +14,9 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-11-22t": [
+        "Steht in der ersten gelesenen Seite der gefragte Betrag nicht, etwa die Höhe der Mindestpension, sucht KIplatz jetzt weiter, statt „dazu gibt es noch keine Angaben“ zu sagen. Und ein Satz, der nur den Satz davor wiederholt, fällt weg.",
+    ],
     "2026-11-22s": [
         "Fragst du nach einer Gebühr einer Behörde oder einer amtlichen Zahl, sucht KIplatz jetzt zusätzlich gezielt auf der Seite der Behörde oder des Statistikamts, etwa bei der EU für das Schengen-Visum. Und bei Feiertagen steht der Name dabei.",
     ],

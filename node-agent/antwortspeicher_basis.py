@@ -268,6 +268,7 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
     ("2026-11-22r", frozenset({"suche"}), "Gebühren einer Behörde und amtliche Zahlen lesen die amtliche Stelle zuerst (Schengen-Visum 90 €), "
      "Zählerseiten als Schätzung; Antworten mit Suche von vorher werden verworfen"),
     ("2026-11-22s", frozenset({"suche"}), "Gebühren und amtliche Zahlen suchen ein zweites Mal auf der amtlichen Domain (site:europa.eu, gov.uk, Statistikamt), Feiertage mit Namen; Antworten mit Suche von vorher werden verworfen"),
+    ("2026-11-22t", frozenset({"suche"}), "„Es gibt noch keine Angaben“ sucht weiter wie „weiß ich nicht“ (Mindestpension), wortgleiche Wiederholungen fallen; Antworten mit Suche von vorher werden verworfen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())

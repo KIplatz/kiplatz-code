@@ -2722,7 +2722,8 @@ class Api:
             strom.neu()
             return True
 
-        while (schrift is None and not frisch and not fern and self.nachschauen_an() and _WEISS_NICHT.search(ohne_markdown(a.text) or "")
+        while (schrift is None and not frisch and not fern and self.nachschauen_an()
+               and (_WEISS_NICHT.search(ohne_markdown(a.text) or "") or keine_angabe(ohne_markdown(a.text) or ""))
                and lauf and lauf["runde"] < SUCHRUNDEN - 1):
             if not nachsuchen("Das weiß ich noch nicht, ich suche danach …" if lauf["runde"] == 0 else "Noch nicht gefunden, ich suche mit anderen Wörtern …",
                               "Das Modell kannte es nicht, darum wurde im Internet nachgeschaut."):
@@ -7849,6 +7850,22 @@ _WEISS_NICHT = re.compile(r"kenne ich (?:das |es |leider |gerade |noch )*nicht|s
                           r"|\bI (?:do not|don't|don’t) (?:yet )?know\b|\bI (?:can't|can’t|cannot) (?:say|tell|answer)\b|\bI have no (?:information|details|data)\b"
                           r"|\bnone of the (?:sources|passages) (?:mention|mentions|say|says|give|gives|contain|contains|name|names)\b"
                           r"|\bthe (?:sources|passages) (?:do not|don't|don’t) (?:mention|say|give|contain|name)\b", re.I)
+_KEINE_ANGABE = re.compile(
+    r"(?i)\b(?:genauere|konkrete|aktuelle|genaue)\s+(?:Angaben|Zahlen|Beträge)\b[^.]{0,60}?\b(?:gibt es|liegen)\s+(?:noch\s+|derzeit\s+)(?:nicht|keine)\b"
+    r"|\b(?:gibt es|liegen)\s+(?:noch|derzeit)\s+keine\s+(?:genauen\s+|konkreten\s+|aktuellen\s+)?(?:Angaben|Zahlen|Beträge)\b"
+    r"|\bno (?:specific|exact|current|official|precise) (?:figures?|amounts?|numbers?|rates?) (?:is|are|has been|have been) (?:yet )?(?:available|published)\b")
+
+
+def _zweimal_da(text: str, satz: str) -> bool:
+    return sum(1 for absatz in str(text or "").split("\n") for x in belege._saetze(absatz) if x == satz) > 1
+
+
+def keine_angabe(text: str) -> bool:
+    t = str(text or "")
+    ohne_jahre = re.sub(r"\b(?:19|20)\d\d\b", " ", t)
+    return bool(_KEINE_ANGABE.search(t)) and not re.search(r"\d", ohne_jahre)
+
+
 _WEISS_NICHT_SATZ = "Das weiß ich gerade nicht sicher. Soll ich live nachprüfen?"
 _NACHPRUEFEN_ANGEBOT = "Soll ich live nachprüfen?"
 _GESUCHT_NICHTS_SATZ = "Das weiß ich noch nicht, und im Internet habe ich dazu gerade nichts Verlässliches gefunden."
@@ -8136,7 +8153,7 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
         namen_fall = namen_fall and not raus_misch
         notizen.append("1 Satz, der einer Quelle etwas aus einer anderen Quelle zuschreibt, vom Programm gestrichen." if len(raus_misch) == 1
                        else f"{len(raus_misch)} Sätze, die einer Quelle etwas aus einer anderen Quelle zuschreiben, vom Programm gestrichen.")
-    angehaengt = belege.angehaengte_saetze(geprueft)
+    angehaengt = belege.angehaengte_saetze(geprueft) if not schreiben else []
     heute_falsch = belege.heute_widerspruch(geprueft, ki_laufzeit.heute().weekday())
     if heute_falsch:
         geprueft, raus_heute = belege.saetze_streichen(geprueft, lambda s: s in heute_falsch)
@@ -8146,7 +8163,16 @@ def belege_anwenden(text: str, frage: str, zusatz: str, quellen: list[dict], *, 
             notizen.append("1 Satz „heute geschlossen“ oder „heute geöffnet“, dem die Antwort für den heutigen Wochentag widersprach, vom Programm gestrichen.")
     weg_angehaengt: list[str] = []
     if angehaengt:
-        geprueft, weg_angehaengt = belege.saetze_streichen(geprueft, lambda s: s in angehaengt)
+        gesehen: set[str] = set()
+        doppelt = {x for x in angehaengt if _zweimal_da(geprueft, x)}
+
+        def weg_spaeter(satz_: str) -> bool:
+            frueher_da = satz_ in gesehen
+            gesehen.add(satz_)
+            if satz_ not in angehaengt:
+                return False
+            return frueher_da if satz_ in doppelt else True
+        geprueft, weg_angehaengt = belege.saetze_streichen(geprueft, weg_spaeter)
     if weg_angehaengt:
         notizen.append("1 angehängter Satz (Widerspruch zu den Zahlen davor oder nur Wiederholung) vom Programm gestrichen." if len(weg_angehaengt) == 1
                        else f"{len(weg_angehaengt)} angehängte Sätze (Widerspruch oder Wiederholung) vom Programm gestrichen.")

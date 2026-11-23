@@ -722,6 +722,11 @@ def _anh_zahl(x: str) -> float | None:
         return None
 
 
+_GEGEN_WORT = re.compile(r"(?i)\b(?:nicht|kein\w*|nie|niemals|sondern|aber|jedoch|doch|not|no|never|but|however|instead)\b")
+_WIEDERHOL_FUELL = frozenset("this that these those with from have were been also dies diese dieser dieses jene jener eine einer einem einen "
+                             "auch noch dann sein seine ihre ihr their them they".split())
+
+
 def angehaengte_saetze(antwort: str) -> list[str]:
     saetze = [x for absatz in (antwort or "").split("\n") for x in _saetze(absatz) if x.strip()]
     weg = []
@@ -739,6 +744,21 @@ def angehaengte_saetze(antwort: str) -> list[str]:
                 if any(e == einheit and w > hi for w, e in werte):
                     weg.append(satz)
                     break
+        import wissen
+        inhalt = {w for w in wissen.woerter(satz) if len(w) >= 4 and w not in _WIEDERHOL_FUELL}
+
+        def wiederholt(frueher: str) -> bool:
+            if frueher.rstrip().endswith("?") or (_GEGEN_WORT.search(satz) and not _GEGEN_WORT.search(frueher)):
+                return False
+            alt = [w for w in wissen.woerter(frueher) if len(w) >= 4 and w not in _WIEDERHOL_FUELL]
+            neu = [w for w in wissen.woerter(satz) if len(w) >= 4 and w not in _WIEDERHOL_FUELL]
+            if not alt or not inhalt <= set(alt):
+                return False
+            am_stueck = any(alt[k:k + len(neu)] == neu for k in range(len(alt) - len(neu) + 1))
+            return am_stueck or inhalt == set(alt)
+        if satz not in weg and len(inhalt) >= 3 and not re.search(r"\d", satz) and any(wiederholt(f) for f in saetze[:i]):
+            weg.append(satz)
+            continue
         if satz not in weg and _LEER_ANFANG.search(satz):
             import wissen
             neue_zahl = set(re.findall(r"\d+(?:[.,]\d+)*", satz)) - set(re.findall(r"\d+(?:[.,]\d+)*", davor))
