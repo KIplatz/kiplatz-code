@@ -1279,9 +1279,24 @@ def sperren(adresse: str, jetzt_s: float | None = None) -> None:
 
 
 _AMTLICH = ("gv.at", "oeamtc.at", "arboe.at", "wko.at", "arbeiterkammer.at", "bund.de", "gesetze-im-internet.de", "bundesregierung.de", "adac.de",
-            "verbraucherzentrale.de", "admin.ch", "ch.ch", "tcs.ch", "gov", "gov.uk", "europa.eu", "canada.ca", "service-public.fr")
+            "verbraucherzentrale.de", "admin.ch", "ch.ch", "tcs.ch", "gov", "gov.uk", "europa.eu", "canada.ca", "service-public.fr",
+            "statistik.at", "destatis.de", "insee.fr", "istat.it", "ine.es", "cbs.nl", "scb.se", "ssb.no", "dst.dk", "stat.fi", "un.org",
+            "worldbank.org", "who.int", "imf.org", "oecd.org")
 _AMTLICH_ENDUNG = re.compile(r"\.(?:gov|gob|gouv|govt|go|gc|gv)\.[a-z]{2}$")
 AMTLICH_PUNKTE = 2.0
+
+
+_AMTS_GEBUEHR = re.compile(r"(?i)\b(?:visa(?!\s*-?\s*(?:karte|card|kreditkarte|debit))|visum|visums|reisepass\w*|passport|personalausweis|eta|esta|etias|"
+                           r"vignette|maut\w*|toll\s+road|driving\s+licen[cs]e|driver'?s\s+licen[cs]e|führerschein\w*|zulassung\w*|"
+                           r"konsulargebühr\w*|verwaltungsgebühr\w*|stempelgebühr\w*|gerichtsgebühr\w*|steuersatz\w*|tax\s+rate|mehrwertsteuer|vat)\b")
+_AMTLICHE_ZAHL = re.compile(r"(?i)\b(?:einwohner\w*|bevölkerung\w*|population|inhabitants|arbeitslos\w*|unemployment|inflation\w*|"
+                            r"bip|gdp|geburtenrate|birth\s+rate|lebenserwartung|life\s+expectancy|people\s+live|menschen\s+leben)\b")
+
+
+def amtlich_zuerst(frage: str) -> bool:
+    f = frage or ""
+    return bool(belege.regelfrage(f) or (_AMTS_GEBUEHR.search(f) and (belege.preisfrage(f) or belege.zahlenfrage(f)))
+                or (_AMTLICHE_ZAHL.search(f) and belege.zahlenfrage(f)))
 
 
 def amtlich(adresse: str) -> bool:
@@ -1325,7 +1340,8 @@ def gefunden_zeile(titel: str, adresse: str, tag: str, seitentext: str) -> str:
     return zeile + " " + SCHAETZ_SATZ if schaetzseite(titel, adresse) else zeile
 
 
-_SCHAETZ_HOST = re.compile(r"(?i)(?:calculator|rechner|costhelper|thepricer|pricelisto|howmuchis|kostencheck)")
+_SCHAETZ_HOST = re.compile(r"(?i)(?:calculator|rechner|costhelper|thepricer|pricelisto|howmuchis|kostencheck|"
+                           r"populationtoday|worldometers|countrymeters|populationof|population\.city|worldpopulationreview)")
 _SCHAETZ_TITEL = re.compile(r"(?i)\b(?:flugzeit|flugdauer|reisezeit|fahrzeit|entfernung\w*|flight\s+(?:time|duration)|travel\s+time|distance)"
                             r"[\w\s-]{0,20}(?:rechner|calculator)\b")
 
@@ -1335,8 +1351,8 @@ def schaetzseite(titel: str, adresse: str) -> bool:
     return not amtlich(adresse) and bool(_SCHAETZ_HOST.search(host) or _SCHAETZ_TITEL.search(str(titel or "")))
 
 
-SCHAETZ_SATZ = ("Diese Seite rechnet oder schätzt Zeiten und Preise selbst, sie ist nicht die Seite des Anbieters: nimm ihre Zahlen nur, wenn keine "
-                "andere Quelle sie nennt, und sag dann dazu, dass es eine Schätzung dieser Seite ist.")
+SCHAETZ_SATZ = ("Diese Seite rechnet oder schätzt Zeiten, Preise oder Einwohnerzahlen selbst, sie ist nicht die Seite des Anbieters oder des "
+                "Statistikamts: nimm ihre Zahlen nur, wenn keine andere Quelle sie nennt, und sag dann dazu, dass es eine Schätzung dieser Seite ist.")
 
 
 _GELDBETRAG = re.compile(r"(?<![\d.,])(\d{1,3}(?:[.  ]\d{3})+|\d+)[.,](\d{2})(?!\d)\s*(?:€|eur\b|euro\b|\$|usd\b|chf\b|£)"
@@ -1540,6 +1556,7 @@ def treffer_reihen(treffer: list[dict], frage: str, *, heute, r: str = "", ziel:
     gesehen: set[str] = set()
     bewertet = []
     regel = belege.regelfrage(frage)
+    amt = amtlich_zuerst(frage)
     fenster = letzt_fenster(frage) if r == "letzt" else LETZT_TAGE
     for rang, t in enumerate(treffer):
         adresse = str(t.get("adresse", ""))
@@ -1554,7 +1571,7 @@ def treffer_reihen(treffer: list[dict], frage: str, *, heute, r: str = "", ziel:
         p = (len(fw & tw) / max(1, len(fw))) * 3.0 + zeit_punkte(kopf, heute, r, fenster) * 0.75 + 1.0 / (1 + rang)
         if veraltet_text(kopf + " " + adresse, *ziel) or zeitlich_vorbei(kopf, heute, r, fenster):
             p -= 3.0
-        if regel and amtlich(adresse):
+        if amt and amtlich(adresse):
             p += AMTLICH_PUNKTE
         if gesperrt(adresse):
             p -= 10.0

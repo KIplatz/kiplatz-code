@@ -265,6 +265,8 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
      "geschlossen“ gegen den Wochentag geprüft; Antworten mit Suche von vorher werden verworfen"),
     ("2026-11-22p", frozenset(), "„heute geschlossen“ auch mit „6:00 PM“ im Satz geprüft; nur die Prüfung nach der Antwort, nichts zu verwerfen"),
     ("2026-11-22q", frozenset(), "Schattenbetrieb der Sinnprüfung nur in Prüfrunden, Antworten unverändert; nichts zu verwerfen"),
+    ("2026-11-22r", frozenset({"suche"}), "Gebühren einer Behörde und amtliche Zahlen lesen die amtliche Stelle zuerst (Schengen-Visum 90 €), "
+     "Zählerseiten als Schätzung; Antworten mit Suche von vorher werden verworfen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())
