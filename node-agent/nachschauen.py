@@ -1281,7 +1281,8 @@ def sperren(adresse: str, jetzt_s: float | None = None) -> None:
 _AMTLICH = ("gv.at", "oeamtc.at", "arboe.at", "wko.at", "arbeiterkammer.at", "bund.de", "gesetze-im-internet.de", "bundesregierung.de", "adac.de",
             "verbraucherzentrale.de", "admin.ch", "ch.ch", "tcs.ch", "gov", "gov.uk", "europa.eu", "canada.ca", "service-public.fr",
             "statistik.at", "destatis.de", "insee.fr", "istat.it", "ine.es", "cbs.nl", "scb.se", "ssb.no", "dst.dk", "stat.fi", "un.org",
-            "worldbank.org", "who.int", "imf.org", "oecd.org")
+            "worldbank.org", "who.int", "imf.org", "oecd.org",
+            "pv.at", "sozialversicherung.at")
 _AMTLICH_ENDUNG = re.compile(r"\.(?:gov|gob|gouv|govt|go|gc|gv)\.[a-z]{2}$")
 AMTLICH_PUNKTE = 2.0
 
@@ -1289,6 +1290,12 @@ AMTLICH_PUNKTE = 2.0
 _AMTS_GEBUEHR = re.compile(r"(?i)\b(?:visa(?!\s*-?\s*(?:karte|card|kreditkarte|debit))|visum|visums|reisepass\w*|passport|personalausweis|eta|esta|etias|"
                            r"vignette|maut\w*|toll\s+road|driving\s+licen[cs]e|driver'?s\s+licen[cs]e|führerschein\w*|zulassung\w*|"
                            r"konsulargebühr\w*|verwaltungsgebühr\w*|stempelgebühr\w*|gerichtsgebühr\w*|steuersatz\w*|tax\s+rate|mehrwertsteuer|vat)\b")
+_AMTS_LEISTUNG = re.compile(r"(?i)\b(?:(?:mindestpension|alterspension|witwenpension|ausgleichszulage|familienbeihilfe|kinderbetreuungsgeld|"
+                            r"pflegegeld|sozialhilfe|mindestsicherung|kindergeld|elterngeld|bürgergeld|"
+                            r"wohngeld|mindestlohn)\w*|state\s+pension|pension\s+credit|child\s+benefit|universal\s+credit|minimum\s+wage|"
+                            r"social\s+security\s+benefits?|jobseeker'?s\s+allowance)\b")
+LEISTUNG_DOMAIN = {"de": {"at": "gv.at"},
+                   "en": {"gb": "gov.uk", "us": "gov", "ca": "canada.ca", "au": "gov.au", "nz": "govt.nz"}}
 _AMTLICHE_ZAHL = re.compile(r"(?i)\b(?:einwohner\w*|bevölkerung\w*|population|inhabitants|arbeitslos\w*|unemployment|inflation\w*|"
                             r"bip|gdp|geburtenrate|birth\s+rate|lebenserwartung|life\s+expectancy|people\s+live|menschen\s+leben)\b")
 
@@ -1304,13 +1311,20 @@ _STAT_ZAHL = re.compile(r"(?i)\b(?:einwohner\w*|bevölkerung\w*|population|inhab
 
 def amts_domain(frage: str) -> str:
     f = frage or ""
-    if not amtlich_zuerst(f) or not (_AMTS_GEBUEHR.search(f) or _AMTLICHE_ZAHL.search(f)):
+    if not amtlich_zuerst(f) or not (_AMTS_GEBUEHR.search(f) or _AMTLICHE_ZAHL.search(f) or _AMTS_LEISTUNG.search(f)):
         return ""
     if re.search(r"(?i)\b(?:vignette|maut\w*|toll\s+road)\b", f):
         return ""
     import antwortsprache
     sprache = "en" if antwortsprache.frage_sprache(f) == "en" else "de"
     land = belege.gefragtes_land(f)
+    if _AMTS_LEISTUNG.search(f) and not _AMTS_GEBUEHR.search(f):
+        if not (belege.zahlenfrage(f) or belege.preisfrage(f)):
+            return ""
+        if not land:
+            begriff = land_aus_begriff(f)
+            land = {"Österreich": "at", "Deutschland": "de"}.get(begriff[1], "") if begriff else ""
+        return LEISTUNG_DOMAIN[sprache].get(land, "")
     if _STAT_ZAHL.search(f):
         return STAT_DOMAIN[sprache].get(land, "")
     if _AMTLICHE_ZAHL.search(f) and not _AMTS_GEBUEHR.search(f):
@@ -1323,7 +1337,7 @@ def amts_domain(frage: str) -> str:
 def amtlich_zuerst(frage: str) -> bool:
     f = frage or ""
     return bool(belege.regelfrage(f) or (_AMTS_GEBUEHR.search(f) and (belege.preisfrage(f) or belege.zahlenfrage(f)))
-                or (_AMTLICHE_ZAHL.search(f) and belege.zahlenfrage(f)))
+                or ((_AMTLICHE_ZAHL.search(f) or _AMTS_LEISTUNG.search(f)) and belege.zahlenfrage(f)))
 
 
 def amtlich(adresse: str) -> bool:
