@@ -1236,7 +1236,10 @@ class Api:
             grenze = (min(2, len(teile)) * LIVE_STELLEN if teile else LIVE_STELLEN_LISTE if nachschauen.listenfrage(frage) else LIVE_STELLEN)
             if not live_sortiert and len(gesucht) > 1:
                 fw_live = set(wissen.woerter(frage))
-                gesucht.sort(key=lambda t: -len(fw_live & set(wissen.woerter(t.quelle.titel + " " + t.text))))
+
+                def fragewoerter(t) -> int:
+                    return len(fw_live & set(wissen.woerter(t.quelle.titel + " " + t.text)))
+                gesucht[:] = je_seite_zuerst(sorted(gesucht, key=lambda t: -fragewoerter(t)), fragewoerter)
                 if teile:
                     dinge = [set(wissen.woerter(ding)) for ding, _f in teile]
                     je_ding: list[list] = [[] for _ in dinge] + [[]]
@@ -7616,6 +7619,19 @@ def _gelesen_um(ergebnis) -> str:
 
 
 _AMT_ZURUECK = re.compile(r"(?i)\b(?:dort|da|davon|dessen|deren|sein\w*|ihr\w*|there|its|their|his|her)\b|^\s*(?:und|and)\b")
+
+
+def je_seite_zuerst(stellen: list, punkte) -> list:
+    if not stellen:
+        return []
+    best = punkte(stellen[0])
+    erste, rest, seiten = [], [], set()
+    for t in stellen:
+        neu = t.quelle.adresse not in seiten
+        seiten.add(t.quelle.adresse)
+        p = punkte(t) if neu else 0
+        (erste if neu and p >= 1 and p >= best - 1 else rest).append(t)
+    return erste + rest
 
 
 def amtssuche_dazu(liste: list[str] | None, frage: str, heute=None, bisher=()) -> list[str] | None:
