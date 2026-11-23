@@ -149,6 +149,11 @@ def ohne_fragewendung(frage: str) -> str:
 
 
 _ZAHL = r"\d[\d.,]*\s*"
+_GELD_DE = (r"\b\w*(?:pension|zulage|geld|beihilfe|lohn(?!t)|löhne|gehälter|miete|gebühr|steuer|pauschale|zuschuss|förderung|prämie|beitr[aä]g|"
+            r"strafe|rente|unterhalt|abfertigung|abfindung)\w*\b|\b(?:brutto|netto|monats|jahres|einstiegs|durchschnitts)?gehalts?\b")
+_GELD_EN = r"\b(?:wages?|benefits?|fees?|fines?|salary|salaries|rent|allowances?|bonus|pension)\b"
+_GELD_HOEHE = r"[^.?!]{0,40}?(?:" + _GELD_DE + r")"
+_GELD_HOW_MUCH = r"[^.?!]{0,40}?(?:" + _GELD_DE + r"|" + _GELD_EN + r")"
 _MASSE = (
     (r"\bwie\s+lang\b|\bwie\s+weit\b|\bl(?:ä|ae)nge\b|\bentfernung\b|\bdistanz\b|\bstrecke\b|\bhow\s+(?:long\s+is|far)\b|\blength\b|\bdistance\b",
      _ZAHL + r"(?:km|kilometer\w*|kilometre\w*|meter\w*|metre\w*|m|cm|mm|meilen|miles?|mi|yards?|feet|ft)\b",
@@ -156,7 +161,8 @@ _MASSE = (
     (r"\bwie\s+lange\b|\bdauer(?:t|n)?\b|\bwie\s+viel\s+zeit\b|\bhow\s+long\b|\bhow\s+much\s+time\b|\bduration\b",
      _ZAHL + r"(?:sekunden?|minuten?|min|stunden?|std|h|tage?n?|wochen?|monate?n?|jahre?n?|seconds?|minutes?|mins?|hours?|hrs?|days?|weeks?|months?|years?)\b",
      r"dauer|stunden|minuten|tage\b|duration|minutes|hours"),
-    (r"\bwie\s+(?:hoch|tief)\b|\bh[öo]he\b|\btiefe\b|\bseeh[öo]he\b|\bhow\s+(?:high|tall|deep)\b|\bheight\b|\bdepth\b|\belevation\b",
+    (r"\bwie\s+(?:hoch|tief)\b(?!" + _GELD_HOEHE + r")|\bh[öo]he\b(?!" + _GELD_HOEHE + r")|\btiefe\b|\bseeh[öo]he\b|\bhow\s+(?:high|tall|deep)\b|"
+     r"\bheight\b|\bdepth\b|\belevation\b",
      _ZAHL + r"(?:m|meter\w*|metre\w*|km|ft|feet|fu(?:ß|ss))\b", r"h[öo]he|tiefe|meter|height|depth|elevation"),
     (r"\bwie\s+gro(?:ß|ss)\b|\bfl[äa]che\b|\bhow\s+(?:big|large)\b|\barea\b",
      _ZAHL + r"(?:km²|km2|m²|m2|quadratkilometer\w*|quadratmeter\w*|hektar|ha|square\s+\w+|acres?)\b|" + _ZAHL + r"(?:km²|m²)",
@@ -164,7 +170,8 @@ _MASSE = (
     (r"\bwie\s+schwer\b|\bgewicht\b|\bwiegt\b|\bhow\s+heavy\b|\bweigh\w*\b",
      _ZAHL + r"(?:kg|kilogramm|kilograms?|g|gramm|grams?|t|tonnen?|tonnes?|tons?|pounds?|lbs?)\b", r"gewicht|wiegt|kilogramm|tonnen|weight|weighs"),
     (r"\bwie\s+(?:viel|teuer)\b.{0,40}\b(?:kost|preis|euro|geld|bargeld)|\bwas\s+kostet\b|\bpreis(?:e|es)?\b|\bkosten\b|"
-     r"\bhow\s+much\b.{0,40}\b(?:cost|price|euros?|money|cash|pay)|\bwhat\s+does\b.{0,40}\bcost\b|\bprice\b|\bcosts?\b",
+     r"\bhow\s+much\b.{0,40}\b(?:cost|price|euros?|money|cash|pay)|\bwhat\s+does\b.{0,40}\bcost\b|\bprice\b|\bcosts?\b|"
+     r"\b(?:wie\s+hoch|h[öo]he)\b(?=" + _GELD_HOEHE + r")|\bhow\s+much\b(?=" + _GELD_HOW_MUCH + r")",
      _ZAHL + r"(?:€|euros?\b|eur\b|cent\b|dollars?\b|\$|£|pounds?\b|franken\b|chf\b|yen\b|¥)|(?:€|eur\b|\$|£|¥)\s*\d",
      r"preis|kostet|kosten|euro|price|cost"),
     (r"\bwie\s+viele?\b|\banzahl\b|\beinwohner\w*\b|\bhow\s+many\b|\bnumber\s+of\b|\bpopulation\b",
