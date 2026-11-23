@@ -279,6 +279,7 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
     ("2026-11-23b", frozenset({"ohne_suche"}), "Textaufgaben (Wechselgeld, Stückpreis, je Tag/Woche aufs Jahr, doppelt so viele, Summe aus zwei Zahlen) rechnet das Programm; Antworten ohne Suche von vorher werden verworfen"),
     ("2026-11-23c", frozenset(), "Späte Antwort des ersten PCs gilt, solange kein anderer die Frage hat; die KI wechselt vor einer Frage auf die frei gewordene Grafikkarte; nur der Weg, nichts zu verwerfen"),
     ("2026-11-23d", frozenset({"suche"}), "Textaufgaben mit Tagen („An wie vielen Tagen“, „Tage alt“) gelten als Rechnung und suchen keine Vornamen; „alle zwei Tage vom … bis …“ rechnet das Programm; Antworten mit Suche von vorher werden verworfen"),
+    ("2026-11-23e", frozenset({"suche"}), "Kündigungsfrist nach § 20 Angestelltengesetz rechnet das Programm (nach 6 Dienstjahren 3 Monate); Antworten mit Suche von vorher werden verworfen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())
