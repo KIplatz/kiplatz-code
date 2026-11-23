@@ -29,7 +29,7 @@ def loesen(text: str) -> Ergebnis | None:
         return None
     t = _zahlwoerter(t)
     for stufe in (_umkehr, _beine, _reihenfolge, _fehler_division, _wechselgeld, _stueck_preis, _je_zeit, _so_viele_wie, _summe_zwei,
-                  _summe_aus, _alter_wochen, _alle_n_tage, _geschickt, _kalender, _altersvergleich, _bruchteil):
+                  _summe_aus, _alter_wochen, _alle_n_tage, _geschickt, _kalender, _altersvergleich, _bruchteil, _abfahrt_ankunft, _zahlenfolge):
         r = stufe(t)
         if r is not None:
             return r
@@ -655,3 +655,110 @@ def _bruchteil(t: str) -> Ergebnis | None:
         return Ergebnis(f"{_t(n - teil)}{nomen}.\n\n{weg} Übrig bleiben {n} − {teil} = {_t(n - teil)}.",
                         f"{_t(n - teil)}. {teil} of {n} is the fraction; {n} − {teil} = {_t(n - teil)}.")
     return Ergebnis(f"{_t(teil)}{nomen}.\n\n{weg}", f"{_t(teil)}.")
+
+
+_UHR = r"(?P<h>[01]?\d|2[0-3])[:.](?P<m>[0-5]\d)(?:\s*uhr)?"
+_DAUER_SCHULE = (r"(?P<halb>eine\s+halbe\s+stunde|eineinhalb\s+stunden|anderthalb\s+stunden|eine\s+viertelstunde|eine\s+dreiviertelstunde)"
+                 r"|(?=\d|eine?r?\s|zwei\s|drei\s)(?:(?P<std>\d{1,2}|eine|einer|zwei|drei)\s+stunden?)?(?:\s*(?:und\s+)?(?P<min>\d{1,3})\s+minuten?)?")
+_HALB = {"eine halbe stunde": 30, "eineinhalb stunden": 90, "anderthalb stunden": 90, "eine viertelstunde": 15, "eine dreiviertelstunde": 45}
+_STD_WORT = {"eine": 1, "einer": 1, "zwei": 2, "drei": 3}
+_FRAGE_AN = re.compile(r"(?i)\b(?:wann|um\s+wie\s+viel\s+uhr)\b[^?]*\b(?:an|ankunft|ankommt|ankommen|da|dort|fertig|aus|zu\s+ende|vorbei|am\s+ziel|"
+                       r"zu\s+hause|daheim)\s*\?\s*$")
+_FRAGE_AB = re.compile(r"(?i)\b(?:wann|um\s+wie\s+viel\s+uhr)\b[^?]*\b(?:ab(?:fahren|fährt|fahrt)?|los(?:fahren|gehen)?|weg(?:fahren)?|aufbrechen|starten)\b[^?]*\?\s*$")
+
+
+def _abfahrt_ankunft(t: str) -> Ergebnis | None:
+    if re.search(r"(?i)\b(?:flug\w*|flieg\w*|fliegt|landet|landen|flugzeug\w*|nächste[nrs]?|naechste[nrs]?)\b", t):
+        return None
+    uhren = list(re.finditer(rf"(?i)\bum\s+{_UHR}", t))
+    if len(uhren) != 1 or len(re.findall(r"\b\d{1,2}[:.]\d{2}\b", t)) != 1:
+        return None
+    dauer = [d for d in re.finditer(rf"(?i)\b(?:braucht|brauchen|dauert|dauern|ist\s+(?:\S+\s+){{0,3}}?unterwegs|fährt|fahren|geht|gehen|läuft|laufen)\s+(?:(?:er|sie|es|die\s+fahrt|der\s+weg)\s+)?(?:\S+\s+){{0,3}}?(?:{_DAUER_SCHULE})", t)
+             if any(d.group(g) for g in ("std", "min", "halb"))]
+    if len(dauer) != 1 or re.search(r"(?i)\b(?:verspät\w*|später|früher|pause|umsteig\w*|halt\w*|wartet?|warten)\b", t):
+        return None
+    d = dauer[0]
+    tt = re.sub(r"(?<=\d)\.(?=\d)", ":", t)
+    satz_uhr = tt.count(".", 0, uhren[0].start()) + tt.count("?", 0, uhren[0].start())
+    satz_dauer = tt.count(".", 0, d.start()) + tt.count("?", 0, d.start())
+    dauer_satz = tt[tt.rfind(".", 0, d.start()) + 1:d.end()]
+    if re.search(r"(?i)\bzu[mr]\b", dauer_satz):
+        return None
+    if satz_dauer != satz_uhr and not re.match(r"(?i)\s*(?:er|sie|es|die\s+fahrt|die\s+reise|der\s+film|das\s+spiel)\b", dauer_satz):
+        return None
+    if d.group("halb"):
+        minuten = _HALB[" ".join(d.group("halb").lower().split())]
+    else:
+        std = d.group("std")
+        minuten = (_STD_WORT.get(std.lower(), 0) if std and not std.isdigit() else int(std or 0)) * 60 + int(d.group("min") or 0)
+    if not 0 < minuten < 24 * 60:
+        return None
+    u = uhren[0]
+    h, m = int(u.group("h")), int(u.group("m"))
+    vor_der_uhr = t[:u.start()]
+    ab = re.search(r"(?i)\b(?:fährt|fahren|startet|starten|geht|gehen|beginnt|beginnen|los)\b[^.?!]*$", vor_der_uhr) or \
+        re.search(r"(?i)^[^.?!]*\b(?:ab|los|weg)\b", t[u.end():])
+    an = re.search(r"(?i)\b(?:kommt|kommen|landet|landen|ist|sind)\b[^.?!]*$", vor_der_uhr) and re.search(r"(?i)^[^.?!]*\b(?:an|da)\b", t[u.end():])
+    if ab and _FRAGE_AN.search(t) and not an:
+        z = h * 60 + m + minuten
+        richtung, satz_de = 1, "kommt"
+    elif an and _FRAGE_AB.search(t) and not ab:
+        z = h * 60 + m - minuten
+        richtung, satz_de = -1, "muss"
+    else:
+        return None
+    tag = "" if 0 <= z < 1440 else (" (am nächsten Tag)" if z >= 1440 else " (am Vortag)")
+    zh, zm = divmod(z % 1440, 60)
+    dauer_de = (f"{minuten // 60} Stunde{'n' if minuten // 60 != 1 else ''}" if minuten >= 60 else "") + \
+        (" und " if minuten >= 60 and minuten % 60 else "") + (f"{minuten % 60} Minuten" if minuten % 60 else "")
+    if richtung > 0:
+        return Ergebnis(f"Um {zh}:{zm:02d} Uhr{tag}.\n\n{h}:{m:02d} Uhr plus {dauer_de} ist {zh}:{zm:02d} Uhr.",
+                        f"At {zh}:{zm:02d}{tag}. {h}:{m:02d} plus {minuten} minutes is {zh}:{zm:02d}.")
+    return Ergebnis(f"Um {zh}:{zm:02d} Uhr{tag}.\n\n{h}:{m:02d} Uhr minus {dauer_de} ist {zh}:{zm:02d} Uhr.",
+                    f"At {zh}:{zm:02d}{tag}. {h}:{m:02d} minus {minuten} minutes is {zh}:{zm:02d}.")
+
+
+_FOLGE_FRAGE = re.compile(r"(?i)\b(?:nächste\w*|naechste\w*|weiter|fort(?:setzen|setzung|gesetzt)?|setze\w*|folgt|folgende\w*|reihe|folge|zahlenfolge|zahlenreihe)\b")
+
+
+_FOLGE_FORM = re.compile(r"(?i)\s*(?:(?:welche|was\s+für\s+eine)\s+zahl\s+(?:kommt\s+(?:als\s+)?(?:nächstes|nächste|naechstes|danach|dann)|folgt)"
+                         r"|(?:bitte\s+)?(?:setze?|ergänze?|ergaenze?)\s+(?:die\s+)?(?:zahlen)?(?:folge|reihe)?(?:\s+fort)?"
+                         r"|wie\s+geht\s+(?:die|diese|es)\s*(?:zahlen)?(?:folge|reihe)?\s+weiter)\s*[:?.]?\s*#\s*(?:fort)?\s*[.?!…]*\s*"
+                         r"|\s*#\s*[,.…]*\s*(?:welche\s+zahl\s+kommt\s+als\s+nächstes|wie\s+geht\s+es\s+weiter)\s*\??\s*")
+
+
+def _zahlenfolge(t: str) -> Ergebnis | None:
+    if not _FOLGE_FRAGE.search(t):
+        return None
+    m = re.search(r"(-?\d{1,6}(?:\s*[,;]\s*-?\d{1,6}){3,9})\s*(?:[,;]\s*)?(?:\.{3}|…|_+|\?)?", t)
+    if not m or re.search(r"\d", t[:m.start()] + t[m.end():]):
+        return None
+    if not _FOLGE_FORM.fullmatch(t[:m.start()] + " # " + t[m.end():]):
+        return None
+    z = [int(x) for x in re.split(r"\s*[,;]\s*", m.group(1))]
+    d = [b - a for a, b in zip(z, z[1:])]
+    letzte = z[-1]
+    if len(set(d)) == 1 and d[0] != 0:
+        n = letzte + d[0]
+        regel = (f"Es kommt jedes Mal {d[0]} dazu: {_t(letzte)} + {d[0]} = {_t(n)}." if d[0] > 0
+                 else f"Es wird jedes Mal {-d[0]} weniger: {_t(letzte)} − {-d[0]} = {_t(n)}.")
+        en = f"Each time {d[0]:+d}: {letzte} {'+' if d[0] > 0 else '−'} {abs(d[0])} = {n}."
+    elif 0 not in z and all(b % a == 0 for a, b in zip(z, z[1:])) and len({b // a for a, b in zip(z, z[1:])}) == 1 and z[1] // z[0] > 1:
+        k = z[1] // z[0]
+        n = letzte * k
+        regel, en = f"Jede Zahl wird mal {k} genommen: {_t(letzte)} · {k} = {_t(n)}.", f"Each number times {k}: {letzte} × {k} = {n}."
+    elif 0 not in z and all(a % b == 0 for a, b in zip(z, z[1:])) and len({a // b for a, b in zip(z, z[1:])}) == 1 and z[0] // z[1] > 1 \
+            and letzte % (z[0] // z[1]) == 0:
+        k = z[0] // z[1]
+        n = letzte // k
+        regel, en = f"Jede Zahl wird durch {k} geteilt: {_t(letzte)} : {k} = {_t(n)}.", f"Each number divided by {k}: {letzte} ÷ {k} = {n}."
+    elif (len(z) >= 5 or all(x >= 0 and round(x ** 0.5) ** 2 == x for x in z)) and len({b - a for a, b in zip(d, d[1:])}) == 1 and d[1] != d[0]:
+        dd = d[1] - d[0]
+        schritt = d[-1] + dd
+        n = letzte + schritt
+        regel = (f"Der Abstand wird jedes Mal um {abs(dd)} {'größer' if dd > 0 else 'kleiner'} ({', '.join(str(x) for x in d)}, dann {schritt}): "
+                 f"{_t(letzte)} {'+' if schritt >= 0 else '−'} {abs(schritt)} = {_t(n)}.")
+        en = f"The gap changes by {dd:+d} each time: {letzte} + {schritt} = {n}."
+    else:
+        return None
+    return Ergebnis(f"Die nächste Zahl ist {_t(n)}.\n\n{regel}", f"The next number is {n}. {en}")

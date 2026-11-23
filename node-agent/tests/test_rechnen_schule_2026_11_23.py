@@ -251,3 +251,63 @@ def test_bruchteil_gegenproben(frage):
 def test_bruch_in_faktenfrage_ist_keine_rechnung(frage):
     import belege
     assert not belege.rechenaufgabe(frage) and not belege.rechnet(frage)
+
+
+@pytest.mark.parametrize("frage,anfang", [
+    ("Ein Bus fährt um 7:45 ab und braucht 35 Minuten. Wann kommt er an?", "Um 8:20 Uhr.\n\n7:45 Uhr plus 35 Minuten ist 8:20 Uhr."),
+    ("Ein Zug fährt um 14:35 Uhr ab und braucht 2 Stunden 40 Minuten. Wann kommt er an?", "Um 17:15 Uhr."),
+    ("Der Film beginnt um 19.30 Uhr und dauert eineinhalb Stunden. Wann ist er fertig?", "Um 21:00 Uhr."),
+    ("Der Zug kommt um 9:10 an. Die Fahrt dauert 50 Minuten. Wann fährt er ab?", "Um 8:20 Uhr."),
+    ("Ein Nachtzug fährt um 23:30 ab und braucht 7 Stunden. Wann kommt er an?", "Um 6:30 Uhr (am nächsten Tag)."),
+])
+def test_abfahrt_ankunft(frage, anfang):
+    assert rechnen.loesen(frage).de.startswith(anfang)
+
+
+@pytest.mark.parametrize("frage", [
+    "Ein Bus fährt um 7:45 ab und braucht 35 Minuten, hat aber 10 Minuten Verspätung. Wann kommt er an?",
+    "Der Zug fährt um 7:45 ab. Wann kommt er in Salzburg an?",
+    "Ein Bus fährt um 7:45 und um 8:15 ab und braucht 35 Minuten. Wann kommt der erste an?",
+])
+def test_abfahrt_ankunft_gegenproben(frage):
+    assert rechnen_schule._abfahrt_ankunft(frage) is None
+
+
+@pytest.mark.parametrize("frage,ganz", [
+    ("Welche Zahl kommt als nächstes: 2, 4, 8, 16, ...?", "Die nächste Zahl ist 32.\n\nJede Zahl wird mal 2 genommen: 16 · 2 = 32."),
+    ("Setze die Zahlenfolge fort: 3, 7, 11, 15", "Die nächste Zahl ist 19.\n\nEs kommt jedes Mal 4 dazu: 15 + 4 = 19."),
+    ("Wie geht die Reihe weiter: 100, 90, 80, 70?", "Die nächste Zahl ist 60.\n\nEs wird jedes Mal 10 weniger: 70 − 10 = 60."),
+    ("Wie geht die Folge weiter: 1, 4, 9, 16, ...", "Die nächste Zahl ist 25.\n\nDer Abstand wird jedes Mal um 2 größer (3, 5, 7, dann 9): 16 + 9 = 25."),
+    ("Welche Zahl folgt: 640, 320, 160, 80?", "Die nächste Zahl ist 40.\n\nJede Zahl wird durch 2 geteilt: 80 : 2 = 40."),
+])
+def test_zahlenfolge(frage, ganz):
+    assert rechnen.loesen(frage).de == ganz
+
+
+@pytest.mark.parametrize("frage", [
+    "Welche Zahl kommt als nächstes: 1, 1, 2, 3, 5, 8?",
+    "Wie geht es weiter: 3, 1, 4, 1, 5?",
+    "Ich habe 2, 4, 8, 16 Euro gespart, wie viel insgesamt?",
+])
+def test_zahlenfolge_gegenproben(frage):
+    assert rechnen_schule._zahlenfolge(frage) is None
+
+
+@pytest.mark.parametrize("frage", [
+    "Meine Blutdruckwerte der Reihe nach: 120, 125, 130, 135. Ist das gefährlich?",
+    "Wie groß ist die Summe der Reihe 1, 2, 3, 4?",
+    "Welche Zahl passt nicht in die Reihe: 2, 4, 6, 8?",
+    "Welche Zahl kommt als nächstes: 2, 3, 5, 8, ...?",
+])
+def test_zahlenfolge_nur_als_aufgabe(frage):
+    assert rechnen_schule._zahlenfolge(frage) is None
+
+
+@pytest.mark.parametrize("frage", [
+    "Ein Bus fährt um 7:45 ab und braucht 35 Minuten. Wann kommt der nächste?",
+    "Der Zug fährt um 14:35 ab. Der Fußweg zum Bahnhof dauert 20 Minuten. Wann muss ich da sein?",
+    "Das Spiel beginnt um 15:30. Die Fahrt zum Stadion dauert 45 Minuten. Wann sind wir da?",
+    "Der Flug startet um 10:00 in Wien und dauert 9 Stunden. Wann landet er in New York?",
+])
+def test_abfahrt_ankunft_andere_fragen(frage):
+    assert rechnen_schule._abfahrt_ankunft(frage) is None

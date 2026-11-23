@@ -291,6 +291,7 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
     ("2026-11-23g", frozenset({"suche"}), "Aufzählungen von Namen (die neun Bundesländer) gelten nicht mehr als wörtlich übernommen und werden nicht mehr gestrichen; „ein Drittel davon“ ist eine Rechenaufgabe; Antworten mit Suche von vorher werden verworfen"),
     ("2026-11-23h", frozenset(), "Lücken in Briefen und Nachrichten werden Striche zum Ausfüllen statt zu verschwinden; nur der Weg, nichts zu verwerfen"),
     ("2026-11-23i", frozenset(), "Auch lange Lücken in eckigen Klammern gehen nicht mehr hinaus; nur der Weg, nichts zu verwerfen"),
+    ("2026-11-24a", frozenset({"suche", "ohne_suche"}), "Abfahrt plus Fahrzeit und Zahlenfolgen rechnet das Programm; Antworten mit und ohne Suche von vorher werden verworfen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())
