@@ -7114,6 +7114,8 @@ def frage_fokus(frage: str) -> str:
         teile.append(NEUHEIT_FOKUS.format(heute=ki_laufzeit.heute().strftime("%d.%m.%Y")))
     if laender_frage(f):
         teile.append(LAENDER_FOKUS)
+    if _FEIERTAG_FRAGE.search(f):
+        teile.append(FEIERTAG_FOKUS_EN if antwortsprache.frage_sprache(f) == "en" else FEIERTAG_FOKUS)
     if _OEFFNUNG.search(f):
         teile.append(OEFFNUNG_FOKUS_EN if antwortsprache.frage_sprache(f) == "en" else OEFFNUNG_FOKUS)
     if belege.zahlenfrage(f) or belege.preisfrage(f):
@@ -7136,6 +7138,9 @@ TABELLE_FOKUS = ("Steht hinter einer Zeile in den Quellen in Klammern, zu welche
                  "und mische keine Zahlen aus verschiedenen Tabellen in einer Liste.")
 TABELLE_FOKUS_EN = ("If a row in the sources says in brackets which table and column it belongs to, name that with every number, and do not mix "
                     "numbers from different tables in one list.")
+_FEIERTAG_FRAGE = re.compile(r"(?i)\b(?:feiertag\w*|bank\s+holidays?|public\s+holidays?|national\s+holidays?|federal\s+holidays?|next\s+holiday)\b")
+FEIERTAG_FOKUS = "Nenne bei jedem Feiertag seinen Namen zum Datum und zum Wochentag."
+FEIERTAG_FOKUS_EN = "Give each holiday's name together with its date and weekday."
 BEREICH_FOKUS = ("Die Frage nennt {zahl}. Steht in den Quellen eine Zeile mit einem Bereich, der {zahl} enthält, nimm deren Wert und nenne ihn mit "
                  "dem Namen der Tabelle und der Spalte; „mehr als 20“ schließt die 20 selbst aus.")
 BEREICH_FOKUS_EN = ("The question names {zahl}. If the sources have a row whose range contains {zahl}, take its value and give it with the table "
@@ -7665,6 +7670,9 @@ def suchwoerter_ordnen(liste: list[str], frage: str, frueher: str = "", heute=No
         vorjahr = re.sub(rf"\b{h.year}\b", str(h.year - 1), out[0])
         if vorjahr != out[0]:
             out.append(vorjahr)
+    domain = nachschauen.amts_domain(frage)
+    if out and domain and not ausgabe and not any("site:" in o for o in out):
+        out = [out[0], f"{out[0]} site:{domain}"]
     if out and nachschauen._VIDEO_WORT.search(frage) and not any(re.search(r"(?i)youtu", o) for o in out):
         out[0] = " ".join([out[0], "youtube"])
     return out[:SUCHEN_HOECHSTENS]
@@ -7677,6 +7685,7 @@ _LAND_SATZ = {"de": "Die Suche war auf Deutschland zugeschnitten.", "at": "Die S
 def gesucht_satz(frage: str, gesucht: list[str], land: str = "") -> str:
     gleich = " ".join(str(frage).split()).casefold()
     selbst = any(" ".join(str(q).split()).casefold() == gleich for q in gesucht)
+    gesucht = [re.sub(r"\s+site:(\S+)", r" (nur auf \1)", str(q)) for q in gesucht]
     if len(gesucht) > 1:
         vorne, letzte = _aufzaehlung(gesucht)
         satz = (f"Gesucht wurde nach {vorne} und „{letzte}“; dafür ging deine Frage selbst an die Suche." if selbst

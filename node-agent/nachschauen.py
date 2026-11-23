@@ -1293,6 +1293,33 @@ _AMTLICHE_ZAHL = re.compile(r"(?i)\b(?:einwohner\w*|bevölkerung\w*|population|i
                             r"bip|gdp|geburtenrate|birth\s+rate|lebenserwartung|life\s+expectancy|people\s+live|menschen\s+leben)\b")
 
 
+_EU_THEMA = re.compile(r"(?i)\b(?:schengen\w*|etias|eu-visum|eu\s+visa)\b")
+AMTS_DOMAIN = {"de": {"at": "gv.at", "ch": "admin.ch", "de": "bund.de"},
+               "en": {"gb": "gov.uk", "us": "gov", "ie": "gov.ie", "ca": "canada.ca", "au": "gov.au", "nz": "govt.nz"}}
+STAT_DOMAIN = {"de": {"at": "statistik.at", "ch": "bfs.admin.ch", "de": "destatis.de"},
+               "en": {"gb": "ons.gov.uk", "us": "gov", "ie": "cso.ie", "ca": "statcan.gc.ca", "au": "abs.gov.au", "nz": "stats.govt.nz"}}
+_STAT_ZAHL = re.compile(r"(?i)\b(?:einwohner\w*|bevölkerung\w*|population|inhabitants|people\s+live|menschen\s+leben|arbeitslosenquote|"
+                        r"unemployment\s+rate|inflation\w*|bip|gdp|geburtenrate|birth\s+rate|lebenserwartung|life\s+expectancy)\b")
+
+
+def amts_domain(frage: str) -> str:
+    f = frage or ""
+    if not amtlich_zuerst(f) or not (_AMTS_GEBUEHR.search(f) or _AMTLICHE_ZAHL.search(f)):
+        return ""
+    if re.search(r"(?i)\b(?:vignette|maut\w*|toll\s+road)\b", f):
+        return ""
+    import antwortsprache
+    sprache = "en" if antwortsprache.frage_sprache(f) == "en" else "de"
+    land = belege.gefragtes_land(f)
+    if _STAT_ZAHL.search(f):
+        return STAT_DOMAIN[sprache].get(land, "")
+    if _AMTLICHE_ZAHL.search(f) and not _AMTS_GEBUEHR.search(f):
+        return ""
+    if _EU_THEMA.search(f):
+        return "europa.eu"
+    return AMTS_DOMAIN[sprache].get(land, "")
+
+
 def amtlich_zuerst(frage: str) -> bool:
     f = frage or ""
     return bool(belege.regelfrage(f) or (_AMTS_GEBUEHR.search(f) and (belege.preisfrage(f) or belege.zahlenfrage(f)))
