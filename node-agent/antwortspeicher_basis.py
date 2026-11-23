@@ -146,8 +146,15 @@ def _fremd(q) -> bool:
     return isinstance(q, dict) and (q.get("art") not in FREI_ARTEN or bool(q.get("privat")))
 
 
+_NAME_GLIED = r"(?:(?:die|der|das|the)\s+)?[A-ZÄÖÜ][\wäöüß.'-]*(?:\s+[A-ZÄÖÜ][\wäöüß.'-]*){0,2}"
+_NAMEN_AUFZAEHLUNG = re.compile(rf"(?<![\wäöüß]){_NAME_GLIED}(?:\s*,\s*{_NAME_GLIED}){{1,}}\s*,?\s+(?:und|sowie|oder|and|or)\s+{_NAME_GLIED}"
+                                rf"(?![\wäöüß])")
+_NAMEN_LISTE = re.compile(rf"(?m)(?:^[ \t]*(?:[-–•*]|\d{{1,2}}[.)])[ \t]*{_NAME_GLIED}[ \t]*[,;.]?[ \t]*$\n?){{3,}}")
+
+
 def wortliste(text: str) -> list[str]:
-    return [w for w in re.findall(r"[0-9a-zäöüß]+", str(text or "").lower()) if not w.isdigit()]
+    t = _NAMEN_AUFZAEHLUNG.sub(" ", _NAMEN_LISTE.sub(" ", str(text or "")))
+    return [w for w in re.findall(r"[0-9a-zäöüß]+", t.lower()) if not w.isdigit()]
 
 
 def woertlich(antwort: str, quelle: str, n: int = WOERTLICH_WOERTER) -> bool:
@@ -281,6 +288,7 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
     ("2026-11-23d", frozenset({"suche"}), "Textaufgaben mit Tagen („An wie vielen Tagen“, „Tage alt“) gelten als Rechnung und suchen keine Vornamen; „alle zwei Tage vom … bis …“ rechnet das Programm; Antworten mit Suche von vorher werden verworfen"),
     ("2026-11-23e", frozenset({"suche"}), "Kündigungsfrist nach § 20 Angestelltengesetz rechnet das Programm (nach 6 Dienstjahren 3 Monate); Antworten mit Suche von vorher werden verworfen"),
     ("2026-11-23f", frozenset({"ohne_suche"}), "Kalenderwissen (Wochen im Jahr, Tage im Schaltjahr), „Rechne geschickt“ mit 9, 19 … 99 und „Kann das stimmen?“ beim Altersvergleich rechnet das Programm; Antworten ohne Suche von vorher werden verworfen"),
+    ("2026-11-23g", frozenset({"suche"}), "Aufzählungen von Namen (die neun Bundesländer) gelten nicht mehr als wörtlich übernommen und werden nicht mehr gestrichen; „ein Drittel davon“ ist eine Rechenaufgabe; Antworten mit Suche von vorher werden verworfen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())

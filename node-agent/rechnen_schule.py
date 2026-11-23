@@ -29,7 +29,7 @@ def loesen(text: str) -> Ergebnis | None:
         return None
     t = _zahlwoerter(t)
     for stufe in (_umkehr, _beine, _reihenfolge, _fehler_division, _wechselgeld, _stueck_preis, _je_zeit, _so_viele_wie, _summe_zwei,
-                  _summe_aus, _alter_wochen, _alle_n_tage, _geschickt, _kalender, _altersvergleich):
+                  _summe_aus, _alter_wochen, _alle_n_tage, _geschickt, _kalender, _altersvergleich, _bruchteil):
         r = stufe(t)
         if r is not None:
             return r
@@ -604,3 +604,54 @@ def _altersvergleich(t: str) -> Ergebnis | None:
         return f"{j} Jahr{'e' if j != '1' else ''}" + (f" und {d} Tag{'e' if d != '1' else ''}" if d else "")
 
     return Ergebnis(anfang_de + wahr + f"\n\n{n1} ist {_alt(j1, d1)} alt, {n2} {_alt(j2, d2)}.", anfang_en + wahr)
+
+
+_NENNER = {"hälfte": 2, "drittel": 3, "viertel": 4, "fünftel": 5, "sechstel": 6, "achtel": 8, "zehntel": 10}
+_ZAEHLER = {"ein": 1, "eine": 1, "die": 1, "zwei": 2, "drei": 3, "vier": 4}
+_BRUCH = re.compile(r"(?i)\b(ein|eine|die|zwei|drei|vier|\d)\s+(hälfte|drittel|viertel|fünftel|sechstel|achtel|zehntel)\s+(?:davon|von\s+ihnen)\b")
+_REST_FRAGE = re.compile(r"(?i)\b(?:noch|übrig\w*|bleib\w*|rest\w*|andere\w*|nicht)\b")
+
+
+_NOCH_EIN_ANTEIL = re.compile(r"(?i)\b(?:hälfte|drittel|viertel|fünftel|sechstel|achtel|zehntel|prozent|doppelt\w*|halb\w*|dreifach\w*)\b|%|\bmal\s+so\b")
+_FUELL = frozenset("wie viele viel sind ist es hat haben hatte hätte in im am an der die das den dem des ein eine einer einen und sie er ich du wir ihr man "
+                   "dann also davon jetzt insgesamt denn eigentlich genau zusammen von mit für".split())
+
+
+def _inhalt(satz: str) -> set[str]:
+    return {w.lower() for w in re.findall(r"[A-Za-zÄÖÜäöüß]+", satz) if w.lower() not in _FUELL}
+
+
+def _bruchteil(t: str) -> Ergebnis | None:
+    b = _BRUCH.search(t)
+    q = re.search(r"(?i)(?:^|[.!?:]\s*)(wie\s+viele\s+(\w+)[^.?!]*\?)\s*$", t)
+    if not b or not q or len(_BRUCH.findall(t)) != 1 or _NOCH_EIN_ANTEIL.search(t[:b.start()] + " " + t[b.end():]):
+        return None
+    zahlen = [int(z) for z in re.findall(r"(?<![\d.,])\d{1,5}(?![\d.,])", t[:b.start()] + " " + t[b.end():])]
+    if len(zahlen) != 1:
+        return None
+    n = zahlen[0]
+    zaehler = _ZAEHLER.get(b.group(1).lower()) or int(b.group(1))
+    nenner = _NENNER[b.group(2).lower()]
+    if zaehler >= nenner or (n * zaehler) % nenner:
+        return None
+    teil = n * zaehler // nenner
+    anfang = t.rfind(".", 0, b.start()) + 1
+    ende = t.find(".", b.end())
+    grund, bruchsatz = t[:anfang], t[anfang:ende if ende != -1 else len(t)]
+    frage, wort = q.group(1), q.group(2)
+    w_frage, w_bruch, w_grund = _inhalt(frage), _inhalt(bruchsatz), _inhalt(grund)
+    if _REST_FRAGE.search(frage):
+        rest = True
+    elif w_frage & w_bruch:
+        rest = False
+    elif len(w_frage - w_grund) == 1 and w_frage & w_grund:
+        rest = True
+    else:
+        return None
+    name = b.group(1).capitalize() + " " + b.group(2).capitalize()
+    weg = f"{name} von {n} ist {n} : {nenner} = {n // nenner}" + (f", mal {zaehler} = {teil}" if zaehler > 1 else "") + "."
+    nomen = f" {wort}" if wort[:1].isupper() else ""
+    if rest:
+        return Ergebnis(f"{_t(n - teil)}{nomen}.\n\n{weg} Übrig bleiben {n} − {teil} = {_t(n - teil)}.",
+                        f"{_t(n - teil)}. {teil} of {n} is the fraction; {n} − {teil} = {_t(n - teil)}.")
+    return Ergebnis(f"{_t(teil)}{nomen}.\n\n{weg}", f"{_t(teil)}.")

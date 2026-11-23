@@ -207,3 +207,47 @@ def test_altersvergleich_volle_jahre():
 
 def test_geschickt_tausenderpunkt():
     assert "Erst 10 · 5.700 = 57.000, dann 1 · 5.700 weg: 57.000 − 5.700 = 51.300." in rechnen.loesen("Rechne geschickt: 9 · 5700").de
+
+
+@pytest.mark.parametrize("frage,anfang", [
+    ("Eine Klasse hat 24 Kinder. Ein Drittel davon sind Buben. Wie viele Mädchen sind in der Klasse?", "16 Mädchen.\n\nEin Drittel von 24 ist 24 : 3 = 8. Übrig bleiben 24 − 8 = 16."),
+    ("Eine Klasse hat 24 Kinder. Ein Drittel davon sind Buben. Wie viele Buben sind in der Klasse?", "8 Buben."),
+    ("Lisa hat 36 Murmeln. Sie schenkt ihrem Bruder ein Viertel davon. Wie viele Murmeln hat Lisa noch?", "27 Murmeln."),
+    ("Im Korb sind 20 Äpfel. Drei Viertel davon sind rot. Wie viele Äpfel sind grün?", "5 Äpfel."),
+])
+def test_bruchteil(frage, anfang):
+    assert rechnen.loesen(frage).de.startswith(anfang)
+
+
+def test_bruchteil_ist_rechenaufgabe():
+    import belege
+    f = "Eine Klasse hat 24 Kinder. Ein Drittel davon sind Buben. Wie viele Mädchen sind in der Klasse?"
+    assert belege.rechnet(f) and belege.rechenaufgabe(f)
+    assert not belege.rechenaufgabe("Nutzt die Hälfte der Österreicher KI?")
+
+
+@pytest.mark.parametrize("frage,anfang", [
+    ("Im Korb sind 20 Äpfel. Drei Viertel davon sind rot. Wie viele Äpfel sind rot?", "15 Äpfel."),
+    ("Eine Klasse hat 24 Kinder. Ein Drittel davon sind Buben. Wie viele Kinder sind Buben?", "8 Kinder."),
+    ("Lisa hat 36 Murmeln. Sie schenkt ihrem Bruder ein Viertel davon. Wie viele Murmeln bekommt der Bruder?", "9 Murmeln."),
+])
+def test_bruchteil_teil_nach_dem_wort_der_frage(frage, anfang):
+    assert rechnen.loesen(frage).de.startswith(anfang)
+
+
+@pytest.mark.parametrize("frage", [
+    "Eine Klasse hat 24 Kinder. Ein Drittel davon sind Buben. Wie viele sind es?",
+    "Wir sind 12 Leute, ein Drittel davon Vegetarier. Wie viele Pizzen soll ich bestellen?",
+    "Eine Klasse hat 24 Kinder. Ein Drittel davon sind Buben. Die Hälfte der Buben spielt Fußball. Wie viele Buben spielen Fußball?",
+])
+def test_bruchteil_gegenproben(frage):
+    assert rechnen_schule._bruchteil(frage) is None
+
+
+@pytest.mark.parametrize("frage", [
+    "Österreich hat 9 Millionen Einwohner. Ein Viertel davon lebt in Wien, stimmt das?",
+    "Die Firma hat 500 Mitarbeiter, die Hälfte davon in Linz. Wo ist der Hauptsitz?",
+])
+def test_bruch_in_faktenfrage_ist_keine_rechnung(frage):
+    import belege
+    assert not belege.rechenaufgabe(frage) and not belege.rechnet(frage)

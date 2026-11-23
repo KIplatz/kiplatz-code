@@ -14,6 +14,9 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-11-23g": [
+        "Fragst du nach einer Liste von Namen, etwa den neun Bundesländern, streicht KIplatz die Namen nicht mehr aus der Antwort, nur weil sie in derselben Reihenfolge auch auf einer Webseite stehen. Und Textaufgaben wie „24 Kinder, ein Drittel davon sind Buben, wie viele Mädchen?“ rechnet es jetzt selbst, mit Rechenweg.",
+    ],
     "2026-11-23f": [
         "Fragen aus dem Schulbuch zu Kalender und Zeit, etwa „Wie viele Wochen hat ein Jahr?“, beantwortet KIplatz jetzt selbst, auch wenn die Suche gerade nicht geht. Bei „Rechne geschickt: 9 · 57“ zeigt es den geschickten Weg, und bei „Kann das stimmen?“ zu zwei Altersangaben sagt es, wer wirklich älter ist.",
     ],

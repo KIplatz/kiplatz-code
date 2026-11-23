@@ -993,6 +993,12 @@ def pruefen_noetig(frage: str, zeitgebunden: bool) -> bool:
 
 
 _RECHNET = re.compile(r"(?i)\bzu je\b|\bje\b|\bmal\b|\d\s*[×x*+/−-]\s*\d|\bzusammen\b|\binsgesamt\b|\bsumme\b|\bprozent von\b|%\s*von|\brabatt\b|was kostet das")
+_BRUCH_VON = re.compile(r"(?i)\b(?:hälfte|drittel|viertel|fünftel|sechstel|achtel|zehntel)\s+(?:davon|von\s+ihnen|von\s+(?:den\s+|der\s+|diesen\s+)?\d)")
+
+
+def _bruch_rechnung(f: str) -> bool:
+    return bool(_BRUCH_VON.search(f) and re.search(r"(?i)\bwie\s+viele?\b", f)
+                and not re.search(r"(?i)\b(?:stimm\w*|wo|wer|welche[rsmn]?|warum|wieso|weshalb)\b", f))
 _NAME_ZAHL = re.compile(r"(?<=[A-Za-zÄÖÜäöüß])-\d+\b")
 _JAHR_SCHRAEG = re.compile(r"\b(1\d{3}|20\d{2})/(\d+)\b")
 
@@ -1050,7 +1056,8 @@ def rechenaufgabe(frage: str) -> bool:
         return False
     zahlen = [z for z in _ZAHL.findall(f) if not _JAHRESZAHL.fullmatch(z)]
     alle = _ZAHL.findall(f)
-    return len(zahlen) >= 2 or bool(_RECHENZEICHEN.search(f) or (_UMRECHNEN.search(f) and (_ZAHL_MIT_EINHEIT.search(f) or len(alle) >= 2)))
+    return len(zahlen) >= 2 or bool(_RECHENZEICHEN.search(f) or (zahlen and _bruch_rechnung(f))
+                                    or (_UMRECHNEN.search(f) and (_ZAHL_MIT_EINHEIT.search(f) or len(alle) >= 2)))
 
 
 def preisfrage(frage: str) -> bool:
@@ -1353,7 +1360,7 @@ def rechnet(frage: str) -> bool:
     zahlen = [z for z in _ZAHL.findall(f) if not _JAHRESZAHL.fullmatch(z)]
     if not zahlen:
         return False
-    return bool(_RECHNET.search(f) or _UMRECHNEN.search(f) or (len(zahlen) >= 2 and _RECHNET_ZWEI.search(f)))
+    return bool(_RECHNET.search(f) or _bruch_rechnung(f) or _UMRECHNEN.search(f) or (len(zahlen) >= 2 and _RECHNET_ZWEI.search(f)))
 
 
 _EINHEITEN = (
