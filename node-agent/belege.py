@@ -940,7 +940,8 @@ _DATUM_WOCHENTAG = re.compile(rf"(?i)\b(\d{{1,2}}\.\s*(?:\d{{1,2}}\.|(?:{_MONAT}
                               rf"({'|'.join(WOCHENTAGE)})\b")
 
 
-_PLATZHALTER = re.compile(r"\[(?!\d)(?!Quelle)[^\[\]\n]{1,40}\]")
+_PLATZHALTER = re.compile(r"\[(?!\d)(?!Quelle)[^\[\]\n]{1,40}\](?!\()")
+_PLATZHALTER_LANG = re.compile(r"\[(?!\d)(?!Quelle)[^\[\]\n]{1,120}\](?!\()")
 _GRUSS_LUECKE = re.compile(r"(?:(?<=\s)|^)(?:dein|deine|ihr|ihre|euer|eure|von)\s*,?\s*\[[^\[\]\n]{1,40}\]\s*[!.,]?", re.I | re.M)
 _ANREDE_LUECKE = re.compile(r"\b(Liebe|Lieber|Hallo|Hi|Servus|Sehr geehrte[r]?)\s*\[[^\[\]\n]{1,40}\]", re.I)
 _NUR_GRUSSWORT = re.compile(r"^\s*(?:dein|deine|ihr|ihre|euer|eure|von)\s*[,!.]?\s*$", re.I)
@@ -974,12 +975,12 @@ def ohne_selbstbezug(text: str) -> tuple[str, int]:
 STRICH = "________"
 _PLATZHALTER_ZEILE = re.compile(r"(?m)^[ \t]*\[(?!\d)(?!Quelle)[^\[\]\n]{1,40}\][ \t]*[,.!]?[ \t]*$")
 _FELD = re.compile(r"(?i)\b(?:name\w*|vorname|nachname|datum|tag|uhrzeit|zeit|ort|adresse|anschrift|straße|plz|telefon\w*|nummer|e-?mail|"
-                   r"klasse|schule|betreff|unterschrift|grund|firma|betrag|anrede|lehrer\w*|kind\w*|sohn|tochter|ihr\w*|dein\w*|diagnose)\b")
+                   r"klasse|schule|betreff|unterschrift|grund|begründung|firma|betrag|anrede|lehrer\w*|kind\w*|sohn|tochter|ihr\w*|dein\w*|diagnose)\b")
 
 
 def ohne_platzhalter(text: str, *, strich: bool = False) -> tuple[str, int]:
     t = text or ""
-    n = len(_PLATZHALTER.findall(t))
+    n = len((_PLATZHALTER_LANG if strich else _PLATZHALTER).findall(t))
     if not n:
         return t, 0
     t = _GRUSS_LUECKE.sub("", t)
@@ -987,7 +988,7 @@ def ohne_platzhalter(text: str, *, strich: bool = False) -> tuple[str, int]:
     t = _PLATZHALTER_ZEILE.sub("", t)
     if strich:
         teile = re.split(r"(```.*?```|`[^`\n]*`)", t, flags=re.S)
-        t = "".join(x if x.startswith("`") else _PLATZHALTER.sub(
+        t = "".join(x if x.startswith("`") else _PLATZHALTER_LANG.sub(
             lambda m: STRICH if _FELD.search(m.group(0)) and not re.search(r"[\wäöüß]$", x[:m.start()]) else "", x) for x in teile)
     else:
         t = _PLATZHALTER.sub("", t)

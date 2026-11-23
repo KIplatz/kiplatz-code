@@ -35,3 +35,15 @@ def test_vorlage_gefragt():
     import schriftstueck
     assert schriftstueck.vorlage_gefragt("Wie schreibt man eine Entschuldigung für die Schule, wenn mein Kind krank ist?")
     assert not schriftstueck.vorlage_gefragt("Wie schreibt man Rhythmus?")
+
+
+def test_lange_luecke_geht_nicht_in_klammern_hinaus():
+    t, n = belege.ohne_platzhalter("mein Kind war nicht in der Schule, weil es [kurze, sachliche Begründung, z. B. krank war oder Fieber hatte].", strich=True)
+    assert n == 1 and t == "mein Kind war nicht in der Schule, weil es ________."
+    t, n = belege.ohne_platzhalter("Mehr auf [der Seite des Ministeriums](https://www.bmbwf.gv.at).")
+    assert n == 0 and "[der Seite des Ministeriums](https://www.bmbwf.gv.at)" in t
+
+
+def test_in_sachantworten_bleiben_lange_klammern():
+    s = "Die Zahl ist vorläufig [laut Statistik Austria, Stand Jänner 2026, vorläufige Zahl]."
+    assert belege.ohne_platzhalter(s) == (s, 0)
