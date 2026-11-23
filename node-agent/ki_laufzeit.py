@@ -1281,6 +1281,9 @@ def plaetze_fuer(wahl) -> int:
     return n if n >= 2 else 0
 
 
+_LAUFEND_LOCK = threading.Lock()
+
+
 class KiServer:
 
     def __init__(self, ordner: KiOrdner, *, popen=subprocess.Popen, urlopen=urllib.request.urlopen, schlafen=time.sleep, port_finder=_freier_port) -> None:
@@ -1562,9 +1565,25 @@ class KiServer:
             nachrichten = nachrichten[:-1] + [{**nachrichten[-1], "content": c[:halb] + chr(10) + "[… gekürzt …]" + chr(10) + c[len(c) - halb:]}]
         return zusatz, nachrichten, True
 
+    def beschaeftigt(self) -> bool:
+        with _LAUFEND_LOCK:
+            return getattr(self, "_laufend", 0) > 0
+
     def frage(self, nachrichten: list[dict], *, max_tokens: int = 700, temperature: float = TEMPERATUR, on_token: Callable[[str], None] | None = None,
               zusatz: str = "", kurz: bool = False, abbruch: threading.Event | None = None, system: str | None = None,
               platz: int = SLOT_ANTWORT, art: str | None = None) -> Antwort:
+        with _LAUFEND_LOCK:
+            self._laufend = getattr(self, "_laufend", 0) + 1
+        try:
+            return self._frage_innen(nachrichten, max_tokens=max_tokens, temperature=temperature, on_token=on_token, zusatz=zusatz, kurz=kurz,
+                                     abbruch=abbruch, system=system, platz=platz, art=art)
+        finally:
+            with _LAUFEND_LOCK:
+                self._laufend -= 1
+
+    def _frage_innen(self, nachrichten: list[dict], *, max_tokens: int = 700, temperature: float = TEMPERATUR,
+                     on_token: Callable[[str], None] | None = None, zusatz: str = "", kurz: bool = False, abbruch: threading.Event | None = None,
+                     system: str | None = None, platz: int = SLOT_ANTWORT, art: str | None = None) -> Antwort:
         fest = selbstauskunft.feste_antwort(nachrichten) if system is None else None
         if fest:
             if on_token is not None:

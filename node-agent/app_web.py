@@ -714,6 +714,31 @@ class KiSteuerung:
         self._geduld_genutzt = False
         self.fortschritt = {"was": "", "done": 0, "gesamt": 0}
 
+    NACHWAHL_ABSTAND_S = 600
+    NACHWAHL_NACH_FEHL_S = 6 * 3600
+
+    def staerker_jetzt(self) -> bool:
+        if self.quelle() != "lokal" or self.phase != "bereit" or self.wahl is None or self.nur_prozessor or getattr(self, "probe_geladen", False):
+            return False
+        uhr = getattr(self, "_uhr", time.monotonic)
+        t = uhr()
+        if t - getattr(self, "_nachwahl_t", float("-inf")) < self.NACHWAHL_ABSTAND_S:
+            return False
+        self._nachwahl_t = t
+        if getattr(self.server, "beschaeftigt", lambda: False)():
+            return False
+        try:
+            first = self._core.load_first_start()
+            neu = ki_laufzeit.waehlen(self._geraete_ermitteln(self.ordner.server_exe), first.memory_gib if first else 0.0)
+        except Exception as exc:
+            _log(self._core, f"INFO ki_wahl: Nachsehen der Grafikkarte ging nicht ({type(exc).__name__})")
+            return False
+        return neu.modell.braucht_mib > self.wahl.modell.braucht_mib or (neu.geraet is not None and self.wahl.geraet is None)
+
+    def nachwahl_misslungen(self) -> None:
+        uhr = getattr(self, "_uhr", time.monotonic)
+        self._nachwahl_t = uhr() + self.NACHWAHL_NACH_FEHL_S - self.NACHWAHL_ABSTAND_S
+
     def auf_prozessor_wechseln(self) -> bool:
         if self.quelle() != "lokal" or self.wahl is None or self.wahl.geraet is None or self.nur_prozessor:
             return False
@@ -951,6 +976,28 @@ class Api:
         st = self._community.stand()
         self._community_stand = (time.time(), st)
         return st
+
+    BEDEUTUNG_NACHSTART_S = 600
+
+    def _bedeutung_nachstarten(self) -> bool:
+        bed = getattr(self, "_bedeutung", None)
+        if bed is None:
+            return False
+        try:
+            if getattr(self._ki, "gesperrt", ""):
+                return False
+            if (bed.zustand() or {}).get("phase") != "fehler":
+                return False
+            t = time.monotonic()
+            if t - getattr(self, "_bedeutung_nachstart_t", float("-inf")) < self.BEDEUTUNG_NACHSTART_S:
+                return False
+            self._bedeutung_nachstart_t = t
+            _log(self._core, "INFO bedeutung: lief nicht, neuer Start")
+            self._modelle_danach()
+            return True
+        except Exception as exc:
+            _log(self._core, f"INFO bedeutung nachstarten ging nicht ({type(exc).__name__})")
+            return False
 
     def _modelle_danach(self) -> None:
         if getattr(self._ki, "gesperrt", ""):
@@ -3912,7 +3959,17 @@ class Api:
     def _ki_bereit_machen(self, *, einschalten: bool = True) -> None:
         if getattr(self._ki, "gesperrt", ""):
             raise app_core.AppError("TRAINING", self._ki.gesperrt)
-        if self._ki.bereit():
+        bereit = self._ki.bereit()
+        vorher = ""
+        if einschalten and bereit:
+            self._bedeutung_nachstarten()
+            staerker = getattr(self._ki, "staerker_jetzt", None)
+            if staerker is not None and staerker() and not getattr(getattr(self._ki, "server", None), "beschaeftigt", lambda: False)():
+                vorher = self._ki.wahl.modell.kennung
+                _log(self._core, f"OK ki_wahl: die Grafikkarte trägt jetzt ein stärkeres Modell als {vorher}, die KI startet neu")
+                self._ki.ausschalten()
+                bereit = False
+        if bereit:
             return
         if self._ki.quelle() != "lokal" or not einschalten:
             raise app_core.AppError("KI_AUS", "die KI ist ausgeschaltet; schalte sie oben ein")
@@ -3921,6 +3978,8 @@ class Api:
         letzte = ""
         while time.time() - t0 < KI_WARTEN_S:
             if self._ki.bereit():
+                if vorher and self._ki.wahl is not None and self._ki.wahl.modell.kennung == vorher:
+                    self._ki.nachwahl_misslungen()
                 if letzte and self._window is not None:
                     self._js('app.hinweis("")')
                 return

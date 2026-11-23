@@ -418,7 +418,7 @@ def _so_viele_wie(t: str) -> Ergebnis | None:
     if n % teile:
         return None
     w = n // teile
-    return Ergebnis(f"Es sind {_t(w * k)} {viel} und {_t(w)} {wenig}.\n\nSo kommst du darauf: Auf je 1 von den {wenig} kommen {k} {viel}, "
+    return Ergebnis(f"Es sind {_t(w * k)} {viel} und {_t(w)} {wenig}.\n\nSo kommst du darauf: Die {wenig} sind 1 Teil, die {viel} {k} Teile, "
                     f"zusammen also {teile} Teile. {_t(n)} : {teile} = {_t(w)} {wenig}, und {k} · {_t(w)} = {_t(w * k)} {viel}.\n"
                     f"Probe: {_t(w * k)} + {_t(w)} = {_t(n)}.",
                     f"There are {_t(w * k)} {viel} and {_t(w)} {wenig}.\n\n{_t(n)} ÷ {teile} = {_t(w)}; {k} × {_t(w)} = {_t(w * k)}.")

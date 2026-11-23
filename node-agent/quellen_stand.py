@@ -10,6 +10,8 @@ NAMEN_DE = {"wikipedia": "Wikipedia-Kopie", "wortliste": "Wortliste", "orte": "O
             "modell": "Chat-Modell", "bedeutung": "Bedeutungs-Modell", "suche": "Suchmaschinen"}
 MELDEN_ABSTAND_S = 300
 STILL_AB_S = 3600
+LADEN_AB_S = 6 * 3600
+_LADE_PHASEN = frozenset(("liest", "laedt", "lädt", "holt", "entpackt", "baut", "vektoren", "pause", "wartet"))
 FRISCH_S = 20 * 60
 GERAETE_MAX = 5000
 TEXT_MAX = 160
@@ -30,8 +32,11 @@ def iso_zu_s(iso: str) -> float:
         return 0.0
 
 
-def _eintrag(ok: bool, text: str, *, gilt: bool = True, stand: str = "", zahl: int = 0, fehlt: list[str] | None = None) -> dict:
+def _eintrag(ok: bool, text: str, *, gilt: bool = True, stand: str = "", zahl: int = 0, fehlt: list[str] | None = None,
+             laedt: bool = False) -> dict:
     e = {"ok": bool(ok), "gilt": bool(gilt), "stand": str(stand or "")[:STAND_MAX], "zahl": int(zahl or 0), "text": " ".join(str(text or "").split())[:TEXT_MAX]}
+    if laedt and not ok:
+        e["laedt"] = True
     if fehlt:
         e["fehlt"] = [str(x)[:STAND_MAX] for x in fehlt][:FEHLT_MAX]
     return e
@@ -50,7 +55,8 @@ def _wikipedia(wiki) -> dict:
         z = wiki.zustand()
         ausgabe, artikel, phase = str(z.get("ausgabe") or ""), int(z.get("artikel") or 0), str(z.get("phase") or "")
         if not wiki.bereit():
-            return _eintrag(False, f"Wikipedia: noch keine fertige Kopie ({phase or 'aus'}).", stand=ausgabe, zahl=artikel)
+            return _eintrag(False, f"Wikipedia: noch keine fertige Kopie ({phase or 'aus'}).", stand=ausgabe, zahl=artikel,
+                            laedt=phase in _LADE_PHASEN)
         if wiki.belegt():
             return _eintrag(False, f"Wikipedia: die Kopie ist gerade belegt ({phase}); Einleitungen und Namensprüfung fallen aus, bis sie frei ist.", stand=ausgabe, zahl=artikel)
         if phase == "fehler":
@@ -71,7 +77,7 @@ def _wortliste(wl) -> dict:
             return _eintrag(True, f"Wortliste: {len(sprachen)} Sprachen bereit, Stand {_datum(ausgabe)}.", stand=ausgabe, zahl=len(sprachen))
         if z.get("phase") == "fehler":
             return _eintrag(False, f"Wortliste: gerade geht es nicht ({z.get('meldung') or ''}).", stand=ausgabe, zahl=len(sprachen))
-        return _eintrag(False, "Wortliste: wird gerade geholt.", stand=ausgabe, zahl=len(sprachen))
+        return _eintrag(False, "Wortliste: wird gerade geholt.", stand=ausgabe, zahl=len(sprachen), laedt=True)
     except Exception as exc:
         return _eintrag(False, f"Wortliste: Zustand nicht lesbar ({type(exc).__name__}).")
 
@@ -98,7 +104,7 @@ def _orte(osm) -> dict:
                 text = f"Orte: {laender} fehlt ({grund})." if grund else f"Orte: {laender} fehlt."
             else:
                 text = f"Orte: {laender} fehlen ({grund})." if grund else f"Orte: {laender} fehlen."
-            return _eintrag(False, text, stand=stand, zahl=n, fehlt=fehlt)
+            return _eintrag(False, text, stand=stand, zahl=n, fehlt=fehlt, laedt=getattr(osm, "phase", "") in _LADE_PHASEN)
         return _eintrag(True, f"Orte: {', '.join(fertig)} bereit, ältester Stand {_datum(stand)}.", stand=stand, zahl=n)
     except Exception as exc:
         return _eintrag(False, f"Orte: Zustand nicht lesbar ({type(exc).__name__}).")
@@ -227,7 +233,8 @@ def pruefen(quellen) -> dict | None:
         fehlt = e.get("fehlt")
         out[name] = _eintrag(bool(e.get("ok")), str(e.get("text") or "")[:TEXT_MAX], gilt=bool(e.get("gilt", True)), stand=str(e.get("stand") or "")[:STAND_MAX],
                              zahl=int(e.get("zahl") or 0) if isinstance(e.get("zahl"), (int, float)) and not isinstance(e.get("zahl"), bool) else 0,
-                             fehlt=[str(x) for x in fehlt if isinstance(x, str)] if isinstance(fehlt, list) else None)
+                             fehlt=[str(x) for x in fehlt if isinstance(x, str)] if isinstance(fehlt, list) else None,
+                             laedt=e.get("laedt") is True)
     if "modell" in out:
         fassung_pruefen(out["modell"], quellen.get("modell"))
     return out or None
@@ -325,7 +332,7 @@ class Sammlung:
                 self._datei_schreiben({k: v for k, v in self._geraete.items() if v.get("admin")})
 
 
-def still(geraete: dict, jetzt: float, *, still_ab_s: float = STILL_AB_S, frisch_s: float = FRISCH_S) -> list[dict]:
+def still(geraete: dict, jetzt: float, *, still_ab_s: float = STILL_AB_S, frisch_s: float = FRISCH_S, laden_ab_s: float = LADEN_AB_S) -> list[dict]:
     out = []
     for kennung, e in (geraete or {}).items():
         if not isinstance(e, dict) or not e.get("admin"):
@@ -334,10 +341,12 @@ def still(geraete: dict, jetzt: float, *, still_ab_s: float = STILL_AB_S, frisch
             continue
         for q, seit in (e.get("nicht_ok_seit") or {}).items():
             s = jetzt - iso_zu_s(seit)
-            if s >= still_ab_s:
-                text = str(((e.get("quellen") or {}).get(q) or {}).get("text") or NAMEN_DE.get(q, q))
+            eintrag = (e.get("quellen") or {}).get(q) or {}
+            if s >= (laden_ab_s if eintrag.get("laedt") is True else still_ab_s):
+                text = str(eintrag.get("text") or NAMEN_DE.get(q, q))
                 out.append({"geraet": str(kennung), "name": str(e.get("name") or ""), "quelle": str(q), "seit_s": s, "text": text})
     return out
 
 
-__all__ = ["sammeln", "zeilen", "kurz", "pruefen", "Sammlung", "still", "QUELLEN", "NAMEN_DE", "MELDEN_ABSTAND_S", "STILL_AB_S", "FRISCH_S"]
+__all__ = ["sammeln", "zeilen", "kurz", "pruefen", "Sammlung", "still", "QUELLEN", "NAMEN_DE", "MELDEN_ABSTAND_S", "STILL_AB_S", "FRISCH_S",
+           "LADEN_AB_S"]

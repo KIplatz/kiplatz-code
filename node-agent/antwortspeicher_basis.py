@@ -277,6 +277,7 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
     ("2026-11-22z", frozenset({"suche"}), "Jede gelesene Seite bringt zuerst ihre beste Stelle, eine lange Seite verdrängt die anderen nicht mehr (Bundeskanzler); Antworten mit Suche von vorher werden verworfen"),
     ("2026-11-23a", frozenset({"ohne_suche"}), "Schulaufgaben (Zahlenrätsel mit Rest, Tiere und Beine, Reihenfolge, Fehler suchen) rechnet das Programm; Antworten ohne Suche von vorher werden verworfen (der Speicher am Server hatte am 23.11. 0 gültige)"),
     ("2026-11-23b", frozenset({"ohne_suche"}), "Textaufgaben (Wechselgeld, Stückpreis, je Tag/Woche aufs Jahr, doppelt so viele, Summe aus zwei Zahlen) rechnet das Programm; Antworten ohne Suche von vorher werden verworfen"),
+    ("2026-11-23c", frozenset(), "Späte Antwort des ersten PCs gilt, solange kein anderer die Frage hat; die KI wechselt vor einer Frage auf die frei gewordene Grafikkarte; nur der Weg, nichts zu verwerfen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())

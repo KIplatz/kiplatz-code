@@ -77,3 +77,66 @@ def test_der_grund_der_wahl_steht_im_protokoll():
     src = (HIER / "app_web.py").read_text(encoding="utf-8")
     assert '+ f" ({wahl.grund})")' in src and "self._wahl_mit_geduld(wahl" in src
     assert app_core is not None
+
+
+def test_wird_die_karte_spaeter_frei_startet_die_ki_vor_der_naechsten_frage_staerker(tmp_path, monkeypatch):
+    k, t = _steuerung(tmp_path, monkeypatch, [9000])
+    k.wahl = kl.waehlen(k._geraete_ermitteln(None), 32.0)
+    assert k.wahl.modell.kennung == "8B"
+    k.phase, k.nur_prozessor, k.probe_geladen = "bereit", False, False
+    k.quelle = lambda: "lokal"
+    k._core.load_first_start = lambda: type("F", (), {"memory_gib": 32.0})()
+    beschaeftigt = [False]
+    k.server = type("S", (), {"beschaeftigt": lambda self: beschaeftigt[0]})()
+    assert k.staerker_jetzt() is False
+    monkeypatch.setattr(kl, "fremd_mib", lambda g: 300)
+    assert k.staerker_jetzt() is False
+    t[0] += k.NACHWAHL_ABSTAND_S
+    beschaeftigt[0] = True
+    assert k.staerker_jetzt() is False
+    t[0] += k.NACHWAHL_ABSTAND_S
+    beschaeftigt[0] = False
+    assert k.staerker_jetzt() is True
+
+
+def test_jede_anfrage_ans_modell_zaehlt_als_beschaeftigt():
+    s = object.__new__(kl.KiServer)
+    gesehen = []
+    s._frage_innen = lambda nachrichten, **kw: gesehen.append(s.beschaeftigt()) or "a"
+    assert s.beschaeftigt() is False and s.frage([{"role": "user", "content": "x"}]) == "a" and gesehen == [True] and s.beschaeftigt() is False
+
+
+def test_ein_misslungener_wechsel_wird_erst_nach_stunden_wiederholt(tmp_path, monkeypatch):
+    k, t = _steuerung(tmp_path, monkeypatch, [300])
+    k.wahl = kl.waehlen(kl.geraete_parsen(""), 32.0)
+    k.phase, k.nur_prozessor, k.probe_geladen = "bereit", False, False
+    k.quelle = lambda: "lokal"
+    k._core.load_first_start = lambda: type("F", (), {"memory_gib": 32.0})()
+    k.server = type("S", (), {"beschaeftigt": lambda self: False})()
+    assert k.staerker_jetzt() is True
+    k.nachwahl_misslungen()
+    t[0] += k.NACHWAHL_ABSTAND_S
+    assert k.staerker_jetzt() is False
+    t[0] += k.NACHWAHL_NACH_FEHL_S
+    assert k.staerker_jetzt() is True
+    k._geraete_ermitteln = lambda exe: (_ for _ in ()).throw(OSError("weg"))
+    t[0] += k.NACHWAHL_ABSTAND_S
+    assert k.staerker_jetzt() is False
+
+
+def test_ein_abgebrochener_start_des_bedeutungs_modells_wird_vor_einer_frage_wiederholt(tmp_path):
+    api = object.__new__(app_web.Api)
+    api._core = _Kern(tmp_path)
+    phase = ["fehler"]
+    gestartet = []
+    api._ki = type("K", (), {"bereit": lambda self: True})()
+    api._bedeutung = type("B", (), {"zustand": lambda self: {"phase": phase[0]}})()
+    api._modelle_danach = lambda: gestartet.append(1)
+    assert api._bedeutung_nachstarten() is True and gestartet == [1]
+    assert api._bedeutung_nachstarten() is False and gestartet == [1]
+    api._bedeutung_nachstart_t -= api.BEDEUTUNG_NACHSTART_S
+    phase[0] = "bereit"
+    assert api._bedeutung_nachstarten() is False
+    api._ki.gesperrt = "Training"
+    phase[0] = "aus"
+    assert api._bedeutung_nachstarten() is False
