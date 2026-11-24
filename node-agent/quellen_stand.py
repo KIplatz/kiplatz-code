@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 from __future__ import annotations
 
+import re
+
 import time
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -11,6 +13,7 @@ NAMEN_DE = {"wikipedia": "Wikipedia-Kopie", "wortliste": "Wortliste", "orte": "O
 MELDEN_ABSTAND_S = 300
 STILL_AB_S = 3600
 LADEN_AB_S = 6 * 3600
+LADEN_MAX_S = 48 * 3600
 _LADE_PHASEN = frozenset(("liest", "laedt", "lädt", "holt", "entpackt", "baut", "vektoren", "pause", "wartet"))
 FRISCH_S = 20 * 60
 GERAETE_MAX = 5000
@@ -55,7 +58,8 @@ def _wikipedia(wiki) -> dict:
         z = wiki.zustand()
         ausgabe, artikel, phase = str(z.get("ausgabe") or ""), int(z.get("artikel") or 0), str(z.get("phase") or "")
         if not wiki.bereit():
-            return _eintrag(False, f"Wikipedia: noch keine fertige Kopie ({phase or 'aus'}).", stand=ausgabe, zahl=artikel,
+            meldung = str(z.get("meldung") or "")
+            return _eintrag(False, f"Wikipedia: noch keine fertige Kopie ({phase or 'aus'}{' ' + meldung if meldung else ''}).", stand=ausgabe, zahl=artikel,
                             laedt=phase in _LADE_PHASEN)
         if wiki.belegt():
             return _eintrag(False, f"Wikipedia: die Kopie ist gerade belegt ({phase}); Einleitungen und Namensprüfung fallen aus, bis sie frei ist.", stand=ausgabe, zahl=artikel)
@@ -257,6 +261,17 @@ def fassung_pruefen(eintrag: dict, roh) -> None:
         eintrag.update(ok=False, text=t["fremd"].format(ist=ist or "Grundfassung", soll=soll or "Grundfassung"))
 
 
+def _ladestand(e: dict) -> tuple[str, int, int]:
+    text = str(e.get("text") or "")
+    m = re.search(r"\((\w+)[^)]*?(\d+)\s*/\s*\d+", text) or re.search(r"\((\w+)", text)
+    phase = m.group(1) if m else ""
+    teil = re.search(r"(\d+)\s*/\s*\d+", text)
+    try:
+        return phase, int(e.get("zahl") or 0), int(teil.group(1)) if teil else 0
+    except (TypeError, ValueError):
+        return phase, 0, 0
+
+
 class Sammlung:
 
     def __init__(self, pfad: Path, *, jetzt=time.time, schreiben=None, lesen=None) -> None:
@@ -298,17 +313,33 @@ class Sammlung:
             alt = self._geraete.get(kennung) or {}
             zuletzt_ok = dict(alt.get("zuletzt_ok") or {})
             nicht_ok_seit = dict(alt.get("nicht_ok_seit") or {})
+            voran_seit = dict(alt.get("voran_seit") or {})
+            hoechst = dict(alt.get("laden_hoechst") or {})
             for q, e in quellen.items():
                 if not e.get("gilt"):
                     nicht_ok_seit.pop(q, None)
+                    voran_seit.pop(q, None)
+                    hoechst.pop(q, None)
                     continue
                 if e.get("ok"):
                     zuletzt_ok[q] = _jetzt_iso(t)
                     nicht_ok_seit.pop(q, None)
                 else:
                     nicht_ok_seit.setdefault(q, _jetzt_iso(t))
+                if not e.get("ok") and e.get("laedt") is True:
+                    phase, zahl, teil = _ladestand(e)
+                    je_phase = dict(hoechst.get(q) or {}) if isinstance(hoechst.get(q), dict) else {}
+                    bisher = je_phase.get(phase)
+                    if bisher is None or (zahl, teil) > tuple(bisher):
+                        je_phase[phase] = [zahl, teil]
+                        hoechst[q] = je_phase
+                        voran_seit[q] = _jetzt_iso(t)
+                    voran_seit.setdefault(q, nicht_ok_seit.get(q) or _jetzt_iso(t))
+                else:
+                    hoechst.pop(q, None)
+                    voran_seit.pop(q, None)
             e = {"name": " ".join(str(name or "").split())[:60], "admin": bool(admin), "zeit": _jetzt_iso(t), "quellen": quellen,
-                 "zuletzt_ok": zuletzt_ok, "nicht_ok_seit": nicht_ok_seit}
+                 "zuletzt_ok": zuletzt_ok, "nicht_ok_seit": nicht_ok_seit, "voran_seit": voran_seit, "laden_hoechst": hoechst}
             self._geraete[kennung] = e
             while len(self._geraete) > GERAETE_MAX:
                 self._geraete.pop(next(iter(self._geraete)))
@@ -342,11 +373,16 @@ def still(geraete: dict, jetzt: float, *, still_ab_s: float = STILL_AB_S, frisch
         for q, seit in (e.get("nicht_ok_seit") or {}).items():
             s = jetzt - iso_zu_s(seit)
             eintrag = (e.get("quellen") or {}).get(q) or {}
-            if s >= (laden_ab_s if eintrag.get("laedt") is True else still_ab_s):
+            if eintrag.get("laedt") is True:
+                still_s = jetzt - iso_zu_s((e.get("voran_seit") or {}).get(q) or seit)
+                befund = still_s >= laden_ab_s or s >= LADEN_MAX_S
+            else:
+                befund = s >= still_ab_s
+            if befund:
                 text = str(eintrag.get("text") or NAMEN_DE.get(q, q))
                 out.append({"geraet": str(kennung), "name": str(e.get("name") or ""), "quelle": str(q), "seit_s": s, "text": text})
     return out
 
 
 __all__ = ["sammeln", "zeilen", "kurz", "pruefen", "Sammlung", "still", "QUELLEN", "NAMEN_DE", "MELDEN_ABSTAND_S", "STILL_AB_S", "FRISCH_S",
-           "LADEN_AB_S"]
+           "LADEN_AB_S", "LADEN_MAX_S"]

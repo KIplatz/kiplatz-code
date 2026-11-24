@@ -1108,16 +1108,19 @@ class Rechenarbeit:
         except (TypeError, ValueError):
             mit_ablauf = False
         verschlossen_antwort = None
+        speicher_offen = bool(inhalt.get("speicher_ok")) and antwortspeicher_basis.antwort_taugt(text, lieferschein if isinstance(lieferschein, dict) else {})
         if kanal is not None:
             verschlossen_antwort = kanal.antwort(text, lieferschein if isinstance(lieferschein, dict) else {}, self._community.frage_schluessel().unterschrift)
             ls = lieferschein if isinstance(lieferschein, dict) else {}
             zahlen = {k: ls[k] for k in ("wortstuecke", "dauer_s", "modell") if k in ls}
+            if speicher_offen:
+                zahlen = antwortspeicher_basis.lieferschein_fuer_speicher(ls)
         for versuch in (1, 2):
             try:
                 if verschlossen_antwort is not None:
                     r = self._community.antwort_senden_verschlossen(
                         str(auftrag["auftrag"]), verschlossen_antwort, zahlen, dauer, messung, ablauf=zeiten,
-                        speicher_text=text if inhalt.get("speicher_ok") else "", speicher_frage=str(inhalt.get("speicher_frage") or "")[:500])
+                        speicher_text=text if speicher_offen else "", speicher_frage=str(inhalt.get("speicher_frage") or "")[:500] if speicher_offen else "")
                 else:
                     offen_ls = {x: v for x, v in lieferschein.items() if x != "abschnitte"} if isinstance(lieferschein, dict) else lieferschein
                     r = self._community.antwort_senden(str(auftrag["auftrag"]), text, offen_ls, dauer, messung, **({"ablauf": zeiten} if mit_ablauf else {}))

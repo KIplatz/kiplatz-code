@@ -4,6 +4,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -56,11 +57,26 @@ def test_mindest_bau_bleibt_der_boden():
     assert ab.MINDEST_BAU == "2026-10-26k", "MINDEST_BAU nicht anheben (verwirft alle Antworten); den Bau in antwortspeicher_basis.ERNEUERT eintragen"
 
 
+NEUTRAL = ("Der Traunsee ist mit 191 Metern der tiefste See Österreichs.",
+           "Im Jänner liegen im Mühlviertel oft 20 cm Schnee, die Fahrt nach Linz sind 30 km.",
+           "Eine CD kostet im Handel rund 10 Euro, die Apotheke hat bis 18 Uhr offen.",
+           "Wien hat rund 2 Millionen Einwohner und ist die Hauptstadt Österreichs.",
+           "Ein Dutzend sind zwölf Stück; der Februar 2028 hat 29 Tage.",
+           "Es kommt darauf an: ab 16 Jahren bis 22 Uhr, die Arbeit ist umfangreich.",
+           "Österreich hat eine Fläche von 83.879 km², die Wohnfläche liegt im Schnitt bei 100 Quadratmetern.")
+
+
 def test_erneuert_ist_ordentlich():
     baue = [b for b, _m, _g in ab.ERNEUERT]
     assert baue == sorted(baue) and len(set(baue)) == len(baue) and all(b > ab.MINDEST_BAU for b in baue)
     for b, m, grund in ab.ERNEUERT:
-        assert isinstance(m, frozenset) and m <= ab.MERKMALE, f"{b}: unbekanntes Merkmal {sorted(m - ab.MERKMALE)}"
+        assert isinstance(m, frozenset) and all(ab.merkmal_gueltig(x) for x in m), f"{b}: unbekanntes Merkmal {sorted(m - ab.MERKMALE)}"
+        for x in m:
+            if x.startswith(ab.TEXT_MERKMAL):
+                for neutral in NEUTRAL:
+                    assert not re.search(x[len(ab.TEXT_MERKMAL):], neutral), f"{b}: „{x}“ trifft die gewöhnliche Antwort „{neutral}“"
+        if b >= "2026-11-24e" and m & {"alle", "suche", "ohne_suche", "de", "en", "zahl"}:
+            assert "alle gespeicherten" in grund, f"{b}: verwirft grob ({sorted(m)}); ein „text:“-Merkmal nehmen oder begründen („alle gespeicherten …“)"
         assert len(grund.strip()) >= 20, f"{b}: der Grund fehlt"
 
 

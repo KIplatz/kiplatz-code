@@ -146,6 +146,33 @@ def _fremd(q) -> bool:
     return isinstance(q, dict) and (q.get("art") not in FREI_ARTEN or bool(q.get("privat")))
 
 
+SPEICHER_FELDER = ("gemacht", "modell", "fassung", "bau", "stand", "woertlich", "skill", "wortstuecke", "dauer_s", "kleineres_modell")
+_PRUEF_ZAHLEN = ("rot", "gelb", "gruen", "widersprueche", "unbestimmt")
+_QUELLE_FELDER = ("nummer", "art", "titel", "adresse", "kennung")
+
+
+def lieferschein_fuer_speicher(lieferschein) -> dict:
+    ls = lieferschein if isinstance(lieferschein, dict) else {}
+    out = {k: ls[k] for k in SPEICHER_FELDER if k in ls}
+    pr = ls.get("pruefung")
+    if isinstance(pr, dict):
+        out["pruefung"] = {k: pr[k] for k in _PRUEF_ZAHLEN if k in pr}
+    quellen = [{k: q[k] for k in _QUELLE_FELDER if k in q} for q in (ls.get("quellen_liste") or [])
+               if isinstance(q, dict) and not q.get("privat")]
+    if isinstance(ls.get("quellen_liste"), list):
+        out["quellen_liste"] = quellen
+        out["quellen"] = " ".join(f"Nachgeschaut: {q.get('titel') or q.get('adresse') or ''}"
+                                  + (f" ({q['adresse']})" if q.get("adresse") and q.get("titel") else "") + "." for q in quellen if q.get("titel") or q.get("adresse"))
+    return out
+
+
+def lieferschein_ohne_fremdtext(lieferschein) -> dict:
+    ls = dict(lieferschein) if isinstance(lieferschein, dict) else {}
+    if isinstance(ls.get("quellen_liste"), list):
+        ls["quellen_liste"] = [{k: v for k, v in q.items() if k != "text"} if _fremd(q) else q for q in ls["quellen_liste"]]
+    return ls
+
+
 _NAME_GLIED = r"(?:(?:die|der|das|the)\s+)?[A-ZÄÖÜ][\wäöüß.'-]*(?:\s+[A-ZÄÖÜ][\wäöüß.'-]*){0,2}"
 _NAMEN_AUFZAEHLUNG = re.compile(rf"(?<![\wäöüß]){_NAME_GLIED}(?:\s*,\s*{_NAME_GLIED}){{1,}}\s*,?\s+(?:und|sowie|oder|and|or)\s+{_NAME_GLIED}"
                                 rf"(?![\wäöüß])")
@@ -291,10 +318,11 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
     ("2026-11-23g", frozenset({"suche"}), "Aufzählungen von Namen (die neun Bundesländer) gelten nicht mehr als wörtlich übernommen und werden nicht mehr gestrichen; „ein Drittel davon“ ist eine Rechenaufgabe; Antworten mit Suche von vorher werden verworfen"),
     ("2026-11-23h", frozenset(), "Lücken in Briefen und Nachrichten werden Striche zum Ausfüllen statt zu verschwinden; nur der Weg, nichts zu verwerfen"),
     ("2026-11-23i", frozenset(), "Auch lange Lücken in eckigen Klammern gehen nicht mehr hinaus; nur der Weg, nichts zu verwerfen"),
-    ("2026-11-24a", frozenset({"suche", "ohne_suche"}), "Abfahrt plus Fahrzeit und Zahlenfolgen rechnet das Programm; Antworten mit und ohne Suche von vorher werden verworfen"),
-    ("2026-11-24b", frozenset({"suche", "ohne_suche"}), "Umfang und Fläche von Rechteck und Quadrat rechnet das Programm; Antworten mit und ohne Suche von vorher werden verworfen"),
-    ("2026-11-24c", frozenset({"suche"}), "Die Luftlinie zwischen zwei Orten rechnet das Gerät aus OpenStreetMap; Antworten mit Suche von vorher werden verworfen"),
-    ("2026-11-24d", frozenset({"suche"}), "Römische Zahlen in allen üblichen Frageformen rechnet das Programm, mit Aufschlüsselung; Antworten mit Suche von vorher werden verworfen"),
+    ("2026-11-24a", frozenset({"text:(?i)\\d{1,2}[:.]\\d{2}.*\\b(?:kommt|fährt)\\b|\\b(?:kommt|fährt)\\b.*\\d{1,2}[:.]\\d{2}|die nächste zahl ist|zahlenfolge"}), "Abfahrt plus Fahrzeit und Zahlenfolgen rechnet das Programm; Antworten mit und ohne Suche von vorher werden verworfen; seit 24e nur Antworten über Abfahrt und Ankunft oder Zahlenfolgen"),
+    ("2026-11-24b", frozenset({"text:(?i)rechteck|quadrat(?!meter|kilometer|zentimeter|millimeter)"}), "Umfang und Fläche von Rechteck und Quadrat rechnet das Programm; Antworten mit und ohne Suche von vorher werden verworfen; seit 24e nur Antworten mit Umfang oder Fläche"),
+    ("2026-11-24c", frozenset({"text:(?i)luftlinie"}), "Die Luftlinie zwischen zwei Orten rechnet das Gerät aus OpenStreetMap; Antworten mit Suche von vorher werden verworfen; seit 24e nur Antworten mit Luftlinie"),
+    ("2026-11-24d", frozenset({"text:(?i)römisch|roemisch"}), "Römische Zahlen in allen üblichen Frageformen rechnet das Programm, mit Aufschlüsselung; Antworten mit Suche von vorher werden verworfen; seit 24e nur Antworten mit römischen Zahlen"),
+    ("2026-11-24e", frozenset(), "Feinere Auswahl beim Verwerfen („text:“-Merkmal) und die Wache sieht den Fortschritt beim Laden; am Antwortweg ändert sich nichts, nichts zu verwerfen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())
@@ -317,6 +345,27 @@ def merkmale(lieferschein, text=None) -> frozenset:
     return frozenset(m)
 
 
+TEXT_MERKMAL = "text:"
+
+
+def merkmal_gueltig(x: str) -> bool:
+    if x in MERKMALE:
+        return True
+    if not (isinstance(x, str) and x.startswith(TEXT_MERKMAL) and len(x) > len(TEXT_MERKMAL)):
+        return False
+    try:
+        re.compile(x[len(TEXT_MERKMAL):])
+    except re.error:
+        return False
+    return True
+
+
+def _betrifft(betrifft: frozenset, m: frozenset, text) -> bool:
+    muster = [x[len(TEXT_MERKMAL):] for x in betrifft if x.startswith(TEXT_MERKMAL)]
+    return bool((betrifft - {x for x in betrifft if x.startswith(TEXT_MERKMAL)}) & m) or any(
+        re.search(rx, str(text or "")) for rx in muster)
+
+
 def erneuert_von(lieferschein, text=None) -> str:
     ls = lieferschein if isinstance(lieferschein, dict) else {}
     bau = str(ls.get("bau") or "")
@@ -324,7 +373,7 @@ def erneuert_von(lieferschein, text=None) -> str:
     for b, betrifft, _grund in ERNEUERT:
         if bau < b and betrifft:
             m = merkmale(ls, text) if m is None else m
-            if betrifft & m:
+            if _betrifft(betrifft, m, text):
                 return b
     return ""
 
@@ -387,7 +436,7 @@ def antwort_taugt(text: str, lieferschein) -> bool:
         return False
     if not ausliefern_ok(ls, text):
         return False
-    if ls.get("gemacht") not in ("geantwortet", "nachgeschaut und geantwortet") or ls.get("skill") or ls.get("kleineres_modell") or ls.get("aus_speicher"):
+    if ls.get("gemacht") not in ("geantwortet", "nachgeschaut und geantwortet") or ls.get("skill") or ls.get("aus_speicher"):
         return False
     if ls.get("woertlich") or any(_fremd(q) and woertlich(text, str(q.get("text") or "")) for q in (ls.get("quellen_liste") or [])):
         return False

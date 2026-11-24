@@ -2299,7 +2299,7 @@
  "Wikipedia: liest Teil {0} ein.": "Wikipedia: loading part {0}.",
  "Wikipedia: lädt Teil {0} der Ausgabe vom {1} herunter.": "Wikipedia: downloading part {0} of the edition from {1}.",
  "Wikipedia: nicht eingerichtet.": "Wikipedia: not set up.",
- "Wikipedia: noch keine fertige Kopie ({0}).": "Wikipedia: no finished copy yet ({0}).",
+ "Wikipedia: noch keine fertige Kopie ({0}{1}).": "Wikipedia: no finished copy yet ({0}{1}).",
  "Wikipedia: ordnet die Abschnitte für die Suche nach Bedeutung.": "Wikipedia: sorting the sections by meaning for the search.",
  "Wikipedia: startet gleich.": "Wikipedia: starting shortly.",
  "Wikipedia: sucht die neueste Ausgabe bei Wikimedia.": "Wikipedia: looking for the newest edition at Wikimedia.",
