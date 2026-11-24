@@ -14,6 +14,9 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-11-24f": [
+        "Antworten kommen jetzt oft rund 12 Sekunden schneller: Eine Frage wartete bisher jedes Mal auf einen stärkeren PC, der sie gar nicht öffnen konnte.",
+    ],
     "2026-11-24e": [
         "Wird KIplatz neu ausgerollt, bleiben die gespeicherten Antworten jetzt erhalten, außer die Änderung betrifft genau sie. Häufige Fragen kommen so wieder sofort aus dem Antwortspeicher.",
     ],
