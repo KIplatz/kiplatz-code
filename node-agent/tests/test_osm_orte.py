@@ -227,3 +227,21 @@ def test_program_asks_the_places_before_searching_the_net():
     assert "if not live and self.nachschauen_an():" in code and "kandidaten = ergaenzend + orte + server + lokal" in code
     assert "self._wiki.belegt_mb() - self._osm.belegt_mb()" in code
     assert "vorgesehen=lambda: self._community.ist_admin()" in code
+
+
+def test_luftlinie_zwischen_zwei_orten(datei):
+    _, d = datei
+    km = round(o.entfernung_km((47.918, 13.799), (48.509, 15.159)))
+    tr = o.suchen_in([d], "Wie viele Kilometer sind es von Gmunden nach Schafberg?", stand="26.09.2026")
+    assert len(tr) == 1 and tr[0].quelle.art == "openstreetmap"
+    assert tr[0].text.startswith(f"Luftlinie zwischen Gmunden und Schafberg: etwa {km} km") and "Stand 26.09.2026" in tr[0].text
+    assert o.suchen_in([d], "Wie weit ist es zwischen Gmunden und Schafberg?")[0].text.startswith("Luftlinie")
+    for f in ("Wie komme ich von Gmunden nach Schafberg?", "Wie weit ist es von Gmunden nach Atlantis?", "Wie weit ist es von Gmunden nach Gmunden?"):
+        assert o.luftlinie([d], f) == [], f
+
+
+def test_luftlinie_nach_fable(datei):
+    _, d = datei
+    assert o.luftlinie([d], "Wie viele Kilometer sind es von Gmunden nach Schafberg mit dem Auto?") == []
+    assert o.luftlinie([d], "Entfernung zwischen Gmunden und Schafberg Luftlinie")[0].text.startswith("Luftlinie zwischen Gmunden und Schafberg")
+    assert o.luftlinie([d], "Wie weit ist Gmunden von Schafberg entfernt?")[0].text.startswith("Luftlinie zwischen Gmunden und Schafberg")

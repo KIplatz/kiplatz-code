@@ -14,6 +14,9 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-11-24c": [
+        "Fragst du, wie weit es von einem Ort zum anderen ist, rechnet KIplatz die Luftlinie jetzt aus den Ortsdaten von OpenStreetMap selbst aus, etwa rund 155 km von Linz nach Wien.",
+    ],
     "2026-11-24b": [
         "Umfang und Fläche von Rechteck und Quadrat rechnet KIplatz jetzt selbst aus, mit Rechenweg.",
     ],

@@ -543,6 +543,12 @@ class Laenderdatei:
                         break
         return out
 
+    def gleichnamige(self, name: str) -> list[tuple[float, float, int]]:
+        with self._lock:
+            n = _norm(name)
+            return [(r[0], r[1], int(r[2] or 0)) for r in self._db.execute("SELECT lat, lon, rang FROM ort WHERE (norm=? OR (norm > ? AND norm < ?)) AND rang >= ?",
+                                                           (n, n + " ", n + " ~", ORTSARTEN["village"]))]
+
     def naechste(self, art: str, lat: float, lon: float, *, km: float, n: int) -> list[tuple[float, str, str]]:
         d_lat = km / 111.0
         d_lon = km / (111.0 * max(0.2, math.cos(math.radians(lat))))
@@ -603,8 +609,64 @@ def bester_ort(dateien: list, kandidaten: list[str], frage: str = "") -> tuple[s
     return min(alle, key=lambda x: x[0])[1] if alle else None
 
 
+_WEIT = re.compile(r"(?i)\b(?:wie\s+weit|wie\s+viele?\s+(?:kilometer|km)|kilometer|km|entfernung|entfernt|luftlinie|distanz|abstand)\b")
+_NAME = r"[A-ZÄÖÜ][\wäöüß.\-]{1,30}(?:\s+(?:am|an\s+der|im|in|ob|bei)\s+[A-ZÄÖÜ][\wäöüß.\-]+|\s+[A-ZÄÖÜ][\wäöüß.\-]+)?"
+_VON_NACH = re.compile(rf"\b(?:[Vv]on|[Aa]b)\s+({_NAME})\s+(?:nach|bis(?:\s+nach)?|zu[mr]?)\s+({_NAME})|\b[Zz]wischen\s+({_NAME})\s+und\s+({_NAME})"
+                       rf"|\b(?:ist|liegt)\s+({_NAME})\s+von\s+({_NAME})\s+entfernt")
+_VERKEHR = re.compile(r"(?i)\b(?:auto\w*|zug|zuges|bahn\w*|bus\w*|rad\w*|fahrrad\w*|zu\s+fuß|zu\s+fuss|gehen|wandern|fahr\w*|straße\w*|strasse\w*|"
+                      r"route\w*|autobahn\w*|weg)\b")
+
+
+def luftlinie(dateien: list, frage: str, *, stand: str = "") -> list[wissen.Treffer]:
+    if not dateien or not _WEIT.search(frage or ""):
+        return []
+    if _VERKEHR.search(frage) and not re.search(r"(?i)\bluftlinie\b", frage):
+        return []
+    m = _VON_NACH.search(frage)
+    if not m:
+        return []
+    paare = [g for g in ((m.group(1), m.group(2)), (m.group(3), m.group(4)), (m.group(5), m.group(6))) if g[0]]
+    a_name, b_name = paare[0]
+    import region as region_mod
+    rest = frage.replace(a_name, " ").replace(b_name, " ")
+    gegend = region_mod.erkennen(rest) is not None
+    orte = []
+    for n in (a_name, b_name):
+        n = re.sub(r"[?.!,]+$", "", n).strip()
+        o = None
+        for versuch in dict.fromkeys((n, n.split()[0])):
+            o = bester_ort(dateien, [versuch], frage)
+            if o is not None and _norm(o[0]) == _norm(versuch) and o[3] >= ORTSARTEN["village"]:
+                break
+            o = None
+        if o is None:
+            return []
+        lagen = [x for d in dateien for x in d.gleichnamige(o[0])]
+        if not gegend and any(r >= o[3] and entfernung_km((o[1], o[2]), (la, lo)) > 20 for la, lo, r in lagen):
+            return []
+        orte.append(o)
+    (an, ala, alo, _r1), (bn, bla, blo, _r2) = orte
+    if _norm(an) == _norm(bn):
+        return []
+    km = entfernung_km((ala, alo), (bla, blo))
+    text = (f"Luftlinie zwischen {an} und {bn}: etwa {round(km):d} km, aus den Koordinaten der Ortsmitten in OpenStreetMap berechnet"
+            + (f" (Stand {stand})" if stand else "") + ". Auf der Straße ist der Weg länger.")
+    q = wissen.Quelle(wissen.kennung_fuer("osm", f"luftlinie|{an}|{bn}"), "openstreetmap", f"OpenStreetMap: Luftlinie {an}–{bn} ({NENNUNG})",
+                      f"https://www.openstreetmap.org/directions?route={ala:.4f}%2C{alo:.4f}%3B{bla:.4f}%2C{blo:.4f}", _jetzt(), len(text))
+    return [wissen.Treffer(q, text, 9.0)]
+
+
 def suchen_in(dateien: list[Laenderdatei], frage: str, *, stand: str = "", ort_hinweis: str = "") -> list[wissen.Treffer]:
+    weit = luftlinie(dateien, frage, stand=stand)
     art = frage_art(frage)
+    if weit and not art:
+        return weit
+    if weit:
+        return _suchen_art(dateien, frage, art, stand=stand, ort_hinweis=ort_hinweis) + weit
+    return _suchen_art(dateien, frage, art, stand=stand, ort_hinweis=ort_hinweis)
+
+
+def _suchen_art(dateien: list, frage: str, art: str, *, stand: str = "", ort_hinweis: str = "") -> list[wissen.Treffer]:
     if not art or not dateien:
         return []
     kandidaten = _ortsworte(frage)

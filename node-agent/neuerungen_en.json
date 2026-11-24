@@ -717,5 +717,6 @@
  "Wann ein Bus oder Zug ankommt, rechnet KIplatz aus Abfahrt und Fahrzeit selbst": "KIplatz now works out when a bus or train arrives from departure and travel time",
  "Zahlenfolgen wie 2, 4, 8, 16 setzt KIplatz mit der richtigen Regel fort": "KIplatz continues number sequences such as 2, 4, 8, 16 with the right rule",
  "Umfang und Fläche von Rechteck und Quadrat rechnet KIplatz jetzt selbst aus, mit Rechenweg.": "KIplatz now works out the perimeter and area of rectangles and squares itself, with the working.",
- "Umfang und Fläche von Rechteck und Quadrat rechnet KIplatz selbst": "KIplatz works out the perimeter and area of rectangles and squares itself"
+ "Umfang und Fläche von Rechteck und Quadrat rechnet KIplatz selbst": "KIplatz works out the perimeter and area of rectangles and squares itself",
+ "Fragst du, wie weit es von einem Ort zum anderen ist, rechnet KIplatz die Luftlinie jetzt aus den Ortsdaten von OpenStreetMap selbst aus, etwa rund 155 km von Linz nach Wien.": "If you ask how far it is from one place to another, KIplatz now works out the straight-line distance itself from OpenStreetMap place data, for example about 155 km from Linz to Vienna."
 }
