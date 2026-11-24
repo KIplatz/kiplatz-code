@@ -718,5 +718,6 @@
  "Zahlenfolgen wie 2, 4, 8, 16 setzt KIplatz mit der richtigen Regel fort": "KIplatz continues number sequences such as 2, 4, 8, 16 with the right rule",
  "Umfang und Fläche von Rechteck und Quadrat rechnet KIplatz jetzt selbst aus, mit Rechenweg.": "KIplatz now works out the perimeter and area of rectangles and squares itself, with the working.",
  "Umfang und Fläche von Rechteck und Quadrat rechnet KIplatz selbst": "KIplatz works out the perimeter and area of rectangles and squares itself",
- "Fragst du, wie weit es von einem Ort zum anderen ist, rechnet KIplatz die Luftlinie jetzt aus den Ortsdaten von OpenStreetMap selbst aus, etwa rund 155 km von Linz nach Wien.": "If you ask how far it is from one place to another, KIplatz now works out the straight-line distance itself from OpenStreetMap place data, for example about 155 km from Linz to Vienna."
+ "Fragst du, wie weit es von einem Ort zum anderen ist, rechnet KIplatz die Luftlinie jetzt aus den Ortsdaten von OpenStreetMap selbst aus, etwa rund 155 km von Linz nach Wien.": "If you ask how far it is from one place to another, KIplatz now works out the straight-line distance itself from OpenStreetMap place data, for example about 155 km from Linz to Vienna.",
+ "Römische Zahlen rechnet KIplatz jetzt in beide Richtungen selbst und schlüsselt sie auf, etwa 2024 = MMXXIV (MM = 2000, XX = 20, IV = 4).": "KIplatz now converts Roman numerals both ways itself and breaks them down, for example 2024 = MMXXIV (MM = 2000, XX = 20, IV = 4)."
 }

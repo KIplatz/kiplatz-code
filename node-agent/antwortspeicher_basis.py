@@ -294,6 +294,7 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
     ("2026-11-24a", frozenset({"suche", "ohne_suche"}), "Abfahrt plus Fahrzeit und Zahlenfolgen rechnet das Programm; Antworten mit und ohne Suche von vorher werden verworfen"),
     ("2026-11-24b", frozenset({"suche", "ohne_suche"}), "Umfang und Fläche von Rechteck und Quadrat rechnet das Programm; Antworten mit und ohne Suche von vorher werden verworfen"),
     ("2026-11-24c", frozenset({"suche"}), "Die Luftlinie zwischen zwei Orten rechnet das Gerät aus OpenStreetMap; Antworten mit Suche von vorher werden verworfen"),
+    ("2026-11-24d", frozenset({"suche"}), "Römische Zahlen in allen üblichen Frageformen rechnet das Programm, mit Aufschlüsselung; Antworten mit Suche von vorher werden verworfen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())

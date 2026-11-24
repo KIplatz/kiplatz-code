@@ -421,34 +421,57 @@ def _basis(t: str) -> Ergebnis | None:
 _ROEMISCH = [(1000, "M"), (900, "CM"), (500, "D"), (400, "CD"), (100, "C"), (90, "XC"), (50, "L"), (40, "XL"), (10, "X"), (9, "IX"), (5, "V"), (4, "IV"), (1, "I")]
 
 
+def _roemisch_teile(n: int) -> list[tuple[int, str]]:
+    teile = []
+    for stelle in (1000, 100, 10, 1):
+        wert = n // stelle % 10 * stelle
+        if wert:
+            r, rest = "", wert
+            for v, rz in _ROEMISCH:
+                while rest >= v:
+                    r += rz
+                    rest -= v
+            teile.append((wert, r))
+    return teile
+
+
+def _roemisch_lesen(s: str) -> int | None:
+    wert, i = 0, 0
+    for v, rz in _ROEMISCH:
+        while s.startswith(rz, i):
+            wert += v
+            i += len(rz)
+    if i != len(s) or wert == 0 or "".join(r for _w, r in _roemisch_teile(wert)) != s:
+        return None
+    return wert
+
+
+_ROEM_WORT = r"(?:in\s+|als\s+)?(?:römischen?\s+(?:zahl(?:en)?|ziffern?|schreibweise)|römisch|roemisch(?:en\s+zahlen)?|roman\s+numerals?|roman)"
+
+
 def _roemisch(t: str) -> Ergebnis | None:
-    m = re.fullmatch(r"(?P<n>\d{1,4})\s+(?:in|als|to|as)\s+(?:römischen?\s+(?:zahlen|ziffern|schreibweise)|römisch|roemisch(?:en\s+zahlen)?|roman\s+numerals?|roman)", t, re.I)
+    m = (re.fullmatch(rf"(?i)(?:schreib\w*\s+(?:die\s+zahl\s+)?)?(?P<n>\d{{1,4}})\s+(?:in|als|to|as)\s+{_ROEM_WORT}", t)
+         or re.fullmatch(rf"(?i)wie\s+schreibt\s+man\s+(?:die\s+zahl\s+)?(?P<n>\d{{1,4}})\s+{_ROEM_WORT}", t))
     if m:
         n = int(m.group("n"))
         if not 1 <= n <= 3999:
             return None
-        r, rest = "", n
-        for wert, zeichen in _ROEMISCH:
-            while rest >= wert:
-                r += zeichen
-                rest -= wert
-        return Ergebnis(f"{n} ist römisch {r}.", f"{n} in Roman numerals is {r}.")
-    m = re.fullmatch(r"(?P<r>[MDCLXVImdclxvi]{1,15})\s+(?:in|als|to|as)\s+(?:arabische[nr]?\s+(?:zahlen|ziffern)|dezimal|decimal|arabic(?:\s+numerals?)?)", t, re.I)
+        teile = _roemisch_teile(n)
+        r = "".join(z for _w, z in teile)
+        auf = ", ".join(f"{z} = {w}" for w, z in teile)
+        return Ergebnis(f"{n} ist römisch {r}." + (f" ({auf})" if len(teile) > 1 else ""), f"{n} in Roman numerals is {r}.")
+    m = (re.fullmatch(r"(?P<r>[MDCLXVImdclxvi]{1,15})\s+(?:in|als|to|as)\s+(?:arabische[nr]?\s+(?:zahlen|ziffern)|dezimal|decimal|arabic(?:\s+numerals?)?)", t, re.I)
+         or re.fullmatch(r"(?i)(?:welche\s+zahl\s+(?:ist|bedeutet)|was\s+bedeutet\s+die\s+römische\s+zahl|die\s+römische\s+zahl)\s+(?-i:(?P<r>[MDCLXVI]{1,15}))", t)
+         or re.fullmatch(r"(?i)(?:die\s+römische\s+zahl\s+)?(?-i:(?P<r>[MDCLXVI]{1,15}))\s+(?:in\s+zahlen|als\s+zahl|römisch)", t))
+    if m and m.group("r").isupper() and not re.search(r"(?i)römisch|roemisch|arabisch|roman|arabic|decimal|dezimal", t):
+        if len(m.group("r")) < (2 if re.match(r"(?i)welche\s+zahl", t) else 4):
+            return None
     if m and m.group("r").isupper():
         s = m.group("r")
-        wert, i = 0, 0
-        for v, rz in _ROEMISCH:
-            while s.startswith(rz, i):
-                wert += v
-                i += len(rz)
-        if i != len(s) or wert == 0:
+        wert = _roemisch_lesen(s)
+        if wert is None:
             return None
-        r, rest = "", wert
-        for v, rz in _ROEMISCH:
-            while rest >= v:
-                r += rz
-                rest -= v
-        if r != s:
-            return None
-        return Ergebnis(f"{s} ist {wert}.", f"{s} is {wert}.")
+        teile = _roemisch_teile(wert)
+        auf = ", ".join(f"{z} = {w}" for w, z in teile)
+        return Ergebnis(f"{s} ist {wert}." + (f" ({auf})" if len(teile) > 1 else ""), f"{s} is {wert}.")
     return None
