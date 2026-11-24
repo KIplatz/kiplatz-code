@@ -324,6 +324,7 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
     ("2026-11-24d", frozenset({"text:(?i)römisch|roemisch"}), "Römische Zahlen in allen üblichen Frageformen rechnet das Programm, mit Aufschlüsselung; Antworten mit Suche von vorher werden verworfen; seit 24e nur Antworten mit römischen Zahlen"),
     ("2026-11-24e", frozenset(), "Feinere Auswahl beim Verwerfen („text:“-Merkmal) und die Wache sieht den Fortschritt beim Laden; am Antwortweg ändert sich nichts, nichts zu verwerfen"),
     ("2026-11-24f", frozenset(), "Nur die Vermittlung: ein kleines Modell wartet nicht mehr auf einen PC, der die Frage nicht öffnen kann; nichts zu verwerfen"),
+    ("2026-11-24g", frozenset(), "Nur das Laden der Wikipedia-Kopie und die Wache; am Antwortweg ändert sich nichts, nichts zu verwerfen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())

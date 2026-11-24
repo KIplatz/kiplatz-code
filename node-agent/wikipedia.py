@@ -1141,6 +1141,43 @@ class WikiKopie:
                 return ausgabe, sorted(set(teile))
         return None
 
+    LADEN_NOCHMAL_S = 120
+    LADEN_NOCHMAL_MAX_S = 1800
+    GROESSE_VERSUCHE = 3
+
+    def _laden_versuch(self, adresse: str, datei: Path, groesse: int, teil: str) -> float | None:
+        import urllib.error
+        self._teil_text = teil
+        teil_datei = datei.with_suffix(datei.suffix + ".teil")
+        vorher = teil_datei.stat().st_size if teil_datei.exists() else 0
+        try:
+            fertig = self._teil_laden(adresse, datei, groesse)
+            self._laden_abstand, self._groesse_fehler = self.LADEN_NOCHMAL_S, 0
+            return None if fertig else 30
+        except urllib.error.HTTPError:
+            raise
+        except (TimeoutError, ConnectionError, urllib.error.URLError) as exc:
+            grund = type(exc).__name__
+        except WikiError as exc:
+            if exc.code == "WIKI_HOLEN" and "HTTPError" not in str(exc.detail):
+                grund = exc.code
+            elif exc.code == "WIKI_GROESSE":
+                self._groesse_fehler = getattr(self, "_groesse_fehler", 0) + 1
+                if self._groesse_fehler >= self.GROESSE_VERSUCHE:
+                    raise
+                if groesse and teil_datei.exists() and teil_datei.stat().st_size >= groesse:
+                    teil_datei.unlink(missing_ok=True)
+                grund = exc.code
+            else:
+                raise
+        jetzt = teil_datei.stat().st_size if teil_datei.exists() else 0
+        abstand = self.LADEN_NOCHMAL_S if jetzt > vorher else getattr(self, "_laden_abstand", self.LADEN_NOCHMAL_S)
+        self._laden_abstand = min(self.LADEN_NOCHMAL_MAX_S, abstand * 2)
+        mb = min(jetzt, int(groesse or jetzt)) // 2**20
+        self.phase, self.meldung = "wartet", f"{teil}, {mb} MB von {int(groesse or 0) // 2**20} MB, dumps.wikimedia.org antwortet langsam"
+        self._log(f"INFO wikipedia: Teil {teil} unterbrochen ({grund}), geht in {abstand} s weiter, wo er war")
+        return float(abstand)
+
     def _teil_laden(self, adresse: str, ziel: Path, groesse: int) -> bool:
         teil = ziel.with_suffix(ziel.suffix + ".teil")
         schon = teil.stat().st_size if teil.exists() else 0
@@ -1158,6 +1195,8 @@ class WikiKopie:
                 if not stueck:
                     break
                 f.write(stueck)
+                if getattr(self, "_teil_text", ""):
+                    self.meldung = f"{self._teil_text}, {min(f.tell(), int(groesse or f.tell())) // 2**20} MB von {int(groesse or 0) // 2**20} MB"
         if groesse and teil.stat().st_size != groesse:
             raise WikiError("WIKI_GROESSE", f"Teil unvollständig ({teil.stat().st_size} statt {groesse} Bytes)")
         teil.replace(ziel)
@@ -1330,8 +1369,9 @@ class WikiKopie:
                 datei = self.ordner / f"teil-{nr:05d}.json.bz2"
                 if not datei.exists():
                     self.phase, self.meldung = "laedt", f"{len(teile) - len(offen) + 1}/{len(teile)}"
-                    if not self._teil_laden(adresse, datei, groesse):
-                        return 30
+                    warten = self._laden_versuch(adresse, datei, groesse, self.meldung)
+                    if warten is not None:
+                        return warten
                 self.phase, self.meldung = "liest", f"{len(teile) - len(offen) + 1}/{len(teile)}"
                 fertig = self._teil_einlesen(db, nr, datei)
                 if fertig:

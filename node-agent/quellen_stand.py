@@ -261,15 +261,16 @@ def fassung_pruefen(eintrag: dict, roh) -> None:
         eintrag.update(ok=False, text=t["fremd"].format(ist=ist or "Grundfassung", soll=soll or "Grundfassung"))
 
 
-def _ladestand(e: dict) -> tuple[str, int, int]:
+def _ladestand(e: dict) -> tuple[str, int, int, int]:
     text = str(e.get("text") or "")
     m = re.search(r"\((\w+)[^)]*?(\d+)\s*/\s*\d+", text) or re.search(r"\((\w+)", text)
     phase = m.group(1) if m else ""
     teil = re.search(r"(\d+)\s*/\s*\d+", text)
+    mb = re.search(r"(\d+)\s*MB\b", text)
     try:
-        return phase, int(e.get("zahl") or 0), int(teil.group(1)) if teil else 0
+        return phase, int(e.get("zahl") or 0), int(teil.group(1)) if teil else 0, int(mb.group(1)) if mb else 0
     except (TypeError, ValueError):
-        return phase, 0, 0
+        return phase, 0, 0, 0
 
 
 class Sammlung:
@@ -327,11 +328,11 @@ class Sammlung:
                 else:
                     nicht_ok_seit.setdefault(q, _jetzt_iso(t))
                 if not e.get("ok") and e.get("laedt") is True:
-                    phase, zahl, teil = _ladestand(e)
+                    phase, zahl, teil, mb = _ladestand(e)
                     je_phase = dict(hoechst.get(q) or {}) if isinstance(hoechst.get(q), dict) else {}
                     bisher = je_phase.get(phase)
-                    if bisher is None or (zahl, teil) > tuple(bisher):
-                        je_phase[phase] = [zahl, teil]
+                    if bisher is None or (zahl, teil, mb) > tuple(bisher):
+                        je_phase[phase] = [zahl, teil, mb]
                         hoechst[q] = je_phase
                         voran_seit[q] = _jetzt_iso(t)
                     voran_seit.setdefault(q, nicht_ok_seit.get(q) or _jetzt_iso(t))

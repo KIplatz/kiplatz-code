@@ -2518,6 +2518,8 @@
  "{0} · gekoppelt am {1}": "{0} · paired on {1}",
  "{0}, dein PC daheim": "{0}, your PC at home",
  "{0}, gelesen am {1}.": "{0}, read on {1}.",
+ "{0}, {1} MB von {2} MB": "{0}, {1} MB of {2} MB",
+ "{0}, {1} MB von {2} MB, dumps.wikimedia.org antwortet langsam": "{0}, {1} MB of {2} MB, dumps.wikimedia.org is answering slowly",
  "{0}. Unter Windows-Einstellungen → Datenschutz → Mikrofon muss der Zugriff für Apps erlaubt sein.": "{0}. Apps need to be allowed to use it under Windows Settings → Privacy → Microphone.",
  "{0}. {1} Gerät: {2} Freigabe: {3}": "{0}. {1} Device: {2} Limits: {3}",
  "{0}: die Datei ist größer als erwartet": "{0}: the file is bigger than expected",
