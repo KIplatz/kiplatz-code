@@ -848,11 +848,11 @@ class Api:
         self._bedeutung = bedeutung_ or bedeutung.Bedeutung(core, protokoll=lambda line: _log(core, line))
         self._bewertung = bewertung_ or bewertung.Bewertung(core, protokoll=lambda line: _log(core, line))
         self._wiki = wikipedia.WikiKopie(lambda: wiki_pfad(self._core.load_freigabe().speicher_ort, self._core.base_dir),
-                                         vorgesehen=lambda: self._community.ist_admin(),
+                                         vorgesehen=lambda: False,
                                          freigabe_mb=lambda: self._core.load_freigabe().speicher_mb, darf=self._wiki_darf, karte_frei=self._wiki_karte_frei,
                                          log=lambda line: _log(core, line))
         self._wiki_en = wikipedia.WikiKopie(lambda: wiki_pfad(self._core.load_freigabe().speicher_ort, self._core.base_dir, wikipedia.SIMPLE.dirname),
-                                            vorgesehen=lambda: self._community.ist_admin(),
+                                            vorgesehen=lambda: False,
                                             freigabe_mb=lambda: self._core.load_freigabe().speicher_mb,
                                             darf=lambda: self._wiki_darf() and self._wiki.phase not in WIKI_ARBEITET,
                                             karte_frei=self._wiki_karte_frei, log=lambda line: _log(core, line),

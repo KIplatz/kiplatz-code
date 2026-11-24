@@ -14,6 +14,9 @@ NEUERUNGEN: dict[str, list[str]] = {
     "2026-10-25p": [
         "Schickst du deine Frage ab, während die App ein Foto noch liest, geht sie jetzt von selbst los, sobald das Foto gelesen ist. Fotos liest die App deutlich schneller, und was dabei passiert, steht direkt über dem Eingabefeld. Steht auf einem Foto kein Text, sagt sie dir das nach wenigen Sekunden.",
     ],
+    "2026-11-24h": [
+        "KIplatz lädt keine Wikipedia-Kopie mehr auf deinen PC. Keine Antwort hat sie seit Oktober gebraucht; eine vorhandene Kopie wird gelöscht, das gibt bis zu 50 GB auf der Platte frei.",
+    ],
     "2026-11-24g": [
         "Lädt ein PC die Wikipedia gerade über eine langsame Leitung, gilt ein abgerissener Download nicht mehr als Fehler: KIplatz macht nach 2 Minuten dort weiter, wo es war, und zeigt, wie viele MB schon da sind.",
     ],
