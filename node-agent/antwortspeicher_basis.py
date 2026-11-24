@@ -327,6 +327,7 @@ ERNEUERT: tuple[tuple[str, frozenset, str], ...] = (
     ("2026-11-24g", frozenset(), "Nur das Laden der Wikipedia-Kopie und die Wache; am Antwortweg ändert sich nichts, nichts zu verwerfen"),
     ("2026-11-24h", frozenset(), "Keine Wikipedia-Kopie mehr auf den Geräten; keine Antwort las darin, nichts zu verwerfen"),
     ("2026-11-24i", frozenset(), "Nur die Vorab-Liste am Dienst (veraltete Entwürfe gehen weg); am Antwortweg ändert sich nichts, nichts zu verwerfen"),
+    ("2026-11-24j", frozenset(), "Nur der Neustart nach dem Update und ein Meldetext; am Antwortweg ändert sich nichts, nichts zu verwerfen"),
 )
 
 _EN_WORT = frozenset("the is are was were and of in to with for which who that this from by on it its has have".split())

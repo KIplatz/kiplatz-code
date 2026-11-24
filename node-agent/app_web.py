@@ -920,6 +920,7 @@ class Api:
         self.prep_error: str | None = None
         self.start_meldung = ""
         self._stopp = threading.Event()
+        self._neustart_laeuft = False
         self.schliessen_angefordert = False
         self.versteckt = False
         self.abbruch_gewuenscht = False
@@ -6318,12 +6319,19 @@ class Api:
             befehl = [str(ordner / app_install.START_NAME), "-"]
         else:
             befehl = app_install.start_command(ordner) if starter else [str(ordner / app_install.EXE_NAME)]
-        self.herunterfahren()
-        if self.versteckt:
-            befehl = befehl + ["--autostart"]
-        einmal.freigeben()
-        subprocess.Popen(befehl, close_fds=True, cwd=str(ordner), creationflags=getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
-        self.schliessen_angefordert = True
+        self._neustart_laeuft = True
+        try:
+            try:
+                self.herunterfahren()
+            except Exception as exc:
+                _log(self._core, f"FEHLER herunterfahren vor dem Neustart: {type(exc).__name__}: {exc}")
+            if self.versteckt:
+                befehl = befehl + ["--autostart"]
+            einmal.freigeben()
+            subprocess.Popen(befehl, close_fds=True, cwd=str(ordner), creationflags=getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+        finally:
+            self.schliessen_angefordert = True
+            self._neustart_laeuft = False
 
     UPDATE_TAKT_S = 3600
     UPDATE_BLICK_S = 300
@@ -8697,7 +8705,7 @@ def run_window(core: app_core.AppCore, *, start_minimized: bool = False, registr
                 api._morgenbericht_pruefen()
             if einmal.zeigen_angefordert(core.base_dir):
                 api.fenster_zeigen()
-            if api.schliessen_angefordert:
+            if api.schliessen_angefordert and not getattr(api, "_neustart_laeuft", False):
                 try:
                     window.destroy()
                 except Exception:

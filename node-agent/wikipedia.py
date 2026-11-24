@@ -1251,7 +1251,7 @@ class WikiKopie:
                 vorgesehen = False
             if self.ordner.exists() and (self.ordner / STAND).exists():
                 self._log(f"OK wikipedia: Freigabe unter {self.sprache.min_freigabe_mb // 1000} GB, Kopie gelöscht" if vorgesehen
-                          else "OK wikipedia: dieses Gerät hält keine Kopie (nur das Admin-Gerät), Kopie gelöscht")
+                          else "OK wikipedia: kein Gerät hält mehr eine Kopie (seit Bau 24h), Kopie gelöscht")
                 self.loeschen()
             self.phase = "zu_wenig_platz" if vorgesehen else "nicht_vorgesehen"
             return 300

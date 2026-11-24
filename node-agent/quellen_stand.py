@@ -54,7 +54,7 @@ def _wikipedia(wiki) -> dict:
         return _eintrag(False, "Wikipedia: nicht eingerichtet.", gilt=False)
     try:
         if not wiki.darf_halten():
-            return _eintrag(False, "Wikipedia: dieses Gerät hält keine Kopie (nur das Admin-Gerät ab 100 GB Freigabe).", gilt=False)
+            return _eintrag(False, "Wikipedia: keine Kopie, KIplatz braucht sie nicht mehr.", gilt=False)
         z = wiki.zustand()
         ausgabe, artikel, phase = str(z.get("ausgabe") or ""), int(z.get("artikel") or 0), str(z.get("phase") or "")
         if not wiki.bereit():
